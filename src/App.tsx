@@ -183,6 +183,7 @@ function App() {
       first6H: '0',
       initialMcap: '0',
       insiderHoldings: '0',
+      insiders: 0,
       isFreezeAuthDisabled: false,
       isMintAuthDisabled: false,
       liquidity: '0',
