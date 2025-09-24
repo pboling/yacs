@@ -290,6 +290,20 @@ export default function TokensPane({
         setSort((s) => ({ key: k, dir: s.key === k && s.dir === 'desc' ? 'asc' : 'desc' }))
     }
 
+    // Sync sort changes to URL query params (?sort=...&dir=...)
+    useEffect(() => {
+        try {
+            const sp = new URLSearchParams(window.location.search)
+            // Write client sort keys directly; server accepts both aliases per README
+            sp.set('sort', sort.key)
+            sp.set('dir', sort.dir)
+            const next = `${window.location.pathname}?${sp.toString()}`
+            window.history.replaceState(null, '', next)
+        } catch {
+            // ignore URL errors
+        }
+    }, [sort])
+
     // Ensure per-row subscriptions for all currently visible rows (top 50) — this protects
     // against any races where App-level scanner-pairs handling didn't issue subs yet.
     useEffect(() => {

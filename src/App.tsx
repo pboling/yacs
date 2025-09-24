@@ -43,6 +43,7 @@ interface TokenRow {
     liquidity: { current: number; changePc: number }
 }
 
+type SortKey = 'tokenName' | 'exchange' | 'priceUsd' | 'mcap' | 'volumeUsd' | 'age' | 'tx' | 'liquidity'
 
 // Local state shape matching tokens.reducer.js output
 interface TokensMeta {
@@ -99,6 +100,33 @@ type Action = ScannerPairsAction | ScannerAppendAction | TickAction | PairStatsA
 
 
 function App() {
+    // Derive initial sort from URL (?sort=...&dir=...)
+    const initialSort = useMemo(() => {
+        try {
+            const sp = new URLSearchParams(window.location.search)
+            const rawSort = (sp.get('sort') || '').toLowerCase()
+            const rawDir = (sp.get('dir') || '').toLowerCase()
+            const dir: 'asc' | 'desc' = rawDir === 'asc' || rawDir === 'desc' ? (rawDir as 'asc' | 'desc') : 'desc'
+            // Map server sort keys to client SortKey
+            const map: Record<string, SortKey> = {
+                tokenname: 'tokenName',
+                exchange: 'exchange',
+                price: 'priceUsd',
+                priceusd: 'priceUsd',
+                mcap: 'mcap',
+                volume: 'volumeUsd',
+                volumeusd: 'volumeUsd',
+                age: 'age',
+                tx: 'tx',
+                liquidity: 'liquidity',
+            }
+            const key = map[rawSort]
+            if (key) return { key, dir }
+        } catch {
+            // ignore URL errors and fall back to defaults
+        }
+        return null as null | { key: SortKey; dir: 'asc' | 'desc' }
+    }, [])
     // Memoize filters to satisfy exhaustive-deps
     const trendingFilters: GetScannerResultParams = useMemo(() => TRENDING_TOKENS_FILTERS, [])
     const newFilters: GetScannerResultParams = useMemo(() => NEW_TOKENS_FILTERS, [])
@@ -489,7 +517,7 @@ function App() {
                     page={TRENDING_PAGE}
                     state={{ byId: state.byId, pages: state.pages, version: (state as unknown as { version?: number }).version ?? 0 } as unknown as { byId: Record<string, TokenRow>, pages: Partial<Record<number, string[]>> }}
                     dispatch={dispatch as unknown as React.Dispatch<ScannerPairsAction>}
-                    defaultSort={{ key: 'volumeUsd', dir: 'desc' }}
+                    defaultSort={initialSort ?? { key: 'volumeUsd', dir: 'desc' }}
                     clientFilters={state.filters as unknown as { chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number; excludeHoneypots?: boolean }}
                 />
                 <TokensPane
@@ -498,7 +526,7 @@ function App() {
                     page={NEW_PAGE}
                     state={{ byId: state.byId, pages: state.pages, version: (state as unknown as { version?: number }).version ?? 0 } as unknown as { byId: Record<string, TokenRow>, pages: Partial<Record<number, string[]>> }}
                     dispatch={dispatch as unknown as React.Dispatch<ScannerPairsAction>}
-                    defaultSort={{ key: 'age', dir: 'desc' }}
+                    defaultSort={initialSort ?? { key: 'age', dir: 'desc' }}
                     clientFilters={state.filters as unknown as { chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number; excludeHoneypots?: boolean }}
                 />
             </div>

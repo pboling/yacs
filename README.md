@@ -154,6 +154,19 @@ GET /scanner
 
 **Parameters:** See `GetScannerResultParams` in `test-task-types.ts`
 
+Server-side sorting (initial REST load): The /scanner endpoint accepts optional allow-listed parameters to return the initial page pre-sorted so URLs can be bookmarked and shared.
+- sort: one of tokenName, exchange, price, priceUsd, mcap, volume, volumeUsd, age, tx, liquidity
+- dir: one of asc, desc (default: desc)
+
+Examples:
+- /scanner?chain=ETH&page=1&sort=volume&dir=desc
+- /scanner?chain=SOL&page=1&sort=age&dir=asc
+- /scanner?page=1&sort=mcap (defaults to dir=desc)
+
+Notes:
+- Sorting is applied only to the initial REST payload; live updates over WebSocket still update values in-place. Client-side sorting can still be toggled in the UI independently.
+- Invalid values are ignored (endpoint falls back to unsorted for sort; dir falls back to desc) — parameters are validated against an allow-list on the server.
+
 **Response:** See `ScannerApiResponse` and `ScannerResult` in `test-task-types.ts`
 
 ### Price Updates
