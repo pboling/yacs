@@ -19,6 +19,9 @@ interface TokenRow {
     tokenCreatedTimestamp: Date
     transactions: { buys: number; sells: number }
     liquidity: { current: number; changePc: number }
+    // Optional fields present in reducer mapping; used to form WS subscription payloads when rows render
+    pairAddress?: string
+    tokenAddress?: string
 }
 
 // Action aliases to satisfy TS strictly
@@ -29,24 +32,26 @@ type SortKey = 'tokenName' | 'exchange' | 'priceUsd' | 'mcap' | 'volumeUsd' | 'a
 type Dir = 'asc' | 'desc'
 
 export default function TokensPane({
-                                       title,
-                                       filters,
-                                       state,
-                                       dispatch,
-                                       defaultSort,
-                                   }: {
+                                        title,
+                                        filters,
+                                        page,
+                                        state,
+                                        dispatch,
+                                        defaultSort,
+                                    }: {
     title: string
     filters: GetScannerResultParams
-    state: { byId: Record<string, TokenRow> }
+    page: number
+    state: { byId: Record<string, TokenRow | undefined>, pages: Partial<Record<number, string[]>> } & { version?: number }
     dispatch: React.Dispatch<ScannerPairsAction>
     defaultSort: { key: SortKey; dir: Dir }
 }) {
-    const [ids, setIds] = useState<string[]>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [sort, setSort] = useState(defaultSort)
     const wsRef = useRef<WebSocket | null>(null)
     const payloadsRef = useRef<{ pair: string; token: string; chain: string }[]>([])
+    const rowsRef = useRef<TokenRow[]>([])
 
     // Fetch function as typed alias to keep TS happy with JS module
     const fetchScannerTyped = fetchScanner as unknown as (p: GetScannerResultParams) => Promise<{ raw: { page?: number | null; scannerPairs?: ScannerResult[] | null } }>
@@ -77,12 +82,28 @@ export default function TokensPane({
                 wsRef.current = ws
                 console.log('[TokensPane:' + title + '] detected __APP_WS__ later; readyState=' + String(ws.readyState))
                 // If we already computed payloads and socket is OPEN, (re)send subscriptions now
-                if (payloadsRef.current.length > 0 && ws.readyState === WebSocket.OPEN) {
+                if (ws.readyState === WebSocket.OPEN) {
                     try {
-                        console.log('[TokensPane:' + title + '] sending ' + String(payloadsRef.current.length) + ' pair subscriptions on late WS attach')
-                        for (const p of payloadsRef.current) {
-                            ws.send(JSON.stringify(buildPairSubscriptionSafe(p)))
-                            ws.send(JSON.stringify(buildPairStatsSubscriptionSafe(p)))
+                        if (payloadsRef.current.length > 0) {
+                            console.log('[TokensPane:' + title + '] sending ' + String(payloadsRef.current.length) + ' pair subscriptions on late WS attach')
+                            for (const p of payloadsRef.current) {
+                                ws.send(JSON.stringify(buildPairSubscriptionSafe(p)))
+                                ws.send(JSON.stringify(buildPairStatsSubscriptionSafe(p)))
+                            }
+                        }
+                        // Also ensure visible-row subscriptions on late attach
+                        const seen = new Set<string>()
+                        const anyRows = Array.isArray(rowsRef.current) ? rowsRef.current : []
+                        for (const t of anyRows) {
+                            const pair = t.pairAddress
+                            const token = t.tokenAddress
+                            if (!pair || !token) continue
+                            const chain = t.chain
+                            const key = pair + '|' + token + '|' + chain
+                            if (seen.has(key)) continue
+                            seen.add(key)
+                            ws.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
+                            ws.send(JSON.stringify(buildPairStatsSubscriptionSafe({ pair, token, chain })))
                         }
                     } catch (err) {
                         console.error(`[TokensPane:${title}] failed to send late subscriptions`, err)
@@ -94,7 +115,7 @@ export default function TokensPane({
             }
         }, 500)
         return () => { clearInterval(interval) }
-    }, [title, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe])
+    }, [buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, title])
 
     // Initial REST load (page must start at 1 for every pane)
     useEffect(() => {
@@ -103,8 +124,8 @@ export default function TokensPane({
             setLoading(true)
             setError(null)
             try {
-                console.log('[TokensPane:' + title + '] fetching initial scanner page with filters', { ...filters, page: 1 })
-                const res = await fetchScannerTyped({ ...filters, page: 1 })
+                console.log('[TokensPane:' + title + '] fetching initial scanner page with filters', { ...filters, page })
+                const res = await fetchScannerTyped({ ...filters, page })
                 if (cancelled) return
                 const raw = res.raw as unknown
                 // Strict shape check: expect an object with scannerPairs: array
@@ -121,14 +142,35 @@ export default function TokensPane({
                 }
                 const list = scannerPairs
                 console.log('[TokensPane:' + title + '] /scanner returned ' + String(list.length) + ' items')
+                // Deduplicate by pairAddress (case-insensitive) before computing payloads/dispatching
+                const seenPairsLower = new Set<string>()
+                const dedupedList: unknown[] = []
+                for (const it of list as ScannerResult[]) {
+                    const addr = (it as unknown as { pairAddress?: string }).pairAddress
+                    const k = typeof addr === 'string' ? addr.toLowerCase() : ''
+                    if (k && !seenPairsLower.has(k)) {
+                        seenPairsLower.add(k)
+                        dedupedList.push(it)
+                    }
+                }
+                if (dedupedList.length !== list.length) {
+                    console.log('[TokensPane:' + title + '] deduped initial list: ' + String(list.length - dedupedList.length) + ' duplicates removed')
+                }
                 // Update local ids for this pane only
-                const payloads = computePairPayloadsSafe(list as ScannerResult[])
+                const payloads = computePairPayloadsSafe(dedupedList as ScannerResult[])
                 payloadsRef.current = payloads
-                const localIds = payloads.map((p) => p.pair)
-                setIds(localIds)
-                console.log('[TokensPane:' + title + '] computed ' + String(payloads.length) + ' unique pair payloads for subscriptions')
+                // Deduplicate pair ids for this pane to avoid duplicate row keys (computePairPayloads emits chain variants)
+                const seenPairs = new Set<string>()
+                const localIds: string[] = []
+                for (const p of payloads) {
+                    if (!seenPairs.has(p.pair)) {
+                        seenPairs.add(p.pair)
+                        localIds.push(p.pair)
+                    }
+                }
+                console.log('[TokensPane:' + title + `] computed ${String(payloads.length)} pair subscription payloads and ${String(localIds.length)} unique pair ids for table`)
                 // Merge into global store (byId/meta) — page value is irrelevant for panes
-                dispatch({ type: 'scanner/pairs', payload: { page: 1, scannerPairs: list } })
+                dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: list } })
                 // Subscribe per-pair if WS is already open
                 const ws = wsRef.current
                 const rs = ws?.readyState
@@ -154,13 +196,21 @@ export default function TokensPane({
         }
         void run()
         return () => { cancelled = true }
-    }, [title, filters, dispatch, fetchScannerTyped, computePairPayloadsSafe, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe])
+    }, [filters, dispatch, fetchScannerTyped, computePairPayloadsSafe, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, page, title])
 
     // Derive rows for this pane from global byId
     const rows = useMemo(() => {
-        const all = ids
-            .map((id) => state.byId[id])
-            .filter((t): t is TokenRow => Boolean(t))
+        // Derive strictly from the ids assigned to this pane's page to avoid mixing datasets
+        const ids = state.pages[page] ?? []
+        const listed = Array.isArray(ids) ? ids : []
+        const collected: TokenRow[] = []
+        for (const id of listed) {
+            const lowerId = typeof id === 'string' ? id.toLowerCase() : String(id).toLowerCase()
+            const t = state.byId[id] ?? state.byId[lowerId]
+            if (t) collected.push(t)
+        }
+        // Fallback: if page has no ids yet (e.g., before first WS/REST), show empty until data arrives
+        const base = collected
         const sorter = (key: SortKey, dir: Dir) => (a: TokenRow, b: TokenRow) => {
             const getVal = (t: TokenRow): number | string => {
                 switch (key) {
@@ -182,12 +232,60 @@ export default function TokensPane({
             else cmp = (va as number) < (vb as number) ? -1 : (va as number) > (vb as number) ? 1 : 0
             return dir === 'asc' ? cmp : -cmp
         }
-        return [...all].sort(sorter(sort.key, sort.dir))
-    }, [ids, state.byId, sort])
+        const sorted = [...base].sort(sorter(sort.key, sort.dir))
+        const out = sorted.slice(0, 50)
+        return out
+    }, [state.byId, state.pages, page, sort])
+
+    // Keep a ref of latest rows for late WS attach logic
+    useEffect(() => {
+        rowsRef.current = rows
+    }, [rows])
+
+    // Log rows derivation once per version to avoid duplicate logs under React StrictMode
+    const lastLoggedVersionRef = useRef<number>(-1)
+    useEffect(() => {
+        try {
+            const version = state.version ?? 0
+            if (lastLoggedVersionRef.current !== version) {
+                lastLoggedVersionRef.current = version
+                if (rows.length > 0) {
+                    const first = rows[0]
+                    console.log(`[TokensPane:${title}] rows derived`, { count: rows.length, firstId: first.id, firstPrice: first.priceUsd, version })
+                } else {
+                    console.log(`[TokensPane:${title}] rows derived`, { count: 0, version })
+                }
+            }
+        } catch { /* no-op */ }
+    }, [rows, state.version, title])
 
     const onSort = (k: SortKey) => {
         setSort((s) => ({ key: k, dir: s.key === k && s.dir === 'desc' ? 'asc' : 'desc' }))
     }
+
+    // Ensure per-row subscriptions for all currently visible rows (top 50) — this protects
+    // against any races where App-level scanner-pairs handling didn't issue subs yet.
+    useEffect(() => {
+        const ws = wsRef.current
+        if (!ws || ws.readyState !== WebSocket.OPEN) return
+        try {
+            const sent = new Set<string>()
+            for (const t of rows) {
+                const pair = t.pairAddress
+                const token = t.tokenAddress
+                if (!pair || !token) continue // require both to avoid malformed subs
+                const chain = t.chain // may be a name (ETH/BASE). Server-side is tolerant.
+                const key = pair + '|' + token + '|' + chain
+                if (sent.has(key)) continue
+                sent.add(key)
+                ws.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
+                ws.send(JSON.stringify(buildPairStatsSubscriptionSafe({ pair, token, chain })))
+            }
+            try { console.log(`[TokensPane:${title}] ensured subscriptions for ${String(sent.size)} visible rows`) } catch { /* no-op */ }
+        } catch (err) {
+            console.error(`[TokensPane:${title}] failed ensuring row subscriptions`, err)
+        }
+    }, [rows, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, title])
 
     return (
         <Table

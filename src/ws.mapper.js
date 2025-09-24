@@ -47,13 +47,23 @@ export function mapIncomingMessageToAction(msg) {
     case 'scanner-pairs':
       // full dataset replacement for a page
       return { type: 'scanner/pairs', payload: { page: msg.data.page ?? 1, scannerPairs: msg.data.scannerPairs ?? [] } }
-    case 'tick':
-      return { type: 'pair/tick', payload: { pair: msg.data.pair, swaps: msg.data.swaps } }
+    case 'tick': {
+      // Canonical shape only: { data: { pair: { pair, token, chain }, swaps: [...] } }
+      const d = msg.data || {}
+      if (!d.pair || typeof d.pair !== 'object' || !Array.isArray(d.swaps)) {
+        return null
+      }
+      return { type: 'pair/tick', payload: { pair: d.pair, swaps: d.swaps } }
+    }
     case 'pair-stats':
       return { type: 'pair/stats', payload: { data: msg.data } }
     case 'wpeg-prices': {
       const prices = (msg.data && typeof msg.data === 'object') ? (msg.data.prices || {}) : {}
       return { type: 'wpeg/prices', payload: { prices } }
+    }
+    case 'pair-patch': {
+      // Generic per-pair partial update to merge arbitrary fields into an existing row
+      return { type: 'pair/patch', payload: { data: msg.data } }
     }
     default:
       return null

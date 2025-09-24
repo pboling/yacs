@@ -85,9 +85,14 @@ test('pair/tick updates price, mcap, volume and persists token0Address meta', ()
   const t = state.byId['0xPAIR']
   assert.equal(t.priceUsd, 1.3)
   assert.ok(state.meta['0xPAIR'].token0Address === '0xWETH')
+  // README compliance: mcap recalculated as totalSupply * newPrice
+  const totalSupply = parseFloat(page1[0].token1TotalSupplyFormatted)
+  assert.equal(t.mcap, totalSupply * 1.3)
+  // Volume increased based on non-outlier swaps
+  assert.ok(t.volumeUsd > 0)
 })
 
-test('pair/stats merges audit flags', () => {
+test('pair/stats merges audit flags per README mapping', () => {
   const page1 = [mkScanner()]
   let state = tokensReducer(initialState, actions.scannerPairs(1, page1))
   const msg = {
@@ -97,15 +102,31 @@ test('pair/stats merges audit flags', () => {
       token1IsHoneypot: true,
       mintAuthorityRenounced: false,
       freezeAuthorityRenounced: true,
+      linkDiscord: 'https://discord.gg/abc',
+      linkTelegram: 'https://t.me/abc',
+      linkTwitter: 'https://x.com/abc',
+      linkWebsite: 'https://example.com',
+      dexPaid: true,
     },
     pairStats: {},
-    migrationProgress: '0',
+    migrationProgress: '42',
     callCount: 1,
   }
   state = tokensReducer(state, actions.pairStats(msg))
-  const a = state.byId['0xPAIR'].audit
-  assert.equal(a.honeypot, true)
+  const t = state.byId['0xPAIR']
+  const a = t.audit
+  // README: honeypot := !token1IsHoneypot
+  assert.equal(a.honeypot, false)
   assert.equal(a.contractVerified, true)
-  assert.equal(a.mintable, true)
-  assert.equal(a.freezable, false)
+  // README: mintable := mintAuthorityRenounced; freezable := freezeAuthorityRenounced
+  assert.equal(a.mintable, false)
+  assert.equal(a.freezable, true)
+  // Links and dexPaid
+  assert.equal(a.linkDiscord, 'https://discord.gg/abc')
+  assert.equal(a.linkTelegram, 'https://t.me/abc')
+  assert.equal(a.linkTwitter, 'https://x.com/abc')
+  assert.equal(a.linkWebsite, 'https://example.com')
+  assert.equal(a.dexPaid, true)
+  // migrationPc numeric
+  assert.equal(t.migrationPc, 42)
 })

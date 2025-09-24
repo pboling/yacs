@@ -317,7 +317,7 @@ ws.send(
 );
 ```
 
-### Notes
+### WebSocket Subscription Notes
 
 1. **Price Change Percentages**: These come from the API response (`diff5M`, `diff1H`, `diff6H`, `diff24H`) - NOT calculated from tick events
 2. **Triple Subscriptions Required**: Subscribe to these websocket rooms

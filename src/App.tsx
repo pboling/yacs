@@ -21,7 +21,7 @@ import {
     chainIdToName,
 } from './test-task-types'
 import {initialState, tokensReducer} from './tokens.reducer.js'
-import { buildScannerSubscription, buildPairSubscription, buildPairStatsSubscription, mapIncomingMessageToAction } from './ws.mapper.js'
+import { buildScannerSubscription, buildScannerUnsubscription, buildPairSubscription, buildPairStatsSubscription, mapIncomingMessageToAction } from './ws.mapper.js'
 import {computePairPayloads} from './ws.subs.js'
 import TokensPane from './components/TokensPane'
 import { fetchScanner } from './scanner.client.js'
@@ -98,6 +98,10 @@ function App() {
     const trendingFilters: GetScannerResultParams = useMemo(() => TRENDING_TOKENS_FILTERS, [])
     const newFilters: GetScannerResultParams = useMemo(() => NEW_TOKENS_FILTERS, [])
 
+    // Distinct page ids per pane to keep datasets independent in state
+    const TRENDING_PAGE = 101
+    const NEW_PAGE = 201
+
     // Typed aliases for JS functions to satisfy strict lint rules
     const buildScannerSubscriptionSafe = buildScannerSubscription as unknown as (params: GetScannerResultParams) => {
         event: 'scanner-filter';
@@ -113,6 +117,7 @@ function App() {
         token: string;
         chain: string
     }) => { event: 'subscribe-pair-stats'; data: { pair: string; token: string; chain: string } }
+    const buildScannerUnsubscriptionSafe = buildScannerUnsubscription as unknown as (params: GetScannerResultParams) => { event: 'unsubscribe-scanner-filter'; data: GetScannerResultParams }
     const mapIncomingMessageToActionSafe = mapIncomingMessageToAction as unknown as (msg: unknown) => (ScannerPairsAction | TickAction | PairStatsAction | WpegPricesAction | null)
     const computePairPayloadsSafe = computePairPayloads as unknown as (items: ScannerResult[] | unknown[]) => {
         pair: string;
@@ -133,13 +138,24 @@ function App() {
         let currentWs: WebSocket | null = null
         let openTimeout: ReturnType<typeof setTimeout> | null = null
 
+        // If a shared WS is already present and connecting/open, reuse it and skip creating another.
+        try {
+            const anyWin = window as unknown as { __APP_WS__?: WebSocket }
+            const existing = anyWin.__APP_WS__
+            if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
+                console.log('WS: reusing existing shared WebSocket; state=', existing.readyState)
+                return () => { /* no-op reuse */ }
+            }
+        } catch { /* no-op */ }
+
         const proto = location.protocol === 'https:' ? 'wss://' : 'ws://'
         // In dev, align WS with the local backend (port 3001) so it matches REST data
         const devUrl = proto + location.hostname + ':3001/ws'
         const prodUrl = 'wss://api-rs.dexcelerate.com/ws'
         // Allow override via env (useful for debugging)
         const envUrl: string | null = typeof import.meta.env.VITE_WS_URL === 'string' ? import.meta.env.VITE_WS_URL : null
-        const urls: string[] = import.meta.env.DEV ? [envUrl, devUrl, prodUrl].filter(Boolean) as string[] : [envUrl, prodUrl].filter(Boolean) as string[]
+        // In dev, avoid falling back to production WS to prevent duplicate connections and race conditions
+        const urls: string[] = import.meta.env.DEV ? [envUrl, devUrl].filter(Boolean) as string[] : [envUrl, prodUrl].filter(Boolean) as string[]
 
         function connectNext() {
             if (cancelled) return
@@ -179,9 +195,11 @@ function App() {
                     console.log('WS: open', { url })
                     // expose WS to panes so they can send pair subscriptions without prop-drilling
                     try { (window as unknown as { __APP_WS__?: WebSocket }).__APP_WS__ = ws } catch { /* no-op */ }
-                    // subscribe to scanner filters for both tables (both start at page 1)
-                    ws.send(JSON.stringify(buildScannerSubscriptionSafe({ ...trendingFilters, page: 1 })))
-                    ws.send(JSON.stringify(buildScannerSubscriptionSafe({ ...newFilters, page: 1 })))
+                    // Subscribe to scanner filters for both panes so we receive scanner-pairs datasets
+                    // for Trending and New tokens. This allows us to compute and send per-pair
+                    // subscriptions for all visible rows across both tables.
+                    ws.send(JSON.stringify(buildScannerSubscriptionSafe({ ...trendingFilters, page: TRENDING_PAGE })))
+                    ws.send(JSON.stringify(buildScannerSubscriptionSafe({ ...newFilters, page: NEW_PAGE })))
                 }
                 ws.onmessage = (ev) => {
                     try {
@@ -222,6 +240,7 @@ function App() {
                             console.error('WS: unhandled or malformed message', parsed)
                             return
                         }
+                        try { console.log('WS: dispatching action', { type: (action as { type: string }).type }) } catch { /* no-op */ }
                         d(action)
 
                         // Helpful diagnostics: log compact payload details
@@ -232,8 +251,10 @@ function App() {
                             } catch { /* no-op */ }
                         } else if (event === 'tick') {
                             try {
-                                const dd = data as { pair?: { pair?: string }, swaps?: unknown[] }
-                                console.log('WS: tick data summary', { pair: dd.pair?.pair, swaps: Array.isArray(dd.swaps) ? dd.swaps.length : undefined })
+                                const dd = data as { pair?: { pair?: string }, swaps?: { isOutlier?: boolean, priceToken1Usd?: string | number }[] }
+                                const latest = Array.isArray(dd.swaps) ? dd.swaps.filter(s => !s.isOutlier).pop() : undefined
+                                const latestPrice = latest ? (typeof latest.priceToken1Usd === 'number' ? latest.priceToken1Usd : parseFloat(latest.priceToken1Usd ?? 'NaN')) : undefined
+                                console.log('WS: tick data summary', { pair: dd.pair?.pair, swaps: Array.isArray(dd.swaps) ? dd.swaps.length : undefined, latestPrice })
                             } catch { /* no-op */ }
                         }
 
@@ -285,29 +306,36 @@ function App() {
                 clearTimeout(openTimeout);
                 openTimeout = null
             }
-            // Avoid closing a CONNECTING socket to prevent browser error: "WebSocket is closed before the connection is established."
+            // Attempt to unsubscribe from scanner filters before closing (only outside dev)
+            try {
+                if (!import.meta.env.DEV && currentWs && currentWs.readyState === WebSocket.OPEN) {
+                    currentWs.send(JSON.stringify(buildScannerUnsubscriptionSafe({ ...trendingFilters, page: TRENDING_PAGE })))
+                    currentWs.send(JSON.stringify(buildScannerUnsubscriptionSafe({ ...newFilters, page: NEW_PAGE })))
+                }
+            } catch { /* ignore unsubscribe errors */ }
+
+            // In dev, preserve the WebSocket across React StrictMode unmount/mount cycles to avoid churn.
+            // Do not attempt to close CONNECTING or OPEN sockets in dev. Outside dev, close politely.
             try {
                 if (currentWs) {
-                    if (currentWs.readyState === WebSocket.CONNECTING) {
-                        const wsToClose = currentWs
-                        // Defer close until it opens or times out
-                        const closeIfOpen = () => {
-                            try {
-                                if (wsToClose.readyState === WebSocket.OPEN) wsToClose.close()
-                            } catch {
-                                void 0
-                            }
+                    if (!import.meta.env.DEV) {
+                        if (currentWs.readyState === WebSocket.OPEN) {
+                            currentWs.close()
+                        } else if (currentWs.readyState !== WebSocket.CONNECTING) {
+                            // Only close non-CONNECTING states to avoid browser errors
+                            currentWs.close()
                         }
-                        wsToClose.addEventListener('open', closeIfOpen, {once: true})
-                    } else {
-                        currentWs.close()
                     }
                 }
-            } catch { /* ignore close errors */
-            }
-            try { (window as unknown as { __APP_WS__?: WebSocket }).__APP_WS__ = undefined as unknown as WebSocket } catch { /* no-op */ }
+            } catch { /* ignore close errors */ }
+            // Preserve global WS reference in dev; clear only outside dev
+            try {
+                if (!import.meta.env.DEV) {
+                    (window as unknown as { __APP_WS__?: WebSocket }).__APP_WS__ = undefined as unknown as WebSocket
+                }
+            } catch { /* no-op */ }
         }
-    }, [trendingFilters, newFilters, d, buildScannerSubscriptionSafe, mapIncomingMessageToActionSafe, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, computePairPayloadsSafe])
+    }, [trendingFilters, newFilters, d, buildScannerSubscriptionSafe, mapIncomingMessageToActionSafe, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, computePairPayloadsSafe, buildScannerUnsubscriptionSafe])
 
     // keep demo type usage to satisfy README guidance
     const demoMap = useMemo(() => {
@@ -372,7 +400,7 @@ function App() {
 
     return (
         <div style={{padding: '16px 16px 16px 10px'}}>
-            <h1>Dexcelerate Scanner</h1>
+            <h1>Dexcelerate Scanner{import.meta.env.DEV ? ` (v${String((state as unknown as { version?: number }).version ?? 0)})` : ''}</h1>
             <p className="muted">Demo chainIdToName: {demoMap.chainName}</p>
             {wpegPrices && Object.keys(wpegPrices).length > 0 && (
                 <div style={{ margin: '8px 0', padding: '8px', background: '#0d1117', border: '1px solid #30363d', borderRadius: 6, fontSize: 12 }}>
@@ -386,14 +414,16 @@ function App() {
                 <TokensPane
                     title="Trending Tokens"
                     filters={trendingFilters}
-                    state={state as unknown as { byId: Record<string, TokenRow> }}
+                    page={TRENDING_PAGE}
+                    state={{ byId: state.byId, pages: state.pages, version: (state as unknown as { version?: number }).version ?? 0 } as unknown as { byId: Record<string, TokenRow>, pages: Partial<Record<number, string[]>> }}
                     dispatch={dispatch as unknown as React.Dispatch<ScannerPairsAction>}
                     defaultSort={{ key: 'volumeUsd', dir: 'desc' }}
                 />
                 <TokensPane
                     title="New Tokens"
                     filters={newFilters}
-                    state={state as unknown as { byId: Record<string, TokenRow> }}
+                    page={NEW_PAGE}
+                    state={{ byId: state.byId, pages: state.pages, version: (state as unknown as { version?: number }).version ?? 0 } as unknown as { byId: Record<string, TokenRow>, pages: Partial<Record<number, string[]>> }}
                     dispatch={dispatch as unknown as React.Dispatch<ScannerPairsAction>}
                     defaultSort={{ key: 'age', dir: 'desc' }}
                 />

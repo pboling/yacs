@@ -186,7 +186,17 @@ export function generateScannerResponse(params = {}) {
     items.push(item)
   }
 
-  return { page, totalPages, scannerPairs: items }
+  // Deduplicate by pairAddress (case-insensitive) to avoid duplicate rows downstream
+  const seen = new Set()
+  const uniqueItems = []
+  for (const it of items) {
+    const k = typeof it.pairAddress === 'string' ? it.pairAddress.toLowerCase() : ''
+    if (k && !seen.has(k)) {
+      seen.add(k)
+      uniqueItems.push(it)
+    }
+  }
+  return { page, totalPages, scannerPairs: uniqueItems }
 }
 
 // Minimal Vite dev middleware to serve /scanner using the generator above

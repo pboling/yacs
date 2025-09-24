@@ -15,17 +15,35 @@ export function computePairPayloads(items) {
   if (!Array.isArray(items)) return []
   const out = []
   const seen = new Set()
+
+  const idToName = (id) => {
+    switch (Number(id)) {
+      case 1: return 'ETH'
+      case 56: return 'BSC'
+      case 8453: return 'BASE'
+      case 900: return 'SOL'
+      default: return String(id)
+    }
+  }
+
   for (const it of items) {
     if (!it || typeof it !== 'object') continue
     const pair = typeof it.pairAddress === 'string' ? it.pairAddress : undefined
     const token = typeof it.token1Address === 'string' ? it.token1Address : undefined
-    // chainId is a number in ScannerResult; normalize to string to keep payload consistent
-    const chainId = typeof it.chainId === 'number' ? String(it.chainId) : (typeof it.chainId === 'string' ? it.chainId : undefined)
-    if (!pair || !token || !chainId) continue
-    const key = pair + '|' + token + '|' + chainId
-    if (seen.has(key)) continue
-    seen.add(key)
-    out.push({ pair, token, chain: chainId })
+    const chainIdNum = typeof it.chainId === 'number' ? it.chainId : (typeof it.chainId === 'string' ? Number(it.chainId) : undefined)
+    if (!pair || !token || chainIdNum == null || Number.isNaN(chainIdNum)) continue
+
+    const chainIdStr = String(chainIdNum)
+    const chainName = idToName(chainIdNum)
+
+    // Emit both variants to be compatible with servers expecting either numeric id or name
+    const variants = [chainIdStr, chainName]
+    for (const chain of variants) {
+      const key = pair + '|' + token + '|' + chain
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({ pair, token, chain })
+    }
   }
   return out
 }

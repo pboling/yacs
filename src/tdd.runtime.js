@@ -64,24 +64,41 @@ export function mapScannerResultToToken(scanner) {
 export function applyTickToToken(token, swaps, ctx) {
   const latest = swaps.filter((s) => !s.isOutlier).pop()
   if (!latest) return token
-  const newPrice = parseFloat(latest.priceToken1Usd)
-  const oldPrice = token.priceUsd || 0
-  const newMcap = ctx.totalSupply * newPrice
+
+  const parseNum = (v, def = 0) => {
+    const n = typeof v === 'number' ? v : parseFloat(v || '0')
+    return Number.isFinite(n) ? n : def
+  }
+
+  const oldPrice = parseNum(token.priceUsd, 0)
+  let newPrice = parseNum(latest.priceToken1Usd, NaN)
+  if (!Number.isFinite(newPrice) || newPrice <= 0) {
+    // Fallback: try any other non-outlier swap price, otherwise keep old price
+    const alt = swaps.filter((s) => !s.isOutlier).map((s) => parseNum(s.priceToken1Usd, NaN)).find((n) => Number.isFinite(n) && n > 0)
+    newPrice = Number.isFinite(alt) ? alt : oldPrice
+  }
+
+  const newMcap = (parseNum(ctx.totalSupply, 0)) * newPrice
+
   let buys = 0
   let sells = 0
   let volumeDelta = 0
   for (const s of swaps) {
     if (s.isOutlier) continue
-    const amt1 = parseFloat(s.amountToken1 || '0') || 0
-    volumeDelta += parseFloat(s.priceToken1Usd || '0') * Math.abs(amt1)
-    if (s.tokenInAddress.toLowerCase() === ctx.token0Address.toLowerCase()) buys++
-    else if (s.tokenInAddress.toLowerCase() === ctx.token1Address.toLowerCase()) sells++
+    const amt1 = parseNum(s.amountToken1, 0)
+    const px = Number.isFinite(parseNum(s.priceToken1Usd, NaN)) ? parseNum(s.priceToken1Usd, 0) : (Number.isFinite(newPrice) && newPrice > 0 ? newPrice : oldPrice)
+    volumeDelta += px * Math.abs(amt1)
+    const tin = (s.tokenInAddress || '').toLowerCase()
+    const t0 = (ctx.token0Address || '').toLowerCase()
+    const t1 = (ctx.token1Address || '').toLowerCase()
+    if (t0 && tin === t0) buys++
+    else if (t1 && tin === t1) sells++
   }
 
   // Deterministic liquidity evolution driven by price percent change per tick.
   // We let liquidity drift by a fraction (10%) of the price percentage change.
   const prevLiq = token.liquidity?.current ?? 0
-  const pricePct = oldPrice > 0 ? (newPrice - oldPrice) / oldPrice : 0
+  const pricePct = oldPrice > 0 && newPrice > 0 ? (newPrice - oldPrice) / oldPrice : 0
   const driftFactor = 0.10 // 10% of price pct change affects liquidity
   const liqDelta = prevLiq * pricePct * driftFactor
   const nextLiq = Math.max(0, prevLiq + liqDelta)
@@ -89,8 +106,8 @@ export function applyTickToToken(token, swaps, ctx) {
 
   return {
     ...token,
-    priceUsd: newPrice,
-    mcap: newMcap,
+    priceUsd: Number.isFinite(newPrice) ? newPrice : oldPrice,
+    mcap: Number.isFinite(newMcap) ? newMcap : token.mcap,
     volumeUsd: token.volumeUsd + volumeDelta,
     transactions: {
       buys: token.transactions.buys + buys,

@@ -22,60 +22,135 @@ export const initialState = {
   pages: {}, // pageNumber -> string[] ids present on that page
   filters: { excludeHoneypots: false },
   wpegPrices: {}, // chain -> number
+  version: 0, // monotonically increasing change counter for UI subscriptions
 }
+
+const __REDUCER_SEEN__ = new WeakSet()
 
 export function tokensReducer(state = initialState, action) {
   switch (action.type) {
     case 'scanner/pairs': {
+          if (!__REDUCER_SEEN__.has(action)) {
+            __REDUCER_SEEN__.add(action)
+            try { console.log('REDUCER: scanner/pairs ingest', { page: action.payload?.page, count: Array.isArray(action.payload?.scannerPairs) ? action.payload.scannerPairs.length : 'n/a' }) } catch {}
+          }
       const { page, scannerPairs } = action.payload // scannerPairs: ScannerResult[]
       const next = { ...state, byId: { ...state.byId }, meta: { ...state.meta }, pages: { ...state.pages } }
       const ids = []
       for (const s of scannerPairs) {
         const tNew = mapScannerResultToToken(s)
         const id = tNew.id
+        const idLower = String(id || '').toLowerCase()
         ids.push(id)
-        // preserve live price/mcap if already updated in state
-        const existing = next.byId[id]
-        next.byId[id] = existing ? { ...tNew, priceUsd: existing.priceUsd, mcap: existing.mcap, volumeUsd: existing.volumeUsd, transactions: existing.transactions } : tNew
-        // store meta needed for ticks
+        // preserve live price/mcap if already updated in state (prefer existing original-cased id)
+        const existing = next.byId[id] || next.byId[idLower]
+        const merged = existing ? { ...tNew, priceUsd: existing.priceUsd, mcap: existing.mcap, volumeUsd: existing.volumeUsd, transactions: existing.transactions } : tNew
+        next.byId[id] = merged
+        next.byId[idLower] = merged
+        // store meta needed for ticks under both keys
         const totalSupply = parseFloat(s.token1TotalSupplyFormatted || '0') || 0
-        next.meta[id] = { ...(next.meta[id] || {}), totalSupply }
+        const newMeta = { ...(next.meta[id] || next.meta[idLower] || {}), totalSupply }
+        next.meta[id] = newMeta
+        next.meta[idLower] = newMeta
       }
-      // set page ids
+      // set page ids (keep original-cased ids for external expectations/tests)
       next.pages[page] = ids
       // Note: we purposely avoid global removal here to allow tokens present on other pages
       // The cleanup strategy can be implemented later if needed.
-      return next
+      return { ...next, version: (state.version || 0) + 1 }
     }
     case 'pair/tick': {
       const { pair, swaps } = action.payload
       // pair = { pair, token, chain }
-      const id = pair.pair
-      const token = state.byId[id]
-      if (!token) return state
-      const meta = state.meta[id] || {}
+      const idOrig = String(pair.pair || '')
+      const id = idOrig.toLowerCase()
+      const token = state.byId[id] || state.byId[idOrig]
+      if (!token) {
+        console.warn('REDUCER: pair/tick ignored - token not found in state.byId', { idOrig, idLower: id, knownKeys: Object.keys(state.byId).length })
+        return state
+      }
+      const meta = state.meta[id] || state.meta[idOrig] || {}
       const token0Address = swaps?.[0]?.token0Address || meta.token0Address || ''
       const ctx = { totalSupply: meta.totalSupply || 0, token0Address, token1Address: token.tokenAddress }
       const updated = applyTickToToken(token, Array.isArray(swaps) ? swaps : [], ctx)
+      try {
+        if (updated && typeof updated.priceUsd === 'number') {
+          if (!__REDUCER_SEEN__.has(action)) {
+            __REDUCER_SEEN__.add(action)
+            console.log('REDUCER: pair/tick applied', { id: idOrig, oldPrice: token.priceUsd, newPrice: updated.priceUsd, oldMcap: token.mcap, newMcap: updated.mcap, vol: updated.volumeUsd })
+          }
+        }
+      } catch { /* no-op */ }
       return {
         ...state,
-        byId: { ...state.byId, [id]: updated },
-        meta: { ...state.meta, [id]: { ...meta, token0Address } },
+        byId: { ...state.byId, [id]: updated, [idOrig]: updated },
+        meta: { ...state.meta, [id]: { ...meta, token0Address }, [idOrig]: { ...meta, token0Address } },
+        version: (state.version || 0) + 1,
       }
     }
     case 'pair/stats': {
       const { data } = action.payload // PairStatsMsgData
-      const id = data.pair.pairAddress
-      const token = state.byId[id]
+      const idOrig = String(data.pair?.pairAddress || '')
+      const id = idOrig.toLowerCase()
+      const token = state.byId[id] || state.byId[idOrig]
       if (!token) return state
+      const p = data.pair || {}
       const audit = {
         ...token.audit,
-        honeypot: !!data.pair.token1IsHoneypot,
-        contractVerified: !!data.pair.isVerified,
-        mintable: !data.pair.mintAuthorityRenounced,
-        freezable: !data.pair.freezeAuthorityRenounced,
+        // README mapping:
+        // mintable := mintAuthorityRenounced (no inversion)
+        // freezable := freezeAuthorityRenounced (no inversion)
+        // honeypot := !token1IsHoneypot
+        // contractVerified := isVerified
+        mintable: !!p.mintAuthorityRenounced,
+        freezable: !!p.freezeAuthorityRenounced,
+        honeypot: !p.token1IsHoneypot,
+        contractVerified: !!p.isVerified,
+        // Social links + paid flag
+        linkDiscord: p.linkDiscord ?? token.audit?.linkDiscord,
+        linkTelegram: p.linkTelegram ?? token.audit?.linkTelegram,
+        linkTwitter: p.linkTwitter ?? token.audit?.linkTwitter,
+        linkWebsite: p.linkWebsite ?? token.audit?.linkWebsite,
+        dexPaid: p.dexPaid ?? token.audit?.dexPaid,
       }
-      return { ...state, byId: { ...state.byId, [id]: { ...token, audit } } }
+      const migrationPc = Number(data.migrationProgress ?? token.migrationPc ?? 0) || 0
+      const nextTok = { ...token, audit, migrationPc }
+      if (!__REDUCER_SEEN__.has(action)) { __REDUCER_SEEN__.add(action); try { console.log('REDUCER: pair/stats applied', { id: idOrig, audit: { contractVerified: audit.contractVerified, honeypot: audit.honeypot }, migrationPc }) } catch {} }
+      return { ...state, byId: { ...state.byId, [id]: nextTok, [idOrig]: nextTok }, version: (state.version || 0) + 1 }
+    }
+    case 'pair/patch': {
+      const { data } = action.payload || {}
+      if (!data || typeof data !== 'object') return state
+      const idCandidate = data.pairAddress || data.id || ''
+      const idOrig = String(idCandidate || '')
+      const id = idOrig.toLowerCase()
+      const existing = state.byId[id] || state.byId[idOrig]
+      if (!existing) return state
+      // Normalize certain fields if present
+      const patch = { ...data }
+      if (typeof patch.tokenCreatedTimestamp === 'string' || patch.tokenCreatedTimestamp instanceof Date) {
+        try { patch.tokenCreatedTimestamp = new Date(patch.tokenCreatedTimestamp) } catch { delete patch.tokenCreatedTimestamp }
+      }
+      if (patch.priceChangePcs && typeof patch.priceChangePcs === 'object') {
+        const pc = patch.priceChangePcs
+        const norm = {
+          '5m': Number(pc['5m'] ?? pc.m5 ?? existing.priceChangePcs['5m']) || 0,
+          '1h': Number(pc['1h'] ?? pc.h1 ?? existing.priceChangePcs['1h']) || 0,
+          '6h': Number(pc['6h'] ?? pc.h6 ?? existing.priceChangePcs['6h']) || 0,
+          '24h': Number(pc['24h'] ?? pc.h24 ?? existing.priceChangePcs['24h']) || 0,
+        }
+        patch.priceChangePcs = norm
+      }
+      // Limit to known top-level fields to avoid accidental pollution
+      const allowedKeys = new Set([
+        'tokenName','tokenSymbol','chain','exchange','priceUsd','mcap','volumeUsd','priceChangePcs','tokenCreatedTimestamp','transactions','liquidity'
+      ])
+      const safePatch = {}
+      for (const k of Object.keys(patch)) {
+        if (allowedKeys.has(k)) safePatch[k] = patch[k]
+      }
+      const nextTok = { ...existing, ...safePatch }
+      return { ...state, byId: { ...state.byId, [id]: nextTok, [idOrig]: nextTok } }
     }
     case 'wpeg/prices': {
       const prices = action.payload?.prices || {}
@@ -100,5 +175,6 @@ export const actions = {
   scannerPairs: (page, scannerPairs) => ({ type: 'scanner/pairs', payload: { page, scannerPairs } }),
   tick: (pair, swaps) => ({ type: 'pair/tick', payload: { pair, swaps } }),
   pairStats: (data) => ({ type: 'pair/stats', payload: { data } }),
+  pairPatch: (data) => ({ type: 'pair/patch', payload: { data } }),
   setFilters: (payload) => ({ type: 'filters/set', payload }),
 }

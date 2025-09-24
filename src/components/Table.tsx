@@ -1,4 +1,5 @@
 import NumberCell from './NumberCell'
+import { useEffect } from 'react'
 
 // Local minimal types to avoid circular deps with App
 interface TokenRow {
@@ -34,14 +35,14 @@ function formatAge(ts: Date) {
 }
 
 export default function Table({
-                                  title,
-                                  rows,
-                                  loading,
-                                  error,
-                                  onSort,
-                                  sortKey,
-                                  sortDir,
-                              }: {
+                                   title,
+                                   rows,
+                                   loading,
+                                   error,
+                                   onSort,
+                                   sortKey,
+                                   sortDir,
+                               }: {
     title: string
     rows: TokenRow[]
     loading: boolean
@@ -50,6 +51,63 @@ export default function Table({
     sortKey: SortKey
     sortDir: 'asc' | 'desc'
 }) {
+    // Dev-only: log a compact snapshot of the first row whenever rows change
+    useEffect(() => {
+        if (!import.meta.env.DEV) return
+        try {
+            if (rows.length > 0) {
+                const t = rows[0]
+                console.log(`[Table:${title}] first row`, {
+                    id: t.id,
+                    price: t.priceUsd,
+                    mcap: t.mcap,
+                    vol: t.volumeUsd,
+                    buys: t.transactions.buys,
+                    sells: t.transactions.sells,
+                    liq: t.liquidity.current,
+                })
+            } else {
+                console.log(`[Table:${title}] first row`, { none: true })
+            }
+        } catch { /* no-op */ }
+    }, [rows, title])
+
+    // Dev-only: diff logging to prove which rows actually changed between renders
+    useEffect(() => {
+        if (!import.meta.env.DEV) return
+        try {
+            interface Snap { price: number; mcap: number; vol: number; buys: number; sells: number; liq: number }
+            const tableAny = Table as unknown as { __prevMaps__?: Record<string, Record<string, Snap>> }
+            const maps: Record<string, Record<string, Snap>> = tableAny.__prevMaps__ ?? {}
+            const prevMap: Partial<Record<string, Snap>> = maps[title] ?? {}
+            const nextMap: Record<string, Snap> = {}
+            const changes: { id: string; old?: Snap; new: Snap }[] = []
+            for (const r of rows) {
+                const snap: Snap = { price: r.priceUsd, mcap: r.mcap, vol: r.volumeUsd, buys: r.transactions.buys, sells: r.transactions.sells, liq: r.liquidity.current }
+                const suffix = title === 'Trending Tokens' ? 'TREND' : title === 'New Tokens' ? 'NEW' : title.replace(/\s+/g, '-').toUpperCase()
+                const composedId = `${r.id}::${suffix}`
+                nextMap[composedId] = snap
+                const prev = prevMap[composedId]
+                if (
+                    !prev ||
+                    prev.price !== snap.price ||
+                    prev.mcap !== snap.mcap ||
+                    prev.vol !== snap.vol ||
+                    prev.buys !== snap.buys ||
+                    prev.sells !== snap.sells ||
+                    prev.liq !== snap.liq
+                ) {
+                    changes.push({ id: r.id, old: prev, new: snap })
+                }
+            }
+            ;(Table as unknown as { __prevMaps__?: Record<string, Record<string, Snap>> }).__prevMaps__ = { ...maps, [title]: nextMap }
+            if (changes.length > 0) {
+                const c = changes[0]
+                console.log(`[Table:${title}] changed ${String(changes.length)} rows; first change`, c)
+            }
+        } catch { /* no-op */ }
+    }, [rows, title])
+
     return (
         <section>
             <h2>{title}</h2>
@@ -89,39 +147,43 @@ export default function Table({
                         </tr>
                         </thead>
                         <tbody>
-                        {rows.map((t) => (
-                            <tr key={t.id}>
-                                <td>
-                                    <div>
-                                        <strong>{t.tokenName}</strong> <span>({t.tokenSymbol})</span>
-                                    </div>
-                                    <div className="muted">{t.chain}</div>
-                                </td>
-                                <td>{t.exchange}</td>
-                                <td>
-                                    <NumberCell value={t.priceUsd} prefix="$" formatter={(n) => n.toFixed(6)} />
-                                </td>
-                                <td>
-                                    <NumberCell value={t.mcap} prefix="$" formatter={(n) => Math.round(n).toLocaleString()} />
-                                </td>
-                                <td>
-                                    <NumberCell value={t.volumeUsd} prefix="$" formatter={(n) => Math.round(n).toLocaleString()} />
-                                </td>
-                                <td>
-                                    <NumberCell noFade value={t.priceChangePcs['5m']} suffix="%" />{' / '}
-                                    <NumberCell noFade value={t.priceChangePcs['1h']} suffix="%" />{' / '}
-                                    <NumberCell noFade value={t.priceChangePcs['6h']} suffix="%" />{' / '}
-                                    <NumberCell noFade value={t.priceChangePcs['24h']} suffix="%" />
-                                </td>
-                                <td>{formatAge(t.tokenCreatedTimestamp)}</td>
-                                <td>
-                                    <NumberCell value={t.transactions.buys} />/<NumberCell value={t.transactions.sells} />
-                                </td>
-                                <td>
-                                    <NumberCell value={t.liquidity.current} prefix="$" formatter={(n) => Math.round(n).toLocaleString()} />
-                                </td>
-                            </tr>
-                        ))}
+                        {rows.map((t) => {
+                            const suffix = title === 'Trending Tokens' ? 'TREND' : title === 'New Tokens' ? 'NEW' : title.replace(/\s+/g, '-').toUpperCase()
+                            const composedId = `${t.id}::${suffix}`
+                            return (
+                                <tr key={composedId}>
+                                    <td>
+                                        <div>
+                                            <strong>{t.tokenName}</strong> <span>({t.tokenSymbol})</span>
+                                        </div>
+                                        <div className="muted">{t.chain}</div>
+                                    </td>
+                                    <td>{t.exchange}</td>
+                                    <td>
+                                        <NumberCell value={t.priceUsd} prefix="$" formatter={(n) => n.toFixed(6)} />
+                                    </td>
+                                    <td>
+                                        <NumberCell value={t.mcap} prefix="$" formatter={(n) => Math.round(n).toLocaleString()} />
+                                    </td>
+                                    <td>
+                                        <NumberCell value={t.volumeUsd} prefix="$" formatter={(n) => Math.round(n).toLocaleString()} />
+                                    </td>
+                                    <td>
+                                        <NumberCell noFade value={t.priceChangePcs['5m']} suffix="%" />{' / '}
+                                        <NumberCell noFade value={t.priceChangePcs['1h']} suffix="%" />{' / '}
+                                        <NumberCell noFade value={t.priceChangePcs['6h']} suffix="%" />{' / '}
+                                        <NumberCell noFade value={t.priceChangePcs['24h']} suffix="%" />
+                                    </td>
+                                    <td>{formatAge(t.tokenCreatedTimestamp)}</td>
+                                    <td>
+                                        <NumberCell value={t.transactions.buys} />/<NumberCell value={t.transactions.sells} />
+                                    </td>
+                                    <td>
+                                        <NumberCell value={t.liquidity.current} prefix="$" formatter={(n) => Math.round(n).toLocaleString()} />
+                                    </td>
+                                </tr>
+                            )
+                        })}
                         </tbody>
                     </table>
                 </div>

@@ -144,26 +144,54 @@ export function attachWsServer(server) {
                     itemsByKey.set(key, item)
                 }
 
-                // Begin deterministic stream for the first item (kept for immediate UI feedback)
-                const first = res.scannerPairs[0]
-                if (first) {
-                    const pairKey = first.pairAddress + '|' + first.token1Address + '|' + String(first.chainId)
+                // Begin deterministic streams for the first few items to ensure visible rows update quickly
+                const bootstrapCount = 6
+                for (let i = 0; i < Math.min(bootstrapCount, res.scannerPairs.length); i++) {
+                    const item = res.scannerPairs[i]
+                    if (!item) continue
+                    const pairKey = item.pairAddress + '|' + item.token1Address + '|' + String(item.chainId)
                     subs.pairs.add(pairKey)
                     subs.stats.add(pairKey)
-                    startStreamFor(first)
+                    startStreamFor(item)
                 }
             } else if (ev === 'subscribe-pair') {
                 const p = msg.data
                 const key = p?.pair + '|' + p?.token + '|' + p?.chain
                 subs.pairs.add(key)
-                const item = itemsByKey.get(key)
+                let item = itemsByKey.get(key)
+                if (!item) {
+                    // Be tolerant to chain format mismatches (e.g., 'ETH' vs '1'): try to resolve by pair+token only
+                    let prefix = p?.pair + '|' + p?.token + '|'
+                    for (const [k, v] of itemsByKey.entries()) {
+                        if (typeof k === 'string' && k.startsWith(prefix)) { item = v; break }
+                    }
+                    // Fallback: match by pair only if token differs between sources
+                    if (!item) {
+                        prefix = p?.pair + '|'
+                        for (const [k, v] of itemsByKey.entries()) {
+                            if (typeof k === 'string' && k.startsWith(prefix)) { item = v; break }
+                        }
+                    }
+                }
                 if (item) startStreamFor(item)
             } else if (ev === 'subscribe-pair-stats') {
                 const p = msg.data
                 const key = p?.pair + '|' + p?.token + '|' + p?.chain
                 subs.stats.add(key)
                 // If only stats subscription arrives first, also start stream so that stats get emitted too
-                const item = itemsByKey.get(key)
+                let item = itemsByKey.get(key)
+                if (!item) {
+                    let prefix = p?.pair + '|' + p?.token + '|'
+                    for (const [k, v] of itemsByKey.entries()) {
+                        if (typeof k === 'string' && k.startsWith(prefix)) { item = v; break }
+                    }
+                    if (!item) {
+                        prefix = p?.pair + '|'
+                        for (const [k, v] of itemsByKey.entries()) {
+                            if (typeof k === 'string' && k.startsWith(prefix)) { item = v; break }
+                        }
+                    }
+                }
                 if (item) startStreamFor(item)
             }
         })
