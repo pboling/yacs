@@ -2,9 +2,8 @@
 html, body { background: #0f1115; color: #e5e7eb; }
 
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
+  margin: 0;
+  padding: 0;
 }
 
 .muted { color: #9ca3af; font-size: 12px; }

@@ -513,7 +513,7 @@ function App() {
   }, [])
 
   return (
-    <div style={{ padding: 16 }}>
+    <div style={{ padding: '16px 16px 16px 10px' }}>
       <h1>Dexcelerate Scanner</h1>
       <p className="muted">Demo chainIdToName: {demoMap.chainName}</p>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
