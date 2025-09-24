@@ -392,3 +392,10 @@ For ws connection use:
 
 You will have to use a no-cors extension from the Chrome web store during development
 `https://chromewebstore.google.com/detail/allow-cors-access-control/` - or any other extension with similar functionality.
+
+### Dev proxy (added)
+- The Vite dev server proxies API and WebSocket calls to avoid CORS during development.
+- REST: fetch('/scanner?…') → proxies to https://api-rs.dexcelerate.com/scanner
+- WS: new WebSocket('ws://localhost:5173/ws') → proxies to wss://api-rs.dexcelerate.com/ws
+- The client prefers a relative base in dev; you can override with VITE_API_BASE.
+  - Example: echo "VITE_API_BASE=/" > .env.local to force relative base; default behavior already uses relative base in dev.
