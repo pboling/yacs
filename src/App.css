@@ -19,3 +19,11 @@ table.tokens { width: 100%; border-collapse: collapse; font-size: 14px; text-ali
 
 .up { color: #10b981; }
 .down { color: #ef4444; }
+
+/* Filters bar */
+.filters { margin: 10px 0 16px; padding: 10px; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; }
+.filters .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; }
+.filters .group { display: flex; flex-direction: column; gap: 6px; }
+.filters label { font-size: 12px; color: #9ca3af; }
+.filters .chk { display: inline-flex; align-items: center; gap: 6px; margin-right: 8px; }
+.filters input[type="number"] { background: #111827; color: #e5e7eb; border: 1px solid #374151; border-radius: 4px; padding: 6px 8px; min-width: 120px; }

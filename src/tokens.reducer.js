@@ -20,7 +20,7 @@ export const initialState = {
   byId: {}, // id -> TokenData
   meta: {}, // id -> { totalSupply: number, token0Address?: string }
   pages: {}, // pageNumber -> string[] ids present on that page
-  filters: { excludeHoneypots: false },
+  filters: { excludeHoneypots: false, chains: ['ETH','SOL','BASE','BSC'], minVolume: 0, maxAgeHours: null, minMcap: 0 },
   wpegPrices: {}, // chain -> number
   version: 0, // monotonically increasing change counter for UI subscriptions
 }

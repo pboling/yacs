@@ -54,7 +54,7 @@ interface State {
     byId: Record<string, TokenRow>
     meta: Record<string, TokensMeta>
     pages: Partial<Record<number, string[]>>
-    filters: { excludeHoneypots: boolean }
+    filters: { excludeHoneypots?: boolean; chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number }
     wpegPrices?: Record<string, number>
 }
 
@@ -86,7 +86,7 @@ interface WpegPricesAction {
 
 interface FiltersAction {
     type: 'filters/set';
-    payload: { excludeHoneypots?: boolean }
+    payload: { excludeHoneypots?: boolean; chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number }
 }
 
 type Action = ScannerPairsAction | ScannerAppendAction | TickAction | PairStatsAction | WpegPricesAction | FiltersAction
@@ -407,6 +407,73 @@ function App() {
         <div style={{padding: '16px 16px 16px 10px'}}>
             <h1>Dexcelerate Scanner{import.meta.env.DEV ? ` (v${String((state as unknown as { version?: number }).version ?? 0)})` : ''}</h1>
             <p className="muted">Demo chainIdToName: {demoMap.chainName}</p>
+            {/* Filters Bar */}
+            <div className="filters">
+                <div className="row">
+                    <div className="group">
+                        <label>Chains</label>
+                        {(['ETH','SOL','BASE','BSC'] as const).map((c) => {
+                            const checked = (state.filters.chains ?? ['ETH','SOL','BASE','BSC']).includes(c)
+                            return (
+                                <label key={c} className="chk">
+                                    <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={(e) => {
+                                            const prev = new Set(state.filters.chains ?? ['ETH','SOL','BASE','BSC'])
+                                            if (e.currentTarget.checked) prev.add(c); else prev.delete(c)
+                                            d({ type: 'filters/set', payload: { chains: Array.from(prev) } } as FiltersAction)
+                                        }}
+                                    /> {c}
+                                </label>
+                            )
+                        })}
+                    </div>
+                    <div className="group">
+                        <label>Min Volume ($)</label>
+                        <input
+                            type="number"
+                            min={0}
+                            step={100}
+                            value={state.filters.minVolume ?? 0}
+                            onChange={(e) => { d({ type: 'filters/set', payload: { minVolume: Number(e.currentTarget.value || 0) } } as FiltersAction); }}
+                        />
+                    </div>
+                    <div className="group">
+                        <label>Max Age (hours)</label>
+                        <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={state.filters.maxAgeHours ?? ''}
+                            placeholder="any"
+                            onChange={(e) => {
+                                const v = e.currentTarget.value
+                                d({ type: 'filters/set', payload: { maxAgeHours: v === '' ? null : Math.max(0, Number(v)) } } as FiltersAction)
+                            }}
+                        />
+                    </div>
+                    <div className="group">
+                        <label>Min Market Cap ($)</label>
+                        <input
+                            type="number"
+                            min={0}
+                            step={1000}
+                            value={state.filters.minMcap ?? 0}
+                            onChange={(e) => { d({ type: 'filters/set', payload: { minMcap: Number(e.currentTarget.value || 0) } } as FiltersAction); }}
+                        />
+                    </div>
+                    <div className="group">
+                        <label className="chk">
+                            <input
+                                type="checkbox"
+                                checked={!!state.filters.excludeHoneypots}
+                                onChange={(e) => { d({ type: 'filters/set', payload: { excludeHoneypots: e.currentTarget.checked } } as FiltersAction); }}
+                            /> Exclude honeypot
+                        </label>
+                    </div>
+                </div>
+            </div>
             {wpegPrices && Object.keys(wpegPrices).length > 0 && (
                 <div style={{ margin: '8px 0', padding: '8px', background: '#0d1117', border: '1px solid #30363d', borderRadius: 6, fontSize: 12 }}>
                     <strong>WPEG reference prices:</strong>{' '}
@@ -423,6 +490,7 @@ function App() {
                     state={{ byId: state.byId, pages: state.pages, version: (state as unknown as { version?: number }).version ?? 0 } as unknown as { byId: Record<string, TokenRow>, pages: Partial<Record<number, string[]>> }}
                     dispatch={dispatch as unknown as React.Dispatch<ScannerPairsAction>}
                     defaultSort={{ key: 'volumeUsd', dir: 'desc' }}
+                    clientFilters={state.filters as unknown as { chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number; excludeHoneypots?: boolean }}
                 />
                 <TokensPane
                     title="New Tokens"
@@ -431,6 +499,7 @@ function App() {
                     state={{ byId: state.byId, pages: state.pages, version: (state as unknown as { version?: number }).version ?? 0 } as unknown as { byId: Record<string, TokenRow>, pages: Partial<Record<number, string[]>> }}
                     dispatch={dispatch as unknown as React.Dispatch<ScannerPairsAction>}
                     defaultSort={{ key: 'age', dir: 'desc' }}
+                    clientFilters={state.filters as unknown as { chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number; excludeHoneypots?: boolean }}
                 />
             </div>
         </div>

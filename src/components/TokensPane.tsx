@@ -19,6 +19,7 @@ interface TokenRow {
     tokenCreatedTimestamp: Date
     transactions: { buys: number; sells: number }
     liquidity: { current: number; changePc: number }
+    audit?: { honeypot?: boolean }
     // Optional fields present in reducer mapping; used to form WS subscription payloads when rows render
     pairAddress?: string
     tokenAddress?: string
@@ -38,6 +39,7 @@ export default function TokensPane({
                                         state,
                                         dispatch,
                                         defaultSort,
+                                        clientFilters,
                                     }: {
     title: string
     filters: GetScannerResultParams
@@ -45,6 +47,7 @@ export default function TokensPane({
     state: { byId: Record<string, TokenRow | undefined>, pages: Partial<Record<number, string[]>> } & { version?: number }
     dispatch: React.Dispatch<ScannerPairsAction>
     defaultSort: { key: SortKey; dir: Dir }
+    clientFilters?: { chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number; excludeHoneypots?: boolean }
 }) {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -209,8 +212,30 @@ export default function TokensPane({
             const t = state.byId[id] ?? state.byId[lowerId]
             if (t) collected.push(t)
         }
+        // Apply client-side filters before sorting/truncation
+        const cf = clientFilters ?? {}
+        const selectedChains = (cf.chains && cf.chains.length > 0) ? new Set(cf.chains) : null
+        const minVol = cf.minVolume ?? 0
+        const minMcap = cf.minMcap ?? 0
+        const maxAgeMs = (cf.maxAgeHours == null || Number.isNaN(cf.maxAgeHours)) ? null : Math.max(0, cf.maxAgeHours) * 3600_000
+        const now = Date.now()
+        const filtered = collected.filter((t) => {
+            if (selectedChains && !selectedChains.has(t.chain)) return false
+            if (t.volumeUsd < minVol) return false
+            if (t.mcap < minMcap) return false
+            if (maxAgeMs != null) {
+                const ageMs = Math.max(0, now - t.tokenCreatedTimestamp.getTime())
+                if (ageMs > maxAgeMs) return false
+            }
+            if (cf.excludeHoneypots) {
+                if (t.audit && typeof t.audit.honeypot === 'boolean') {
+                    if (t.audit.honeypot) return false
+                }
+            }
+            return true
+        })
         // Fallback: if page has no ids yet (e.g., before first WS/REST), show empty until data arrives
-        const base = collected
+        const base = filtered
         const sorter = (key: SortKey, dir: Dir) => (a: TokenRow, b: TokenRow) => {
             const getVal = (t: TokenRow): number | string => {
                 switch (key) {
@@ -235,7 +260,7 @@ export default function TokensPane({
         const sorted = [...base].sort(sorter(sort.key, sort.dir))
         const out = sorted.slice(0, 50)
         return out
-    }, [state.byId, state.pages, page, sort])
+    }, [state.byId, state.pages, page, sort, clientFilters])
 
     // Keep a ref of latest rows for late WS attach logic
     useEffect(() => {

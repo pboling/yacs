@@ -8,9 +8,9 @@
  */
 export function dumpActiveHandles(prefix = 'Diagnostics') {
   try {
-    // eslint-disable-next-line no-underscore-dangle
+     
     const getHandles = typeof process._getActiveHandles === 'function' ? process._getActiveHandles : null
-    // eslint-disable-next-line no-underscore-dangle
+     
     const getReqs = typeof process._getActiveRequests === 'function' ? process._getActiveRequests : null
     const handles = getHandles ? getHandles.call(process) : []
     const reqs = getReqs ? getReqs.call(process) : []
