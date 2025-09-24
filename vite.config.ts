@@ -6,11 +6,11 @@ export default defineConfig(() => {
   const plugins = [react()]
 
   // WebSocket proxy remains enabled for development
+  // Note: target must be HTTP for ws upgrades; http-proxy handles the WS upgrade when ws: true
   const proxy = {
     '/ws': {
-      target: 'wss://api-rs.dexcelerate.com',
+      target: 'http://localhost:3001',
       changeOrigin: true,
-      secure: true,
       ws: true,
     },
   }

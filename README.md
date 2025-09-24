@@ -392,6 +392,10 @@ You will have to use a no-cors extension from the Chrome web store during develo
 - This allows you to test initial load without relying on the public API.
 
 ### Testing notes
+- Playwright E2E (browser WebSocket validation)
+  - Install browsers once: npx playwright install --with-deps (or rely on CI preinstall)
+  - Run servers + tests: npm run test:e2e (playwright.config.ts starts both Vite and the local backend via npm run dev:serve)
+  - UI mode: npm run test:e2e:ui
 - Minimal regression tests exist using Node's built-in test runner. Run all tests with: node --test
 - Deterministic mock generation is covered by tests/seed.test.js.
 - The Vite dev server proxies API and WebSocket calls to avoid CORS during development.

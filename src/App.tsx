@@ -366,7 +366,25 @@ function App() {
       cancelled = true
       opened = false
       if (openTimeout) { clearTimeout(openTimeout); openTimeout = null }
-      try { currentWs?.close() } catch { /* ignore close errors */ }
+      // Avoid closing a CONNECTING socket to prevent browser error: "WebSocket is closed before the connection is established."
+      try {
+        if (currentWs) {
+          if (currentWs.readyState === WebSocket.CONNECTING) {
+            const wsToClose = currentWs
+            // Defer close until it opens or times out
+            const closeIfOpen = () => {
+              try { if (wsToClose.readyState === WebSocket.OPEN) wsToClose.close() } catch { void 0 }
+            }
+            wsToClose.addEventListener('open', closeIfOpen, { once: true })
+            // Also set a short timeout to avoid lingering sockets
+            setTimeout(() => {
+              try { if (wsToClose.readyState === WebSocket.CONNECTING) wsToClose.close() } catch { void 0 }
+            }, 1000)
+          } else {
+            currentWs.close()
+          }
+        }
+      } catch { /* ignore close errors */ }
       wsRef.current = null
     }
   }, [trendingFilters, newFilters, d, buildScannerSubscriptionSafe, mapIncomingMessageToActionSafe, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, computePairPayloadsSafe])
