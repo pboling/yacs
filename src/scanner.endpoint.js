@@ -47,11 +47,15 @@ function mkAddress(prefix, rnd) {
   return s + prefix
 }
 
+import { getBaseSeed, mixSeeds } from './seed.util.js'
+
 export function generateScannerResponse(params = {}) {
   const page = Number(params.page ?? 1) || 1
   const totalPages = 10
   const size = 50
-  const seed = hashParams({ ...params, page })
+  const baseSeed = getBaseSeed()
+  const paramSeed = hashParams({ ...params, page })
+  const seed = mixSeeds(baseSeed, paramSeed)
   const rnd = mulberry32(seed)
 
   const chain = params.chain ?? 'ETH'

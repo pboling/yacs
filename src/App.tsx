@@ -78,15 +78,15 @@ function Table({ title, rows, loading, error, onSort, sortKey, sortDir }: {
           <table className="tokens">
             <thead>
               <tr>
-                <th onClick={() => { onSort('tokenName') }} aria-sort={sortKey === 'tokenName' ? sortDir : 'none'}>Token</th>
-                <th onClick={() => { onSort('exchange') }} aria-sort={sortKey === 'exchange' ? sortDir : 'none'}>Exchange</th>
-                <th onClick={() => { onSort('priceUsd') }} aria-sort={sortKey === 'priceUsd' ? sortDir : 'none'}>Price</th>
-                <th onClick={() => { onSort('mcap') }} aria-sort={sortKey === 'mcap' ? sortDir : 'none'}>MCap</th>
-                <th onClick={() => { onSort('volumeUsd') }} aria-sort={sortKey === 'volumeUsd' ? sortDir : 'none'}>Volume</th>
+                <th onClick={() => { onSort('tokenName') }} aria-sort={sortKey === 'tokenName' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Token</th>
+                <th onClick={() => { onSort('exchange') }} aria-sort={sortKey === 'exchange' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Exchange</th>
+                <th onClick={() => { onSort('priceUsd') }} aria-sort={sortKey === 'priceUsd' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Price</th>
+                <th onClick={() => { onSort('mcap') }} aria-sort={sortKey === 'mcap' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>MCap</th>
+                <th onClick={() => { onSort('volumeUsd') }} aria-sort={sortKey === 'volumeUsd' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Volume</th>
                 <th>Chg (5m/1h/6h/24h)</th>
-                <th onClick={() => { onSort('age') }} aria-sort={sortKey === 'age' ? sortDir : 'none'}>Age</th>
-                <th onClick={() => { onSort('tx') }} aria-sort={sortKey === 'tx' ? sortDir : 'none'}>Buys/Sells</th>
-                <th onClick={() => { onSort('liquidity') }} aria-sort={sortKey === 'liquidity' ? sortDir : 'none'}>Liquidity</th>
+                <th onClick={() => { onSort('age') }} aria-sort={sortKey === 'age' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Age</th>
+                <th onClick={() => { onSort('tx') }} aria-sort={sortKey === 'tx' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Buys/Sells</th>
+                <th onClick={() => { onSort('liquidity') }} aria-sort={sortKey === 'liquidity' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Liquidity</th>
               </tr>
             </thead>
             <tbody>
@@ -140,7 +140,7 @@ function App() {
   const [trendSort, setTrendSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'volumeUsd', dir: 'desc' })
   const [newSort, setNewSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'age', dir: 'desc' })
 
-  const [state, dispatch] = useReducer<React.Reducer<State, Action>>(tokensReducer as unknown as React.Reducer<State, Action>, initialState as unknown as State)
+  const [state, dispatch] = useReducer(tokensReducer as unknown as (state: State | undefined, action: Action) => State, initialState as unknown as State)
   const d: React.Dispatch<Action> = dispatch as unknown as React.Dispatch<Action>
   const [loadingA, setLoadingA] = useState(false)
   const [loadingB, setLoadingB] = useState(false)

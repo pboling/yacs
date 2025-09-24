@@ -375,3 +375,22 @@ You will have to use a no-cors extension from the Chrome web store during develo
 - WS: new WebSocket('ws://localhost:5173/ws') → proxies to wss://api-rs.dexcelerate.com/ws
 - The client prefers a relative base in dev; you can override with VITE_API_BASE.
   - Example: echo "VITE_API_BASE=/" > .env.local to force relative base; default behavior already uses relative base in dev.
+
+### Local mock data with reproducible seed
+- To generate deterministic mock data locally (no external API), enable the built-in mock server and set a seed:
+  - Enable mock: set LOCAL_SCANNER=1 (or VITE_USE_LOCAL_SCANNER=1)
+  - Seed sources (first match wins): VITE_SEED, SEED, then the content of a .seed file in the project root; fallback to an internal default.
+  - Example:
+    - On macOS/Linux: LOCAL_SCANNER=1 VITE_SEED=12345 npm run dev
+    - Or create a .seed file containing a number (e.g., 987654321) and run: LOCAL_SCANNER=1 npm run dev
+- The REST endpoint /scanner will return data derived from the seed and request params, so the same seed and params always produce the same dataset.
+- This allows you to test initial load without relying on the public API.
+
+### Testing notes
+- Minimal regression tests exist using Node's built-in test runner. Run all tests with: node --test
+- Deterministic mock generation is covered by tests/seed.test.js.
+- The Vite dev server proxies API and WebSocket calls to avoid CORS during development.
+- REST: fetch('/scanner?…') → proxies to https://api-rs.dexcelerate.com/scanner
+- WS: new WebSocket('ws://localhost:5173/ws') → proxies to wss://api-rs.dexcelerate.com/ws
+- The client prefers a relative base in dev; you can override with VITE_API_BASE.
+  - Example: echo "VITE_API_BASE=/" > .env.local to force relative base; default behavior already uses relative base in dev.

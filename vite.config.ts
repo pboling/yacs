@@ -4,7 +4,7 @@ import { createScannerMockPlugin } from './src/scanner.endpoint.js'
 
 // https://vite.dev/config/
 export default defineConfig(() => {
-  const env = (process as unknown as { env: Record<string, string | undefined> }).env
+  const env = ((globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process?.env) ?? {}
   const enableLocalScanner = env.LOCAL_SCANNER === '1' || env.VITE_USE_LOCAL_SCANNER === '1'
   const plugins: PluginOption[] = [react()]
   const getMockPlugin: () => PluginOption = createScannerMockPlugin as unknown as () => PluginOption
