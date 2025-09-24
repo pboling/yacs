@@ -81,28 +81,55 @@ type Action = ScannerPairsAction | TickAction | PairStatsAction | FiltersAction
  * Props are intentionally minimal to keep rendering logic decoupled from data shaping.
  */
 // Reusable cell that colors number green/red based on change vs previous render
-function NumberCell({ value, prefix = '', suffix = '', formatter }: { value: number | string; prefix?: string; suffix?: string; formatter?: (n: number) => string }) {
+function NumberCell({ value, prefix = '', suffix = '', formatter, stableMs, noFade = false }: { value: number | string; prefix?: string; suffix?: string; formatter?: (n: number) => string; stableMs?: number; noFade?: boolean }) {
   const num = typeof value === 'number' ? value : Number(value)
-  const prevRef = useRef<number | null>(null)
-  const trendRef = useRef<'up' | 'down' | ''>('')
+  const prevValRef = useRef<number | null>(null)
+  const appliedClassRef = useRef<'' | 'up' | 'down'>('')
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [, force] = useState(0)
 
-  // Determine trend based on previous value, but only update previous after render
-  let className: '' | 'up' | 'down' = ''
-  if (Number.isFinite(num) && prevRef.current !== null) {
-    if (num > prevRef.current) className = 'up'
-    else if (num < prevRef.current) className = 'down'
+  // Determine raw trend vs previous numeric value
+  let rawTrend: '' | 'up' | 'down' = ''
+  if (Number.isFinite(num) && prevValRef.current !== null) {
+    if (num > prevValRef.current) rawTrend = 'up'
+    else if (num < prevValRef.current) rawTrend = 'down'
   }
-  trendRef.current = className
 
+  // If value is unchanged, keep whatever color was previously applied
+  const desiredClass: '' | 'up' | 'down' = rawTrend === '' ? appliedClassRef.current : rawTrend
+  appliedClassRef.current = desiredClass
+
+  // Update previous numeric value after render
   useEffect(() => {
-    if (Number.isFinite(num)) prevRef.current = num
+    if (Number.isFinite(num)) prevValRef.current = num
   }, [num])
+
+  // Manage auto-clear back to white after a stable period without trend changes
+  useEffect(() => {
+    if (noFade) return
+    const defaultStable = Number(import.meta.env.VITE_STABLE_COLOR_MS ?? '10000')
+    const holdMs = typeof stableMs === 'number' && stableMs > 0 ? stableMs : defaultStable
+
+    if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
+
+    if (desiredClass === 'up' || desiredClass === 'down') {
+      timeoutRef.current = setTimeout(() => {
+        appliedClassRef.current = ''
+        // force a re-render to apply the cleared class
+        force((n) => n + 1)
+      }, holdMs)
+    }
+
+    return () => {
+      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
+    }
+  }, [desiredClass, stableMs, noFade])
 
   const text = Number.isFinite(num)
     ? (formatter ? formatter(num) : String(num))
     : String(value)
 
-  return <span className={trendRef.current}>{prefix}{text}{suffix}</span>
+  return <span className={appliedClassRef.current}>{prefix}{text}{suffix}</span>
 }
 
 function Table({ title, rows, loading, error, onSort, sortKey, sortDir }: {
@@ -156,10 +183,10 @@ function Table({ title, rows, loading, error, onSort, sortKey, sortDir }: {
                     <NumberCell value={t.volumeUsd} prefix="$" formatter={(n) => Math.round(n).toLocaleString()} />
                   </td>
                   <td>
-                    <NumberCell value={t.priceChangePcs['5m']} suffix="%" />{' / '}
-                    <NumberCell value={t.priceChangePcs['1h']} suffix="%" />{' / '}
-                    <NumberCell value={t.priceChangePcs['6h']} suffix="%" />{' / '}
-                    <NumberCell value={t.priceChangePcs['24h']} suffix="%" />
+                    <NumberCell noFade value={t.priceChangePcs['5m']} suffix="%" />{' / '}
+                    <NumberCell noFade value={t.priceChangePcs['1h']} suffix="%" />{' / '}
+                    <NumberCell noFade value={t.priceChangePcs['6h']} suffix="%" />{' / '}
+                    <NumberCell noFade value={t.priceChangePcs['24h']} suffix="%" />
                   </td>
                   <td>{formatAge(t.tokenCreatedTimestamp)}</td>
                   <td>
