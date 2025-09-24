@@ -25,3 +25,4 @@ dist-ssr
 *.tap
 
 /test-results/*
+/test-results/.*
