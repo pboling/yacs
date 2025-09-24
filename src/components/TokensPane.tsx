@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Table from './Table'
 import { fetchScanner } from '../scanner.client.js'
 import { buildPairStatsSubscription, buildPairSubscription } from '../ws.mapper.js'
@@ -28,6 +28,7 @@ interface TokenRow {
 
 // Action aliases to satisfy TS strictly
 interface ScannerPairsAction { type: 'scanner/pairs'; payload: { page: number; scannerPairs: unknown[] } }
+interface ScannerAppendAction { type: 'scanner/append'; payload: { page: number; scannerPairs: unknown[] } }
 
 type SortKey = 'tokenName' | 'exchange' | 'priceUsd' | 'mcap' | 'volumeUsd' | 'age' | 'tx' | 'liquidity'
 
@@ -46,13 +47,20 @@ export default function TokensPane({
     filters: GetScannerResultParams
     page: number
     state: { byId: Record<string, TokenRow | undefined>, pages: Partial<Record<number, string[]>> } & { version?: number }
-    dispatch: React.Dispatch<ScannerPairsAction>
+    dispatch: React.Dispatch<ScannerPairsAction | ScannerAppendAction>
     defaultSort: { key: SortKey; dir: Dir }
     clientFilters?: { chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number; excludeHoneypots?: boolean }
 }) {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [sort, setSort] = useState(defaultSort)
+    // Infinite scroll state
+    const [visibleCount, setVisibleCount] = useState(50)
+    const [currentPage, setCurrentPage] = useState(1)
+    const [loadingMore, setLoadingMore] = useState(false)
+    const [hasMore, setHasMore] = useState(true)
+    const sentinelRef = useRef<HTMLDivElement | null>(null)
+
     const wsRef = useRef<WebSocket | null>(null)
     const payloadsRef = useRef<{ pair: string; token: string; chain: string }[]>([])
     const rowsRef = useRef<TokenRow[]>([])
@@ -124,12 +132,16 @@ export default function TokensPane({
     // Initial REST load (page must start at 1 for every pane)
     useEffect(() => {
         let cancelled = false
+        // reset infinite scroll state on new mount/filters
+        setVisibleCount(50)
+        setCurrentPage(1)
+        setHasMore(true)
         const run = async () => {
             setLoading(true)
             setError(null)
             try {
-                console.log('[TokensPane:' + title + '] fetching initial scanner page with filters', { ...filters, page })
-                const res = await fetchScannerTyped({ ...filters, page })
+                console.log('[TokensPane:' + title + '] fetching initial scanner page with filters', { ...filters, page: 1 })
+                const res = await fetchScannerTyped({ ...filters, page: 1 })
                 if (cancelled) return
                 const raw = res.raw as unknown
                 // Strict shape check: expect an object with scannerPairs: array
@@ -261,9 +273,9 @@ export default function TokensPane({
             return dir === 'asc' ? cmp : -cmp
         }
         const sorted = [...base].sort(sorter(sort.key, sort.dir))
-        const out = sorted.slice(0, 50)
+        const out = sorted.slice(0, visibleCount)
         return out
-    }, [state.byId, state.pages, page, sort, clientFilters])
+    }, [state.byId, state.pages, page, sort, clientFilters, visibleCount])
 
     // Keep a ref of latest rows for late WS attach logic
     useEffect(() => {
@@ -305,7 +317,7 @@ export default function TokensPane({
         }
     }, [sort])
 
-    // Ensure per-row subscriptions for all currently visible rows (top 50) — this protects
+    // Ensure per-row subscriptions for all currently visible rows — this protects
     // against any races where App-level scanner-pairs handling didn't issue subs yet.
     useEffect(() => {
         const ws = wsRef.current
@@ -329,15 +341,75 @@ export default function TokensPane({
         }
     }, [rows, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, title])
 
+    // Load more on intersection (infinite scroll)
+    useEffect(() => {
+        if (!sentinelRef.current) return
+        const el = sentinelRef.current
+        const observer = new IntersectionObserver((entries) => {
+            for (const entry of entries) {
+                if (entry.isIntersecting) {
+                    void loadMore()
+                }
+            }
+        }, { root: null, rootMargin: '200px', threshold: 0 })
+        observer.observe(el)
+        return () => { observer.unobserve(el); observer.disconnect() }
+    }, [loadMore])
+
+    // Imperative loadMore function (memoized)
+    const loadMore = useCallback(async () => {
+        if (loadingMore || !hasMore) return
+        setLoadingMore(true)
+        try {
+            const nextPage = currentPage + 1
+            console.log(`[TokensPane:${title}] loading more: page ${String(nextPage)}`)
+            const res = await fetchScannerTyped({ ...filters, page: nextPage })
+            const raw = res.raw as unknown
+            const list = (raw && typeof raw === 'object' && Array.isArray((raw as { scannerPairs?: unknown[] }).scannerPairs))
+                ? (raw as { scannerPairs: unknown[] }).scannerPairs
+                : []
+            // Deduplicate by pairAddress (case-insensitive)
+            const seenPairsLower = new Set<string>()
+            const dedupedList: unknown[] = []
+            for (const it of list as ScannerResult[]) {
+                const addr = (it as unknown as { pairAddress?: string }).pairAddress
+                const k = typeof addr === 'string' ? addr.toLowerCase() : ''
+                if (k && !seenPairsLower.has(k)) {
+                    seenPairsLower.add(k)
+                    dedupedList.push(it)
+                }
+            }
+            // Dispatch typed append
+            dispatch({ type: 'scanner/append', payload: { page, scannerPairs: dedupedList } } as ScannerAppendAction)
+            // Increase visible count so user sees more rows immediately
+            setVisibleCount((c) => c + 50)
+            setCurrentPage(nextPage)
+            if (dedupedList.length === 0) {
+                setHasMore(false)
+            }
+        } catch (err) {
+            console.error(`[TokensPane:${title}] loadMore failed`, err)
+            // On error, stop auto-loading to prevent tight loops
+            setHasMore(false)
+        } finally {
+            setLoadingMore(false)
+        }
+    }, [loadingMore, hasMore, currentPage, fetchScannerTyped, filters, dispatch, page, title])
+
     return (
-        <Table
-            title={title}
-            rows={rows}
-            loading={loading}
-            error={error}
-            onSort={onSort}
-            sortKey={sort.key}
-            sortDir={sort.dir}
-        />
+        <div>
+            <Table
+                title={title}
+                rows={rows}
+                loading={loading}
+                error={error}
+                onSort={onSort}
+                sortKey={sort.key}
+                sortDir={sort.dir}
+            />
+            <div ref={sentinelRef} style={{ height: 1 }} />
+            {loadingMore && <div className="status">Loading more…</div>}
+            {!hasMore && <div className="status muted" style={{ fontSize: 12 }}>No more results</div>}
+        </div>
     )
 }

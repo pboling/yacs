@@ -152,40 +152,40 @@ export function tokensReducer(state = initialState, action) {
       if (!__REDUCER_SEEN__.has(action)) { __REDUCER_SEEN__.add(action); try { console.log('REDUCER: pair/stats applied', { id: idOrig, audit: { contractVerified: audit.contractVerified, honeypot: audit.honeypot }, migrationPc }) } catch {} }
       return { ...state, byId: { ...state.byId, [id]: nextTok, [idOrig]: nextTok }, version: (state.version || 0) + 1 }
     }
-    case 'pair/patch': {
-      const { data } = action.payload || {}
-      if (!data || typeof data !== 'object') return state
-      const idCandidate = data.pairAddress || data.id || ''
-      const idOrig = String(idCandidate || '')
-      const id = idOrig.toLowerCase()
-      const existing = state.byId[id] || state.byId[idOrig]
-      if (!existing) return state
-      // Normalize certain fields if present
-      const patch = { ...data }
-      if (typeof patch.tokenCreatedTimestamp === 'string' || patch.tokenCreatedTimestamp instanceof Date) {
-        try { patch.tokenCreatedTimestamp = new Date(patch.tokenCreatedTimestamp) } catch { delete patch.tokenCreatedTimestamp }
-      }
-      if (patch.priceChangePcs && typeof patch.priceChangePcs === 'object') {
-        const pc = patch.priceChangePcs
-        const norm = {
-          '5m': Number(pc['5m'] ?? pc.m5 ?? existing.priceChangePcs['5m']) || 0,
-          '1h': Number(pc['1h'] ?? pc.h1 ?? existing.priceChangePcs['1h']) || 0,
-          '6h': Number(pc['6h'] ?? pc.h6 ?? existing.priceChangePcs['6h']) || 0,
-          '24h': Number(pc['24h'] ?? pc.h24 ?? existing.priceChangePcs['24h']) || 0,
-        }
-        patch.priceChangePcs = norm
-      }
-      // Limit to known top-level fields to avoid accidental pollution
-      const allowedKeys = new Set([
-        'tokenName','tokenSymbol','chain','exchange','priceUsd','mcap','volumeUsd','priceChangePcs','tokenCreatedTimestamp','transactions','liquidity'
-      ])
-      const safePatch = {}
-      for (const k of Object.keys(patch)) {
-        if (allowedKeys.has(k)) safePatch[k] = patch[k]
-      }
-      const nextTok = { ...existing, ...safePatch }
-      return { ...state, byId: { ...state.byId, [id]: nextTok, [idOrig]: nextTok } }
-    }
+    // case 'pair/patch': {
+    //   const { data } = action.payload || {}
+    //   if (!data || typeof data !== 'object') return state
+    //   const idCandidate = data.pairAddress || data.id || ''
+    //   const idOrig = String(idCandidate || '')
+    //   const id = idOrig.toLowerCase()
+    //   const existing = state.byId[id] || state.byId[idOrig]
+    //   if (!existing) return state
+    //   // Normalize certain fields if present
+    //   const patch = { ...data }
+    //   if (typeof patch.tokenCreatedTimestamp === 'string' || patch.tokenCreatedTimestamp instanceof Date) {
+    //     try { patch.tokenCreatedTimestamp = new Date(patch.tokenCreatedTimestamp) } catch { delete patch.tokenCreatedTimestamp }
+    //   }
+    //   if (patch.priceChangePcs && typeof patch.priceChangePcs === 'object') {
+    //     const pc = patch.priceChangePcs
+    //     const norm = {
+    //       '5m': Number(pc['5m'] ?? pc.m5 ?? existing.priceChangePcs['5m']) || 0,
+    //       '1h': Number(pc['1h'] ?? pc.h1 ?? existing.priceChangePcs['1h']) || 0,
+    //       '6h': Number(pc['6h'] ?? pc.h6 ?? existing.priceChangePcs['6h']) || 0,
+    //       '24h': Number(pc['24h'] ?? pc.h24 ?? existing.priceChangePcs['24h']) || 0,
+    //     }
+    //     patch.priceChangePcs = norm
+    //   }
+    //   // Limit to known top-level fields to avoid accidental pollution
+    //   const allowedKeys = new Set([
+    //     'tokenName','tokenSymbol','chain','exchange','priceUsd','mcap','volumeUsd','priceChangePcs','tokenCreatedTimestamp','transactions','liquidity'
+    //   ])
+    //   const safePatch = {}
+    //   for (const k of Object.keys(patch)) {
+    //     if (allowedKeys.has(k)) safePatch[k] = patch[k]
+    //   }
+    //   const nextTok = { ...existing, ...safePatch }
+    //   return { ...state, byId: { ...state.byId, [id]: nextTok, [idOrig]: nextTok } }
+    // }
     case 'wpeg/prices': {
       const prices = action.payload?.prices || {}
       const normalized = {}
@@ -209,6 +209,6 @@ export const actions = {
   scannerPairs: (page, scannerPairs) => ({ type: 'scanner/pairs', payload: { page, scannerPairs } }),
   tick: (pair, swaps) => ({ type: 'pair/tick', payload: { pair, swaps } }),
   pairStats: (data) => ({ type: 'pair/stats', payload: { data } }),
-  pairPatch: (data) => ({ type: 'pair/patch', payload: { data } }),
+  // pairPatch: (data) => ({ type: 'pair/patch', payload: { data } }),
   setFilters: (payload) => ({ type: 'filters/set', payload }),
 }

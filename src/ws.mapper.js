@@ -64,10 +64,10 @@ export function mapIncomingMessageToAction(msg) {
       const prices = (msg.data && typeof msg.data === 'object') ? (msg.data.prices || {}) : {}
       return { type: 'wpeg/prices', payload: { prices } }
     }
-    case 'pair-patch': {
-      // Generic per-pair partial update to merge arbitrary fields into an existing row
-      return { type: 'pair/patch', payload: { data: msg.data } }
-    }
+    // case 'pair-patch': {
+    //   // Generic per-pair partial update to merge arbitrary fields into an existing row
+    //   return { type: 'pair/patch', payload: { data: msg.data } }
+    // }
     default:
       return null
   }
