@@ -519,7 +519,7 @@ function App() {
                     page={TRENDING_PAGE}
                     state={{ byId: state.byId, pages: state.pages, version: (state as unknown as { version?: number }).version ?? 0 } as unknown as { byId: Record<string, TokenRow>, pages: Partial<Record<number, string[]>> }}
                     dispatch={dispatch as unknown as React.Dispatch<ScannerPairsAction>}
-                    defaultSort={initialSort ?? { key: 'volumeUsd', dir: 'desc' }}
+                    defaultSort={initialSort ?? { key: 'tokenName', dir: 'asc' }}
                     clientFilters={state.filters as unknown as { chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number; excludeHoneypots?: boolean }}
                 />
                 <TokensPane

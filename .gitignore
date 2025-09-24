@@ -24,4 +24,4 @@ dist-ssr
 *.sw?
 *.tap
 
-/test-results
+/test-results/*
