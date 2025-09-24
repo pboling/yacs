@@ -1,19 +1,22 @@
+/* Global dark theme */
+html, body { background: #0f1115; color: #e5e7eb; }
+
 #root {
   max-width: 1280px;
   margin: 0 auto;
   padding: 2rem;
 }
 
-.muted { color: #666; font-size: 12px; }
+.muted { color: #9ca3af; font-size: 12px; }
 
-.table-wrap { overflow: auto; max-height: 70vh; border: 1px solid #e2e2e2; border-radius: 8px; }
+.table-wrap { overflow: auto; max-height: 70vh; border: 1px solid #22272e; border-radius: 8px; background: #0f1115; }
 
-table.tokens { width: 100%; border-collapse: collapse; font-size: 14px; text-align: left; }
-.tokens thead th { position: sticky; top: 0; background: #fafafa; cursor: pointer; padding: 8px; border-bottom: 1px solid #ddd; }
-.tokens tbody td { padding: 8px; border-bottom: 1px solid #f0f0f0; }
+table.tokens { width: 100%; border-collapse: collapse; font-size: 14px; text-align: left; background: #0f1115; }
+.tokens thead th { position: sticky; top: 0; background: #111827; color: #f9fafb; cursor: pointer; padding: 8px; border-bottom: 1px solid #374151; }
+.tokens tbody td { padding: 8px; border-bottom: 1px solid #1f2937; }
 
-.status { padding: 8px; color: #333; }
-.status.error { color: #b00020; }
+.status { padding: 8px; color: #e5e7eb; }
+.status.error { color: #f87171; }
 
-.up { color: #1a7f37; }
-.down { color: #b00020; }
+.up { color: #10b981; }
+.down { color: #ef4444; }
