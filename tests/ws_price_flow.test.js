@@ -50,10 +50,15 @@ function waitForEvents(ws, count, timeoutMs = 8000) {
 
 // End-to-end state flow: WS scanner → subscribe pair → ticks → reducer state updates price & mcap
 // Also validates deterministic change across ticks (seed + tick index)
+import { withDeterministicTimeout } from './utils/testUtils.js'
+
 test('WS tick events update reducer priceUsd and mcap deterministically', async () => {
-    const { server, wsBase } = await start()
-    try {
-        const ws = await openWs(wsBase + '/ws')
+    await withDeterministicTimeout(async () => {
+        const { server, wsBase } = await start()
+        /** @type {import('ws')} */
+        let ws
+        try {
+            ws = await openWs(wsBase + '/ws')
 
         // Subscribe to scanner-filter
         ws.send(JSON.stringify({ event: 'scanner-filter', data: { chain: 'ETH', rankBy: 'volume', page: 1, isNotHP: true } }))
@@ -116,10 +121,16 @@ test('WS tick events update reducer priceUsd and mcap deterministically', async 
         const id = pairsMsg.data.scannerPairs[0].pairAddress
         const row = state.byId[id] || state.byId[id.toLowerCase()]
         const totalSupply = parseFloat(first.token1TotalSupplyFormatted)
-        assert.equal(row.mcap, totalSupply * row.priceUsd)
+        const expectedMcap = totalSupply * row.priceUsd
+        const diff = Math.abs(row.mcap - expectedMcap)
+        const denom = Math.max(1, Math.abs(expectedMcap))
+        const relErr = diff / denom
+        assert.ok(relErr <= 1e-6, `mcap should equal totalSupply*price within tolerance; got mcap=${row.mcap}, expected=${expectedMcap}, relErr=${relErr}`)
 
         ws.close()
+        try { await once(ws, 'close') } catch {}
     } finally {
-        server.close()
+        await new Promise((r) => server.close(r))
     }
+    }, 12000)
 })

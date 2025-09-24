@@ -49,42 +49,49 @@ function waitForEvent(ws, event, timeoutMs = 8000) {
 
 // Integration: WS handshake, scanner subscription, then server pushes data and per-pair updates
 // This validates our client/server WS contract at a protocol level.
+import { withDeterministicTimeout } from './utils/testUtils.js'
+
 test('WebSocket: scanner subscribe yields scanner-pairs, then changing deterministic ticks and pair-stats', async () => {
-    const { server, wsBase } = await start()
-    try {
-        const ws = await openWs(wsBase + '/ws')
+    await withDeterministicTimeout(async () => {
+        const { server, wsBase } = await start()
+        /** @type {import('ws')} */
+        let ws
+        try {
+            ws = await openWs(wsBase + '/ws')
 
-        // Subscribe to scanner-filter
-        ws.send(JSON.stringify({ event: 'scanner-filter', data: { chain: 'ETH', rankBy: 'volume', page: 1, isNotHP: true } }))
+            // Subscribe to scanner-filter
+            ws.send(JSON.stringify({ event: 'scanner-filter', data: { chain: 'ETH', rankBy: 'volume', page: 1, isNotHP: true } }))
 
-        const pairsMsg = await waitForEvent(ws, 'scanner-pairs')
-        assert.equal(typeof pairsMsg.data.page, 'number')
-        assert.ok(Array.isArray(pairsMsg.data.scannerPairs))
-        assert.ok(pairsMsg.data.scannerPairs.length > 0)
+            const pairsMsg = await waitForEvent(ws, 'scanner-pairs')
+            assert.equal(typeof pairsMsg.data.page, 'number')
+            assert.ok(Array.isArray(pairsMsg.data.scannerPairs))
+            assert.ok(pairsMsg.data.scannerPairs.length > 0)
 
-        const first = pairsMsg.data.scannerPairs[0]
-        // Subscribe explicitly to pair + pair-stats (server also emits them once per scanner-filter)
-        ws.send(JSON.stringify({ event: 'subscribe-pair', data: { pair: first.pairAddress, token: first.token1Address, chain: String(first.chainId) } }))
-        ws.send(JSON.stringify({ event: 'subscribe-pair-stats', data: { pair: first.pairAddress, token: first.token1Address, chain: String(first.chainId) } }))
+            const first = pairsMsg.data.scannerPairs[0]
+            // Subscribe explicitly to pair + pair-stats (server also emits them once per scanner-filter)
+            ws.send(JSON.stringify({ event: 'subscribe-pair', data: { pair: first.pairAddress, token: first.token1Address, chain: String(first.chainId) } }))
+            ws.send(JSON.stringify({ event: 'subscribe-pair-stats', data: { pair: first.pairAddress, token: first.token1Address, chain: String(first.chainId) } }))
 
-        const tickMsg1 = await waitForEvent(ws, 'tick')
-        assert.equal(typeof tickMsg1.data.pair.pair, 'string')
-        assert.ok(Array.isArray(tickMsg1.data.swaps))
-        assert.ok(tickMsg1.data.swaps.length >= 1)
-        const latest1 = tickMsg1.data.swaps.filter(s => !s.isOutlier).pop()
-        assert.ok(latest1)
+            const tickMsg1 = await waitForEvent(ws, 'tick')
+            assert.equal(typeof tickMsg1.data.pair.pair, 'string')
+            assert.ok(Array.isArray(tickMsg1.data.swaps))
+            assert.ok(tickMsg1.data.swaps.length >= 1)
+            const latest1 = tickMsg1.data.swaps.filter(s => !s.isOutlier).pop()
+            assert.ok(latest1)
 
-        // Second tick should arrive and differ (deterministically based on seed + tick index)
-        const tickMsg2 = await waitForEvent(ws, 'tick')
-        const latest2 = tickMsg2.data.swaps.filter(s => !s.isOutlier).pop()
-        assert.ok(latest2)
-        assert.notEqual(latest1.priceToken1Usd, latest2.priceToken1Usd)
+            // Second tick should arrive and differ (deterministically based on seed + tick index)
+            const tickMsg2 = await waitForEvent(ws, 'tick')
+            const latest2 = tickMsg2.data.swaps.filter(s => !s.isOutlier).pop()
+            assert.ok(latest2)
+            assert.notEqual(latest1.priceToken1Usd, latest2.priceToken1Usd)
 
-        const statsMsg = await waitForEvent(ws, 'pair-stats')
-        assert.equal(typeof statsMsg.data.pair.pairAddress, 'string')
+            const statsMsg = await waitForEvent(ws, 'pair-stats')
+            assert.equal(typeof statsMsg.data.pair.pairAddress, 'string')
 
-        ws.close()
-    } finally {
-        server.close()
-    }
+            ws.close()
+            try { await once(ws, 'close') } catch {}
+        } finally {
+            await new Promise((r) => server.close(r))
+        }
+    }, 12000)
 })

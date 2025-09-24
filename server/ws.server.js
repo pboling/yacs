@@ -17,10 +17,15 @@ import { WebSocketServer } from 'ws'
 import { generateScannerResponse } from '../src/scanner.endpoint.js'
 import { getBaseSeed, mixSeeds } from '../src/seed.util.js'
 
-// Test-time acceleration: when TEST_FAST=1, collapse delays/intervals so tests don't wait seconds.
-const FAST_TIMING = (process.env && process.env.TEST_FAST === '1')
-const TICK_INTERVAL_MS = FAST_TIMING ? 5 : 1000
-const MAX_STAGGER_MS = FAST_TIMING ? 0 : 1000
+// Timing configuration is resolved at runtime (not module load) so tests can set TEST_FAST before attaching the WS server.
+function getTiming() {
+    const FAST_TIMING = (process && process.env && process.env.TEST_FAST === '1')
+    return {
+        FAST_TIMING,
+        TICK_INTERVAL_MS: FAST_TIMING ? 5 : 1000,
+        MAX_STAGGER_MS: FAST_TIMING ? 0 : 1000,
+    }
+}
 
 /**
  * Attach a WebSocket server to an existing HTTP/S server.
@@ -30,8 +35,24 @@ const MAX_STAGGER_MS = FAST_TIMING ? 0 : 1000
 export function attachWsServer(server) {
     const wss = new WebSocketServer({ server, path: '/ws' })
 
+    // Ensure the WS server is closed when the underlying HTTP server closes,
+    // so Node's test runner can exit cleanly without lingering handles.
+    try {
+        server.on('close', () => {
+            try {
+                // Proactively terminate all clients to ensure their timers are cleared and close events fire
+                for (const client of wss.clients) {
+                    try { client.terminate() } catch { /* ignore */ }
+                }
+                wss.close()
+            } catch { /* ignore close errors */ }
+        })
+    } catch { /* no-op */ }
+
     // Track simple subscriptions per socket
     wss.on('connection', (ws) => {
+        // Avoid unhandled error events keeping the process alive in tests
+        try { ws.on('error', () => {}) } catch { /* no-op */ }
         /** @type {{ pairs: Set<string>, stats: Set<string> }} */
         const subs = { pairs: new Set(), stats: new Set() }
         /** @type {Map<string, NodeJS.Timeout>} */
@@ -41,6 +62,8 @@ export function attachWsServer(server) {
         /** @type {Map<string, any>} */
         const itemsByKey = new Map()
         const BASE_SEED = getBaseSeed()
+                // Resolve timing for this connection (reads env at runtime)
+                const { TICK_INTERVAL_MS, MAX_STAGGER_MS } = getTiming()
 
         function hash32(str) {
             let h = 2166136261 >>> 0
@@ -119,8 +142,16 @@ export function attachWsServer(server) {
                 warmupTimers.delete(pairKey)
                 sendTick()
                 const interval = setInterval(sendTick, TICK_INTERVAL_MS)
+                // Prevent this interval from keeping the event loop alive if tests forget to close
+                if (typeof (interval).unref === 'function') {
+                    try { (interval).unref() } catch { /* no-op */ }
+                }
                 tickTimers.set(pairKey, interval)
             }, initialDelay)
+            // Prevent this timer from keeping the event loop alive
+            if (typeof (warm).unref === 'function') {
+                try { (warm).unref() } catch { /* no-op */ }
+            }
             warmupTimers.set(pairKey, warm)
         }
 
