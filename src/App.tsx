@@ -88,15 +88,23 @@ function NumberCell({ value, prefix = '', suffix = '', formatter, stableMs, noFa
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [, force] = useState(0)
 
-  // Determine raw trend vs previous numeric value
-  let rawTrend: '' | 'up' | 'down' = ''
-  if (Number.isFinite(num) && prevValRef.current !== null) {
-    if (num > prevValRef.current) rawTrend = 'up'
-    else if (num < prevValRef.current) rawTrend = 'down'
+  // Determine class
+  let desiredClass: '' | 'up' | 'down' = ''
+  if (noFade) {
+    // For noFade cells (e.g., percentage change), color by sign consistently
+    if (Number.isFinite(num)) {
+      desiredClass = num > 0 ? 'up' : num < 0 ? 'down' : ''
+    }
+  } else {
+    // Default behavior: color based on trend vs previous value and allow fade
+    let rawTrend: '' | 'up' | 'down' = ''
+    if (Number.isFinite(num) && prevValRef.current !== null) {
+      if (num > prevValRef.current) rawTrend = 'up'
+      else if (num < prevValRef.current) rawTrend = 'down'
+    }
+    // If value is unchanged, keep whatever color was previously applied
+    desiredClass = rawTrend === '' ? appliedClassRef.current : rawTrend
   }
-
-  // If value is unchanged, keep whatever color was previously applied
-  const desiredClass: '' | 'up' | 'down' = rawTrend === '' ? appliedClassRef.current : rawTrend
   appliedClassRef.current = desiredClass
 
   // Update previous numeric value after render
