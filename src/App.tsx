@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useState } from 'react'
+import { useEffect, useMemo, useReducer, useState, useRef } from 'react'
 import './App.css'
 import {
   NEW_TOKENS_FILTERS,
@@ -9,6 +9,8 @@ import {
 } from './test-task-types'
 import { initialState, tokensReducer } from './tokens.reducer.js'
 import { fetchScanner } from './scanner.client.js'
+import { buildScannerSubscription, buildPairSubscription, buildPairStatsSubscription, mapIncomingMessageToAction } from './ws.mapper.js'
+import { computePairPayloads } from './ws.subs.js'
 
 function formatAge(ts: Date) {
   const now = Date.now()
@@ -126,8 +128,13 @@ function App() {
   const trendingFilters: GetScannerResultParams = useMemo(() => TRENDING_TOKENS_FILTERS, [])
   const newFilters: GetScannerResultParams = useMemo(() => NEW_TOKENS_FILTERS, [])
 
-  // Typed alias for the JS fetch function to satisfy strict lint rules
-  const fetchScannerTyped = fetchScanner as unknown as (params: unknown) => Promise<{ raw: { page?: number | null; scannerPairs?: unknown[] | null } }>
+  // Typed aliases for JS functions to satisfy strict lint rules
+  const fetchScannerTyped = fetchScanner as unknown as (params: GetScannerResultParams) => Promise<{ raw: { page?: number | null; scannerPairs?: ScannerResult[] | null } }>
+  const buildScannerSubscriptionSafe = buildScannerSubscription as unknown as (params: GetScannerResultParams) => { event: 'scanner-filter'; data: GetScannerResultParams }
+  const buildPairSubscriptionSafe = buildPairSubscription as unknown as (p: { pair: string; token: string; chain: string }) => { event: 'subscribe-pair'; data: { pair: string; token: string; chain: string } }
+  const buildPairStatsSubscriptionSafe = buildPairStatsSubscription as unknown as (p: { pair: string; token: string; chain: string }) => { event: 'subscribe-pair-stats'; data: { pair: string; token: string; chain: string } }
+  const mapIncomingMessageToActionSafe = mapIncomingMessageToAction as unknown as (msg: unknown) => (ScannerPairsAction | TickAction | PairStatsAction | null)
+  const computePairPayloadsSafe = computePairPayloads as unknown as (items: ScannerResult[] | unknown[]) => { pair: string; token: string; chain: string }[]
 
   // minimal local sort state per table
   const [trendSort, setTrendSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'volumeUsd', dir: 'desc' })
@@ -139,6 +146,7 @@ function App() {
   const [loadingB, setLoadingB] = useState(false)
   const [errorA, setErrorA] = useState<string | null>(null)
   const [errorB, setErrorB] = useState<string | null>(null)
+  const wsRef = useRef<WebSocket | null>(null)
 
   // Fetch page 1 for both tables on mount
   useEffect(() => {
@@ -149,7 +157,17 @@ function App() {
       try {
         const res = await fetchScannerTyped({ ...trendingFilters, page: 1 })
         const raw = res.raw
-        if (!cancelled) d({ type: 'scanner/pairs', payload: { page: raw.page ?? 1, scannerPairs: raw.scannerPairs ?? [] } })
+        if (!cancelled) {
+          d({ type: 'scanner/pairs', payload: { page: raw.page ?? 1, scannerPairs: raw.scannerPairs ?? [] } })
+          // After initial REST load, subscribe to pair updates if WS is connected
+          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && Array.isArray(raw.scannerPairs)) {
+            const payloads = computePairPayloadsSafe(raw.scannerPairs)
+            for (const p of payloads) {
+              wsRef.current.send(JSON.stringify(buildPairSubscriptionSafe(p)))
+              wsRef.current.send(JSON.stringify(buildPairStatsSubscriptionSafe(p)))
+            }
+          }
+        }
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'Failed to load trending'
         if (!cancelled) setErrorA(msg)
@@ -161,7 +179,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [trendingFilters, d, fetchScannerTyped])
+  }, [trendingFilters, d, fetchScannerTyped, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, computePairPayloadsSafe])
 
   useEffect(() => {
     let cancelled = false
@@ -171,7 +189,16 @@ function App() {
       try {
         const res = await fetchScannerTyped({ ...newFilters, page: 1 })
         const raw = res.raw
-        if (!cancelled) d({ type: 'scanner/pairs', payload: { page: (raw.page ?? 1) * 1000, scannerPairs: raw.scannerPairs ?? [] } })
+        if (!cancelled) {
+          d({ type: 'scanner/pairs', payload: { page: (raw.page ?? 1) * 1000, scannerPairs: raw.scannerPairs ?? [] } })
+          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && Array.isArray(raw.scannerPairs)) {
+            const payloads = computePairPayloadsSafe(raw.scannerPairs)
+            for (const p of payloads) {
+              wsRef.current.send(JSON.stringify(buildPairSubscriptionSafe(p)))
+              wsRef.current.send(JSON.stringify(buildPairStatsSubscriptionSafe(p)))
+            }
+          }
+        }
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'Failed to load new tokens'
         if (!cancelled) setErrorB(msg)
@@ -183,7 +210,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [newFilters, d, fetchScannerTyped])
+  }, [newFilters, d, fetchScannerTyped, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, computePairPayloadsSafe])
 
   // derive rows for each table from pages (use a local typed alias to satisfy strict linting)
   const st = state as unknown as State
@@ -223,6 +250,54 @@ function App() {
 
   const onTrendSort = (k: SortKey) => { setTrendSort((s) => ({ key: k, dir: s.key === k && s.dir === 'desc' ? 'asc' : 'desc' })) }
   const onNewSort = (k: SortKey) => { setNewSort((s) => ({ key: k, dir: s.key === k && s.dir === 'desc' ? 'asc' : 'desc' })) }
+
+  // WebSocket connection and subscriptions
+  useEffect(() => {
+    const proto = location.protocol === 'https:' ? 'wss://' : 'ws://'
+    const devUrl = proto + location.host + '/ws'
+    const prodUrl = 'wss://api-rs.dexcelerate.com/ws'
+    const url = import.meta.env.DEV ? devUrl : prodUrl
+    const ws = new WebSocket(url)
+    wsRef.current = ws
+
+    ws.onopen = () => {
+      // subscribe to scanner filters for both tables
+      ws.send(JSON.stringify(buildScannerSubscriptionSafe(trendingFilters)))
+      ws.send(JSON.stringify(buildScannerSubscriptionSafe(newFilters)))
+    }
+    ws.onmessage = (ev) => {
+      try {
+        const parsed = JSON.parse(typeof ev.data === 'string' ? ev.data : String(ev.data)) as unknown
+        // dispatch mapped actions
+        const action = mapIncomingMessageToActionSafe(parsed)
+        if (action) d(action)
+        // after receiving scanner-pairs, subscribe to pair & pair-stats for the included tokens
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          (parsed as { event?: unknown }).event === 'scanner-pairs' &&
+          Array.isArray((parsed as { data?: { scannerPairs?: unknown[] } }).data?.scannerPairs)
+        ) {
+          const payloads = computePairPayloadsSafe((parsed as { data: { scannerPairs: unknown[] } }).data.scannerPairs)
+          for (const p of payloads) {
+            const subPair = JSON.stringify(buildPairSubscriptionSafe(p))
+            const subStats = JSON.stringify(buildPairStatsSubscriptionSafe(p))
+            ws.send(subPair)
+            ws.send(subStats)
+          }
+        }
+      } catch {
+        /* ignore malformed messages */
+      }
+    }
+    ws.onerror = () => {
+      /* no-op minimal error handling for now */
+    }
+    return () => {
+      try { ws.close() } catch { /* ignore close errors */ }
+      wsRef.current = null
+    }
+  }, [trendingFilters, newFilters, d, buildScannerSubscriptionSafe, mapIncomingMessageToActionSafe, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, computePairPayloadsSafe])
 
   // keep demo type usage to satisfy README guidance
   const demoMap = useMemo(() => {

@@ -13,8 +13,8 @@ import {
 const scannerParams = { chain: 'ETH', page: 1, rankBy: 'volume', orderBy: 'desc' }
 
 test('subscription builders produce expected payloads', () => {
-  assert.deepEqual(buildScannerSubscription(scannerParams), { event: 'subscribe-scanner', data: scannerParams })
-  assert.deepEqual(buildScannerUnsubscription(scannerParams), { event: 'unsubscribe-scanner', data: scannerParams })
+  assert.deepEqual(buildScannerSubscription(scannerParams), { event: 'scanner-filter', data: scannerParams })
+  assert.deepEqual(buildScannerUnsubscription(scannerParams), { event: 'unsubscribe-scanner-filter', data: scannerParams })
   const pair = { pair: '0xPAIR', token: '0xTOKEN', chain: 'ETH' }
   assert.deepEqual(buildPairSubscription(pair), { event: 'subscribe-pair', data: pair })
   assert.deepEqual(buildPairUnsubscription(pair), { event: 'unsubscribe-pair', data: pair })

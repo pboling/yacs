@@ -4,10 +4,10 @@
 // The flexibility of JavaScript allows creating mock objects and test data.
 
 export function buildScannerSubscription(params) {
-  return { event: 'subscribe-scanner', data: { ...params } }
+  return { event: 'scanner-filter', data: { ...params } }
 }
 export function buildScannerUnsubscription(params) {
-  return { event: 'unsubscribe-scanner', data: { ...params } }
+  return { event: 'unsubscribe-scanner-filter', data: { ...params } }
 }
 
 export function buildPairSubscription({ pair, token, chain }) {
