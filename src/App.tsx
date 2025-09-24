@@ -80,6 +80,31 @@ type Action = ScannerPairsAction | TickAction | PairStatsAction | FiltersAction
  * Renders a sortable token table with loading/error/empty states.
  * Props are intentionally minimal to keep rendering logic decoupled from data shaping.
  */
+// Reusable cell that colors number green/red based on change vs previous render
+function NumberCell({ value, prefix = '', suffix = '', formatter }: { value: number | string; prefix?: string; suffix?: string; formatter?: (n: number) => string }) {
+  const num = typeof value === 'number' ? value : Number(value)
+  const prevRef = useRef<number | null>(null)
+  const trendRef = useRef<'up' | 'down' | ''>('')
+
+  // Determine trend based on previous value, but only update previous after render
+  let className: '' | 'up' | 'down' = ''
+  if (Number.isFinite(num) && prevRef.current !== null) {
+    if (num > prevRef.current) className = 'up'
+    else if (num < prevRef.current) className = 'down'
+  }
+  trendRef.current = className
+
+  useEffect(() => {
+    if (Number.isFinite(num)) prevRef.current = num
+  }, [num])
+
+  const text = Number.isFinite(num)
+    ? (formatter ? formatter(num) : String(num))
+    : String(value)
+
+  return <span className={trendRef.current}>{prefix}{text}{suffix}</span>
+}
+
 function Table({ title, rows, loading, error, onSort, sortKey, sortDir }: {
   title: string
   rows: TokenRow[]
@@ -121,20 +146,28 @@ function Table({ title, rows, loading, error, onSort, sortKey, sortDir }: {
                     <div className="muted">{t.chain}</div>
                   </td>
                   <td>{t.exchange}</td>
-                  <td>${t.priceUsd.toFixed(6)}</td>
-                  <td>${Math.round(t.mcap).toLocaleString()}</td>
-                  <td>${Math.round(t.volumeUsd).toLocaleString()}</td>
                   <td>
-                    <span className={t.priceChangePcs['5m'] >= 0 ? 'up' : 'down'}>{t.priceChangePcs['5m']}%</span>{' / '}
-                    <span className={t.priceChangePcs['1h'] >= 0 ? 'up' : 'down'}>{t.priceChangePcs['1h']}%</span>{' / '}
-                    <span className={t.priceChangePcs['6h'] >= 0 ? 'up' : 'down'}>{t.priceChangePcs['6h']}%</span>{' / '}
-                    <span className={t.priceChangePcs['24h'] >= 0 ? 'up' : 'down'}>{t.priceChangePcs['24h']}%</span>
+                    <NumberCell value={t.priceUsd} prefix="$" formatter={(n) => n.toFixed(6)} />
+                  </td>
+                  <td>
+                    <NumberCell value={t.mcap} prefix="$" formatter={(n) => Math.round(n).toLocaleString()} />
+                  </td>
+                  <td>
+                    <NumberCell value={t.volumeUsd} prefix="$" formatter={(n) => Math.round(n).toLocaleString()} />
+                  </td>
+                  <td>
+                    <NumberCell value={t.priceChangePcs['5m']} suffix="%" />{' / '}
+                    <NumberCell value={t.priceChangePcs['1h']} suffix="%" />{' / '}
+                    <NumberCell value={t.priceChangePcs['6h']} suffix="%" />{' / '}
+                    <NumberCell value={t.priceChangePcs['24h']} suffix="%" />
                   </td>
                   <td>{formatAge(t.tokenCreatedTimestamp)}</td>
                   <td>
-                    {t.transactions.buys}/{t.transactions.sells}
+                    <NumberCell value={t.transactions.buys} />/<NumberCell value={t.transactions.sells} />
                   </td>
-                  <td>${Math.round(t.liquidity.current).toLocaleString()}</td>
+                  <td>
+                    <NumberCell value={t.liquidity.current} prefix="$" formatter={(n) => Math.round(n).toLocaleString()} />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -261,7 +294,7 @@ function App() {
     }
     const va = getVal(a)
     const vb = getVal(b)
-    let cmp = 0
+    let cmp
     if (typeof va === 'string' && typeof vb === 'string') cmp = va.localeCompare(vb)
     else cmp = (va as number) < (vb as number) ? -1 : (va as number) > (vb as number) ? 1 : 0
     return dir === 'asc' ? cmp : -cmp
