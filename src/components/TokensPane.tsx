@@ -214,7 +214,9 @@ export default function TokensPane({
         }
         // Apply client-side filters before sorting/truncation
         const cf = clientFilters ?? {}
-        const selectedChains = (cf.chains && cf.chains.length > 0) ? new Set(cf.chains) : null
+        // Treat an empty chains array as "no chains selected" (i.e., filter out all rows),
+        // and only use null (no chain filtering) when chains is truly undefined/null.
+        const selectedChains = Array.isArray(cf.chains) ? new Set(cf.chains) : null
         const minVol = cf.minVolume ?? 0
         const minMcap = cf.minMcap ?? 0
         const maxAgeMs = (cf.maxAgeHours == null || Number.isNaN(cf.maxAgeHours)) ? null : Math.max(0, cf.maxAgeHours) * 3600_000
