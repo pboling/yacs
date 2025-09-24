@@ -1,3 +1,12 @@
+/*
+  scanner.server.js
+  Minimal Express application exposing:
+  - GET /scanner  → deterministic mock data powered by src/scanner.endpoint.js
+  - GET /healthz  → simple healthcheck for integration tests and supervisors
+
+  CORS: A permissive CORS middleware is applied to simplify local development
+  (Access-Control-Allow-Origin: *). Adjust for production as needed.
+*/
 // Minimal Express app that serves GET /scanner using the deterministic generator
 // ESM module (package.json "type": "module")
 import express from 'express'

@@ -1,3 +1,19 @@
+/*
+  ws.mapper.js
+  Pure helpers to build WebSocket subscription messages and map incoming events
+  to reducer actions. This file stays framework-agnostic and side-effect free
+  to keep it highly testable and portable.
+
+  Outgoing events built here:
+  - scanner-filter / unsubscribe-scanner-filter
+  - subscribe-pair / unsubscribe-pair
+  - subscribe-pair-stats / unsubscribe-pair-stats
+
+  Incoming events handled by mapIncomingMessageToAction:
+  - scanner-pairs → { type: 'scanner/pairs', payload: { page, scannerPairs }}
+  - tick          → { type: 'pair/tick', payload: { pair, swaps }}
+  - pair-stats    → { type: 'pair/stats', payload: { data }}
+*/
 // WebSocket subscription builders and incoming message mapper (pure)
 // Aligns with test-task-types.ts message shapes, but implemented in JS for tests.
 // This approach allows developers to leverage the benefits of static typing for reliable code.

@@ -1,3 +1,18 @@
+/*
+  tokens.reducer.js
+  Centralized, pure reducer that manages normalized token state for both tables.
+  State shape:
+  - byId: Record<string, TokenData> — canonical source for row rendering
+  - meta: Record<string, { totalSupply: number, token0Address?: string }> — auxiliary data used by tick processing
+  - pages: Record<number, string[]> — page-specific ordering (separates Trending/New via different page ids)
+  - filters: minimal client-side flags
+
+  Action types (plain objects to keep testability high):
+  - 'scanner/pairs' — replace the dataset for a page; preserves live price/mcap if already present
+  - 'pair/tick'    — apply real-time swaps to a token (price, mcap, volume, tx counters)
+  - 'pair/stats'   — update audit/meta info from pair-stats events
+  - 'filters/set'  — update local filter flags
+*/
 // Pure tokens reducer to manage scanner pages, ticks, and pair-stats
 import { mapScannerResultToToken, applyTickToToken } from './tdd.runtime.js'
 

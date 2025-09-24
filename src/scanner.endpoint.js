@@ -1,3 +1,14 @@
+/*
+  scanner.endpoint.js
+  Deterministic, seed-based mock data generator for GET /scanner plus a small Vite
+  middleware. Used by the Express backend and tests to provide stable, realistic
+  data without external dependencies.
+
+  Key ideas:
+  - Seed is derived from env or .seed file (see src/seed.util.js)
+  - Request parameters influence the per-page stream while remaining reproducible
+  - Shapes mimic ScannerApiResponse/ScannerResult from test-task-types.ts
+*/
 // Mock /scanner endpoint generator and Vite middleware/plugin (ESM)
 // Provides deterministic, param-influenced mock data for development and tests.
 

@@ -9,7 +9,6 @@ const HOST = process.env.HOST || '0.0.0.0'
 const app = createApp()
 
 const server = app.listen(PORT, HOST, () => {
-    // eslint-disable-next-line no-console
     console.log(`[server] listening on http://${HOST}:${PORT}`)
 })
 

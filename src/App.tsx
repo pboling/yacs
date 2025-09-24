@@ -1,3 +1,16 @@
+/*
+  App.tsx
+  High-level container rendering two token tables (Trending, New) and wiring:
+  - Initial REST fetches via src/scanner.client.js
+  - WebSocket subscriptions via src/ws.mapper.js and src/ws.subs.js
+  - State management via a pure reducer in src/tokens.reducer.js
+
+  Notes for maintainers:
+  - This file is TypeScript-first but interoperates with JS modules using
+    explicit type casts to satisfy strict settings. Keep casts narrow and local.
+  - WebSocket logic includes a simple multi-endpoint fallback (dev proxy, env override, public).
+  - Sorting is performed client-side; server-side filters are configured per table.
+*/
 import { useEffect, useMemo, useReducer, useState, useRef } from 'react'
 import './App.css'
 import {
@@ -12,6 +25,10 @@ import { fetchScanner } from './scanner.client.js'
 import { buildScannerSubscription, buildPairSubscription, buildPairStatsSubscription, mapIncomingMessageToAction } from './ws.mapper.js'
 import { computePairPayloads } from './ws.subs.js'
 
+/**
+ * Format a creation timestamp into a short relative age (e.g., 12m, 3h, 2d).
+ * Pure helper used by table rows; safe for frequent calls.
+ */
 function formatAge(ts: Date) {
   const now = Date.now()
   const diff = Math.max(0, now - ts.getTime())
@@ -58,6 +75,11 @@ interface FiltersAction { type: 'filters/set'; payload: { excludeHoneypots?: boo
 
 type Action = ScannerPairsAction | TickAction | PairStatsAction | FiltersAction
 
+/**
+ * Table component
+ * Renders a sortable token table with loading/error/empty states.
+ * Props are intentionally minimal to keep rendering logic decoupled from data shaping.
+ */
 function Table({ title, rows, loading, error, onSort, sortKey, sortDir }: {
   title: string
   rows: TokenRow[]
@@ -251,50 +273,100 @@ function App() {
   const onTrendSort = (k: SortKey) => { setTrendSort((s) => ({ key: k, dir: s.key === k && s.dir === 'desc' ? 'asc' : 'desc' })) }
   const onNewSort = (k: SortKey) => { setNewSort((s) => ({ key: k, dir: s.key === k && s.dir === 'desc' ? 'asc' : 'desc' })) }
 
-  // WebSocket connection and subscriptions
+  // WebSocket connection with fallback and subscriptions
   useEffect(() => {
+    let cancelled = false
+    let opened = false
+    let attempt = 0
+    let currentWs: WebSocket | null = null
+    let openTimeout: ReturnType<typeof setTimeout> | null = null
+
     const proto = location.protocol === 'https:' ? 'wss://' : 'ws://'
     const devUrl = proto + location.host + '/ws'
     const prodUrl = 'wss://api-rs.dexcelerate.com/ws'
-    const url = import.meta.env.DEV ? devUrl : prodUrl
-    const ws = new WebSocket(url)
-    wsRef.current = ws
+    // Allow override via env (useful for debugging)
+    const envUrl: string | null = typeof import.meta.env.VITE_WS_URL === 'string' ? import.meta.env.VITE_WS_URL : null
+    const urls: string[] = import.meta.env.DEV ? [envUrl, devUrl, prodUrl].filter(Boolean) as string[] : [envUrl, prodUrl].filter(Boolean) as string[]
 
-    ws.onopen = () => {
-      // subscribe to scanner filters for both tables
-      ws.send(JSON.stringify(buildScannerSubscriptionSafe(trendingFilters)))
-      ws.send(JSON.stringify(buildScannerSubscriptionSafe(newFilters)))
-    }
-    ws.onmessage = (ev) => {
+    function connectNext() {
+      if (cancelled) return
+      const url = urls[attempt++]
+      if (!url) {
+        // no more options; give up silently
+        return
+      }
       try {
-        const parsed = JSON.parse(typeof ev.data === 'string' ? ev.data : String(ev.data)) as unknown
-        // dispatch mapped actions
-        const action = mapIncomingMessageToActionSafe(parsed)
-        if (action) d(action)
-        // after receiving scanner-pairs, subscribe to pair & pair-stats for the included tokens
-        if (
-          parsed &&
-          typeof parsed === 'object' &&
-          (parsed as { event?: unknown }).event === 'scanner-pairs' &&
-          Array.isArray((parsed as { data?: { scannerPairs?: unknown[] } }).data?.scannerPairs)
-        ) {
-          const payloads = computePairPayloadsSafe((parsed as { data: { scannerPairs: unknown[] } }).data.scannerPairs)
-          for (const p of payloads) {
-            const subPair = JSON.stringify(buildPairSubscriptionSafe(p))
-            const subStats = JSON.stringify(buildPairStatsSubscriptionSafe(p))
-            ws.send(subPair)
-            ws.send(subStats)
+        const ws = new WebSocket(url)
+        currentWs = ws
+        wsRef.current = ws
+
+        // If connection does not open within a short window, try next URL
+        if (openTimeout) clearTimeout(openTimeout)
+        openTimeout = setTimeout(() => {
+          if (!opened && ws.readyState !== WebSocket.OPEN) {
+            try { ws.close() } catch { /* ignore */ }
+            connectNext()
+          }
+        }, 1500)
+
+        ws.onopen = () => {
+          opened = true
+          if (openTimeout) { clearTimeout(openTimeout); openTimeout = null }
+          // subscribe to scanner filters for both tables
+          ws.send(JSON.stringify(buildScannerSubscriptionSafe(trendingFilters)))
+          ws.send(JSON.stringify(buildScannerSubscriptionSafe(newFilters)))
+        }
+        ws.onmessage = (ev) => {
+          try {
+            const parsed = JSON.parse(typeof ev.data === 'string' ? ev.data : String(ev.data)) as unknown
+            // dispatch mapped actions
+            const action = mapIncomingMessageToActionSafe(parsed)
+            if (action) d(action)
+            // after receiving scanner-pairs, subscribe to pair & pair-stats for the included tokens
+            if (
+              parsed &&
+              typeof parsed === 'object' &&
+              (parsed as { event?: unknown }).event === 'scanner-pairs' &&
+              Array.isArray((parsed as { data?: { scannerPairs?: unknown[] } }).data?.scannerPairs)
+            ) {
+              const payloads = computePairPayloadsSafe((parsed as { data: { scannerPairs: unknown[] } }).data.scannerPairs)
+              for (const p of payloads) {
+                const subPair = JSON.stringify(buildPairSubscriptionSafe(p))
+                const subStats = JSON.stringify(buildPairStatsSubscriptionSafe(p))
+                ws.send(subPair)
+                ws.send(subStats)
+              }
+            }
+          } catch {
+            /* ignore malformed messages */
+          }
+        }
+        ws.onerror = () => {
+          // If not opened yet, try next endpoint
+          if (!opened) {
+            try { ws.close() } catch { /* ignore */ }
+            connectNext()
+          }
+        }
+        ws.onclose = () => {
+          // If closed before opening, try next; otherwise keep closed (no auto-reconnect for now)
+          if (!opened) {
+            connectNext()
           }
         }
       } catch {
-        /* ignore malformed messages */
+        // If construction fails, move to next
+        connectNext()
       }
     }
-    ws.onerror = () => {
-      /* no-op minimal error handling for now */
-    }
+
+    connectNext()
+
     return () => {
-      try { ws.close() } catch { /* ignore close errors */ }
+      cancelled = true
+      opened = false
+      if (openTimeout) { clearTimeout(openTimeout); openTimeout = null }
+      try { currentWs?.close() } catch { /* ignore close errors */ }
       wsRef.current = null
     }
   }, [trendingFilters, newFilters, d, buildScannerSubscriptionSafe, mapIncomingMessageToActionSafe, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, computePairPayloadsSafe])

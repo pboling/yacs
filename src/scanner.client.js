@@ -1,3 +1,11 @@
+/*
+  scanner.client.js
+  Small, framework-agnostic REST client for GET /scanner.
+  - In dev, defaults to hitting the local Express backend (http://localhost:3001)
+    unless VITE_API_BASE is configured.
+  - In prod, defaults to the public API unless overridden.
+  - All functions are pure and testable; network is injectable.
+*/
 // Pure REST client utilities for /scanner (ESM, JS for node:test)
 // No direct network in tests: fetch is injected.
 import { mapScannerResultToToken } from './tdd.runtime.js'
@@ -16,6 +24,11 @@ const viteApiBase = (() => { try { return (import.meta && import.meta.env && imp
 export const API_BASE = isViteDev ? (viteApiBase || 'http://localhost:3001') : (viteApiBase || 'https://api-rs.dexcelerate.com')
 
 // Build URLSearchParams from GetScannerResultParams-like object
+/**
+ * Build URLSearchParams from a Scanner filter-like object.
+ * - Arrays are expanded as repeated params.
+ * - Null/undefined/empty string values are omitted.
+ */
 export function buildScannerQuery(params = {}) {
   const qp = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) {
@@ -31,6 +44,10 @@ export function buildScannerQuery(params = {}) {
 }
 
 // Map ScannerApiResponse to TokenData[]
+/**
+ * Map a ScannerApiResponse-like object to an array of TokenData (UI shape).
+ * Delegates per-item conversion to mapScannerResultToToken.
+ */
 export function mapScannerPage(apiResponse) {
   const items = apiResponse?.scannerPairs ?? []
   return items.map(mapScannerResultToToken)
