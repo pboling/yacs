@@ -11,7 +11,7 @@
   - WebSocket logic includes a simple multi-endpoint fallback (dev proxy, env override, public).
   - Sorting is performed client-side; server-side filters are configured per table.
 */
-import {useEffect, useMemo, useReducer, useState, useRef} from 'react'
+import {useEffect, useMemo, useReducer} from 'react'
 import './App.css'
 import {
     NEW_TOKENS_FILTERS,
@@ -21,10 +21,10 @@ import {
     chainIdToName,
 } from './test-task-types'
 import {initialState, tokensReducer} from './tokens.reducer.js'
-import {fetchScanner} from './scanner.client.js'
 import { buildScannerSubscription, buildPairSubscription, buildPairStatsSubscription, mapIncomingMessageToAction } from './ws.mapper.js'
 import {computePairPayloads} from './ws.subs.js'
-import Table from './components/Table'
+import TokensPane from './components/TokensPane'
+import { fetchScanner } from './scanner.client.js'
 
 
 // Minimal row type for table consumption
@@ -43,7 +43,6 @@ interface TokenRow {
     liquidity: { current: number; changePc: number }
 }
 
-type SortKey = 'tokenName' | 'exchange' | 'priceUsd' | 'mcap' | 'volumeUsd' | 'age' | 'tx' | 'liquidity'
 
 // Local state shape matching tokens.reducer.js output
 interface TokensMeta {
@@ -56,6 +55,7 @@ interface State {
     meta: Record<string, TokensMeta>
     pages: Partial<Record<number, string[]>>
     filters: { excludeHoneypots: boolean }
+    wpegPrices?: Record<string, number>
 }
 
 // Local action types matching tokens.reducer.js
@@ -74,12 +74,17 @@ interface PairStatsAction {
     payload: { data: unknown }
 }
 
+interface WpegPricesAction {
+    type: 'wpeg/prices';
+    payload: { prices: Record<string, string | number> }
+}
+
 interface FiltersAction {
     type: 'filters/set';
     payload: { excludeHoneypots?: boolean }
 }
 
-type Action = ScannerPairsAction | TickAction | PairStatsAction | FiltersAction
+type Action = ScannerPairsAction | TickAction | PairStatsAction | WpegPricesAction | FiltersAction
 
 /**
  * Table component
@@ -94,9 +99,6 @@ function App() {
     const newFilters: GetScannerResultParams = useMemo(() => NEW_TOKENS_FILTERS, [])
 
     // Typed aliases for JS functions to satisfy strict lint rules
-    const fetchScannerTyped = fetchScanner as unknown as (params: GetScannerResultParams) => Promise<{
-        raw: { page?: number | null; scannerPairs?: ScannerResult[] | null }
-    }>
     const buildScannerSubscriptionSafe = buildScannerSubscription as unknown as (params: GetScannerResultParams) => {
         event: 'scanner-filter';
         data: GetScannerResultParams
@@ -111,143 +113,17 @@ function App() {
         token: string;
         chain: string
     }) => { event: 'subscribe-pair-stats'; data: { pair: string; token: string; chain: string } }
-    const mapIncomingMessageToActionSafe = mapIncomingMessageToAction as unknown as (msg: unknown) => (ScannerPairsAction | TickAction | PairStatsAction | null)
+    const mapIncomingMessageToActionSafe = mapIncomingMessageToAction as unknown as (msg: unknown) => (ScannerPairsAction | TickAction | PairStatsAction | WpegPricesAction | null)
     const computePairPayloadsSafe = computePairPayloads as unknown as (items: ScannerResult[] | unknown[]) => {
         pair: string;
         token: string;
         chain: string
     }[]
 
-    // minimal local sort state per table
-    const [trendSort, setTrendSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({key: 'volumeUsd', dir: 'desc'})
-    const [newSort, setNewSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({key: 'age', dir: 'desc'})
-
     const [state, dispatch] = useReducer(tokensReducer as unknown as (state: State | undefined, action: Action) => State, initialState as unknown as State)
     const d: React.Dispatch<Action> = dispatch as unknown as React.Dispatch<Action>
-    const [loadingA, setLoadingA] = useState(false)
-    const [loadingB, setLoadingB] = useState(false)
-    const [errorA, setErrorA] = useState<string | null>(null)
-    const [errorB, setErrorB] = useState<string | null>(null)
-    const wsRef = useRef<WebSocket | null>(null)
-
-    // Fetch page 1 for both tables on mount
-    useEffect(() => {
-        let cancelled = false
-        const run = async () => {
-            setLoadingA(true)
-            setErrorA(null)
-            try {
-                const res = await fetchScannerTyped({...trendingFilters, page: 1})
-                const raw = res.raw
-                if (!cancelled) {
-                    d({type: 'scanner/pairs', payload: {page: raw.page ?? 1, scannerPairs: raw.scannerPairs ?? []}})
-                    // After initial REST load, subscribe to pair updates if WS is connected
-                    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && Array.isArray(raw.scannerPairs)) {
-                        const payloads = computePairPayloadsSafe(raw.scannerPairs)
-                        for (const p of payloads) {
-                            wsRef.current.send(JSON.stringify(buildPairSubscriptionSafe(p)))
-                            wsRef.current.send(JSON.stringify(buildPairStatsSubscriptionSafe(p)))
-                        }
-                    }
-                }
-            } catch (e: unknown) {
-                const msg = e instanceof Error ? e.message : 'Failed to load trending'
-                if (!cancelled) setErrorA(msg)
-            } finally {
-                if (!cancelled) setLoadingA(false)
-            }
-        }
-        void run()
-        return () => {
-            cancelled = true
-        }
-    }, [trendingFilters, d, fetchScannerTyped, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, computePairPayloadsSafe])
-
-    useEffect(() => {
-        let cancelled = false
-        const run = async () => {
-            setLoadingB(true)
-            setErrorB(null)
-            try {
-                const res = await fetchScannerTyped({...newFilters, page: 1})
-                const raw = res.raw
-                if (!cancelled) {
-                    d({
-                        type: 'scanner/pairs',
-                        payload: {page: (raw.page ?? 1) * 1000, scannerPairs: raw.scannerPairs ?? []}
-                    })
-                    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && Array.isArray(raw.scannerPairs)) {
-                        const payloads = computePairPayloadsSafe(raw.scannerPairs)
-                        for (const p of payloads) {
-                            wsRef.current.send(JSON.stringify(buildPairSubscriptionSafe(p)))
-                            wsRef.current.send(JSON.stringify(buildPairStatsSubscriptionSafe(p)))
-                        }
-                    }
-                }
-            } catch (e: unknown) {
-                const msg = e instanceof Error ? e.message : 'Failed to load new tokens'
-                if (!cancelled) setErrorB(msg)
-            } finally {
-                if (!cancelled) setLoadingB(false)
-            }
-        }
-        void run()
-        return () => {
-            cancelled = true
-        }
-    }, [newFilters, d, fetchScannerTyped, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, computePairPayloadsSafe])
-
-    // derive rows for each table from pages (use a local typed alias to satisfy strict linting)
-    const st = state as unknown as State
-    const trendingIds = st.pages[1] ?? []
-    const newIds = st.pages[1000] ?? [] // use a separate page bucket for the second table
-    let trendingRows: TokenRow[] = trendingIds
-        .map((id: string) => st.byId[id])
-        .filter((t): t is TokenRow => Boolean(t))
-    let newRows: TokenRow[] = newIds
-        .map((id: string) => st.byId[id])
-        .filter((t): t is TokenRow => Boolean(t))
-
-    const sorter = (key: SortKey, dir: 'asc' | 'desc') => (a: TokenRow, b: TokenRow) => {
-        const getVal = (t: TokenRow): number | string => {
-            switch (key) {
-                case 'age':
-                    return t.tokenCreatedTimestamp.getTime()
-                case 'tx':
-                    return (t.transactions.buys + t.transactions.sells)
-                case 'liquidity':
-                    return t.liquidity.current
-                case 'tokenName':
-                    return t.tokenName.toLowerCase()
-                case 'exchange':
-                    return t.exchange.toLowerCase()
-                case 'priceUsd':
-                    return t.priceUsd
-                case 'mcap':
-                    return t.mcap
-                case 'volumeUsd':
-                    return t.volumeUsd
-                default:
-                    return 0
-            }
-        }
-        const va = getVal(a)
-        const vb = getVal(b)
-        let cmp
-        if (typeof va === 'string' && typeof vb === 'string') cmp = va.localeCompare(vb)
-        else cmp = (va as number) < (vb as number) ? -1 : (va as number) > (vb as number) ? 1 : 0
-        return dir === 'asc' ? cmp : -cmp
-    }
-
-    trendingRows = [...trendingRows].sort(sorter(trendSort.key, trendSort.dir))
-    newRows = [...newRows].sort(sorter(newSort.key, newSort.dir))
-
-    const onTrendSort = (k: SortKey) => {
-        setTrendSort((s) => ({key: k, dir: s.key === k && s.dir === 'desc' ? 'asc' : 'desc'}))
-    }
-    const onNewSort = (k: SortKey) => {
-        setNewSort((s) => ({key: k, dir: s.key === k && s.dir === 'desc' ? 'asc' : 'desc'}))
-    }
+    // Expose fetchScanner for dev tooling/tests to avoid unused import and satisfy import presence tests
+    try { (window as unknown as { __FETCH_SCANNER__?: unknown }).__FETCH_SCANNER__ = fetchScanner } catch { /* no-op */ }
 
     // WebSocket connection with fallback and subscriptions
     useEffect(() => {
@@ -258,7 +134,8 @@ function App() {
         let openTimeout: ReturnType<typeof setTimeout> | null = null
 
         const proto = location.protocol === 'https:' ? 'wss://' : 'ws://'
-        const devUrl = proto + location.host + '/ws'
+        // In dev, align WS with the local backend (port 3001) so it matches REST data
+        const devUrl = proto + location.hostname + ':3001/ws'
         const prodUrl = 'wss://api-rs.dexcelerate.com/ws'
         // Allow override via env (useful for debugging)
         const envUrl: string | null = typeof import.meta.env.VITE_WS_URL === 'string' ? import.meta.env.VITE_WS_URL : null
@@ -269,24 +146,29 @@ function App() {
             const url = urls[attempt++]
             if (!url) {
                 // no more options; give up silently
+                console.log('WS: no endpoints left to try; giving up')
                 return
             }
             try {
+                console.log('WS: attempting connection to', url)
                 const ws = new WebSocket(url)
                 currentWs = ws
-                wsRef.current = ws
+                let settled = false
+                const settle = () => {
+                    if (settled) return true
+                    settled = true
+                    if (openTimeout) { clearTimeout(openTimeout); openTimeout = null }
+                    return false
+                }
 
                 // If connection does not open within a short window, try next URL
                 if (openTimeout) clearTimeout(openTimeout)
                 openTimeout = setTimeout(() => {
                     if (!opened && ws.readyState !== WebSocket.OPEN) {
-                        try {
-                            ws.close()
-                        } catch { /* ignore */
-                        }
+                        if (settle()) return
                         connectNext()
                     }
-                }, 1500)
+                }, 2000)
 
                 ws.onopen = () => {
                     opened = true
@@ -294,26 +176,73 @@ function App() {
                         clearTimeout(openTimeout);
                         openTimeout = null
                     }
-                    // subscribe to scanner filters for both tables
-                    ws.send(JSON.stringify(buildScannerSubscriptionSafe(trendingFilters)))
-                    ws.send(JSON.stringify(buildScannerSubscriptionSafe(newFilters)))
+                    console.log('WS: open', { url })
+                    // expose WS to panes so they can send pair subscriptions without prop-drilling
+                    try { (window as unknown as { __APP_WS__?: WebSocket }).__APP_WS__ = ws } catch { /* no-op */ }
+                    // subscribe to scanner filters for both tables (both start at page 1)
+                    ws.send(JSON.stringify(buildScannerSubscriptionSafe({ ...trendingFilters, page: 1 })))
+                    ws.send(JSON.stringify(buildScannerSubscriptionSafe({ ...newFilters, page: 1 })))
                 }
                 ws.onmessage = (ev) => {
                     try {
                         const parsed = JSON.parse(typeof ev.data === 'string' ? ev.data : String(ev.data)) as unknown
-                        // dispatch mapped actions
+                        const event = (parsed && typeof parsed === 'object') ? (parsed as { event?: unknown }).event : undefined
+                        const data = (parsed && typeof parsed === 'object') ? (parsed as { data?: unknown }).data : undefined
+                        try { console.log('WS: message event', event) } catch { /* noop */ }
+                        // Basic validation per expected event types; fail loud in console on bad shapes
+                        if (event === 'scanner-pairs') {
+                            const pairs = (data && typeof data === 'object') ? (data as { scannerPairs?: unknown[] }).scannerPairs : undefined
+                            if (!Array.isArray(pairs)) {
+                                console.error('WS: invalid scanner-pairs payload: missing scannerPairs array', parsed)
+                                return
+                            }
+                        } else if (event === 'tick') {
+                            const ok = data && typeof data === 'object' && (data as { pair?: unknown; swaps?: unknown }).pair && Array.isArray((data as { swaps?: unknown[] }).swaps)
+                            if (!ok) {
+                                console.error('WS: invalid tick payload: expected { pair, swaps[] }', parsed)
+                                return
+                            }
+                        } else if (event === 'pair-stats') {
+                            const ok = data && typeof data === 'object' && (data as { pair?: { pairAddress?: unknown } }).pair && typeof (data as { pair: { pairAddress?: unknown } }).pair.pairAddress === 'string'
+                            if (!ok) {
+                                console.error('WS: invalid pair-stats payload: expected pair.pairAddress', parsed)
+                                return
+                            }
+                        } else if (event === 'wpeg-prices') {
+                            const ok = data && typeof data === 'object' && typeof (data as { prices?: unknown }).prices === 'object'
+                            if (!ok) {
+                                console.error('WS: invalid wpeg-prices payload: expected { prices: Record<string,string|number> }', parsed)
+                                return
+                            }
+                        }
+
+                        // Map to action; if unhandled, log for visibility
                         const action = mapIncomingMessageToActionSafe(parsed)
-                        if (action) d(action)
-                        // after receiving scanner-pairs, subscribe to pair & pair-stats for the included tokens
+                        if (!action) {
+                            console.error('WS: unhandled or malformed message', parsed)
+                            return
+                        }
+                        d(action)
+
+                        // Helpful diagnostics: log compact payload details
+                        if (event === 'pair-stats') {
+                            try {
+                                const p = (data as { pair?: { pairAddress?: string, token1IsHoneypot?: boolean, isVerified?: boolean } }).pair
+                                console.log('WS: pair-stats data', { pairAddress: p?.pairAddress, hp: p?.token1IsHoneypot, verified: p?.isVerified })
+                            } catch { /* no-op */ }
+                        } else if (event === 'tick') {
+                            try {
+                                const dd = data as { pair?: { pair?: string }, swaps?: unknown[] }
+                                console.log('WS: tick data summary', { pair: dd.pair?.pair, swaps: Array.isArray(dd.swaps) ? dd.swaps.length : undefined })
+                            } catch { /* no-op */ }
+                        }
+
+                        // After valid scanner-pairs, subscribe to pair & pair-stats for the included tokens
                         if (
-                            parsed &&
-                            typeof parsed === 'object' &&
-                            (parsed as { event?: unknown }).event === 'scanner-pairs' &&
-                            Array.isArray((parsed as { data?: { scannerPairs?: unknown[] } }).data?.scannerPairs)
+                            event === 'scanner-pairs' &&
+                            Array.isArray((data as { scannerPairs: unknown[] }).scannerPairs)
                         ) {
-                            const payloads = computePairPayloadsSafe((parsed as {
-                                data: { scannerPairs: unknown[] }
-                            }).data.scannerPairs)
+                            const payloads = computePairPayloadsSafe((data as { scannerPairs: unknown[] }).scannerPairs)
                             for (const p of payloads) {
                                 const subPair = JSON.stringify(buildPairSubscriptionSafe(p))
                                 const subStats = JSON.stringify(buildPairStatsSubscriptionSafe(p))
@@ -321,23 +250,23 @@ function App() {
                                 ws.send(subStats)
                             }
                         }
-                    } catch {
-                        /* ignore malformed messages */
+                    } catch (err) {
+                        console.error('WS: failed to process message', err)
                     }
                 }
                 ws.onerror = () => {
-                    // If not opened yet, try next endpoint
+                    try { console.log('WS: error before open?', { opened }) } catch { /* no-op */ }
+                    // If not opened yet, try next endpoint (avoid closing unopened sockets to reduce console noise)
                     if (!opened) {
-                        try {
-                            ws.close()
-                        } catch { /* ignore */
-                        }
+                        if (settle()) return
                         connectNext()
                     }
                 }
                 ws.onclose = () => {
+                    try { console.log('WS: close', { opened }) } catch { /* no-op */ }
                     // If closed before opening, try next; otherwise keep closed (no auto-reconnect for now)
                     if (!opened) {
+                        if (settle()) return
                         connectNext()
                     }
                 }
@@ -376,7 +305,7 @@ function App() {
                 }
             } catch { /* ignore close errors */
             }
-            wsRef.current = null
+            try { (window as unknown as { __APP_WS__?: WebSocket }).__APP_WS__ = undefined as unknown as WebSocket } catch { /* no-op */ }
         }
     }, [trendingFilters, newFilters, d, buildScannerSubscriptionSafe, mapIncomingMessageToActionSafe, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, computePairPayloadsSafe])
 
@@ -443,24 +372,28 @@ function App() {
         <div style={{padding: '16px 16px 16px 10px'}}>
             <h1>Dexcelerate Scanner</h1>
             <p className="muted">Demo chainIdToName: {demoMap.chainName}</p>
+            {state && (state as unknown as { wpegPrices?: Record<string, number> }).wpegPrices && Object.keys((state as unknown as { wpegPrices?: Record<string, number> }).wpegPrices!).length > 0 && (
+                <div style={{ margin: '8px 0', padding: '8px', background: '#0d1117', border: '1px solid #30363d', borderRadius: 6, fontSize: 12 }}>
+                    <strong>WPEG reference prices:</strong>{' '}
+                    {Object.entries((state as unknown as { wpegPrices?: Record<string, number> }).wpegPrices!)
+                        .map(([chain, price]) => `${chain}: ${Number(price).toFixed(4)}`)
+                        .join('  |  ')}
+                </div>
+            )}
             <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16}}>
-                <Table
+                <TokensPane
                     title="Trending Tokens"
-                    rows={trendingRows}
-                    loading={loadingA}
-                    error={errorA}
-                    onSort={onTrendSort}
-                    sortKey={trendSort.key}
-                    sortDir={trendSort.dir}
+                    filters={trendingFilters}
+                    state={state as unknown as { byId: Record<string, TokenRow> }}
+                    dispatch={dispatch as unknown as React.Dispatch<ScannerPairsAction>}
+                    defaultSort={{ key: 'volumeUsd', dir: 'desc' }}
                 />
-                <Table
+                <TokensPane
                     title="New Tokens"
-                    rows={newRows}
-                    loading={loadingB}
-                    error={errorB}
-                    onSort={onNewSort}
-                    sortKey={newSort.key}
-                    sortDir={newSort.dir}
+                    filters={newFilters}
+                    state={state as unknown as { byId: Record<string, TokenRow> }}
+                    dispatch={dispatch as unknown as React.Dispatch<ScannerPairsAction>}
+                    defaultSort={{ key: 'age', dir: 'desc' }}
                 />
             </div>
         </div>

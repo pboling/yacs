@@ -21,6 +21,7 @@ export const initialState = {
   meta: {}, // id -> { totalSupply: number, token0Address?: string }
   pages: {}, // pageNumber -> string[] ids present on that page
   filters: { excludeHoneypots: false },
+  wpegPrices: {}, // chain -> number
 }
 
 export function tokensReducer(state = initialState, action) {
@@ -75,6 +76,16 @@ export function tokensReducer(state = initialState, action) {
         freezable: !data.pair.freezeAuthorityRenounced,
       }
       return { ...state, byId: { ...state.byId, [id]: { ...token, audit } } }
+    }
+    case 'wpeg/prices': {
+      const prices = action.payload?.prices || {}
+      const normalized = {}
+      for (const k of Object.keys(prices)) {
+        const v = prices[k]
+        const n = typeof v === 'number' ? v : parseFloat(v || '0')
+        if (!Number.isNaN(n)) normalized[k] = n
+      }
+      return { ...state, wpegPrices: { ...state.wpegPrices, ...normalized } }
     }
     case 'filters/set': {
       return { ...state, filters: { ...state.filters, ...action.payload } }

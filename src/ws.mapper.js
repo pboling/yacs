@@ -51,6 +51,10 @@ export function mapIncomingMessageToAction(msg) {
       return { type: 'pair/tick', payload: { pair: msg.data.pair, swaps: msg.data.swaps } }
     case 'pair-stats':
       return { type: 'pair/stats', payload: { data: msg.data } }
+    case 'wpeg-prices': {
+      const prices = (msg.data && typeof msg.data === 'object') ? (msg.data.prices || {}) : {}
+      return { type: 'wpeg/prices', payload: { prices } }
+    }
     default:
       return null
   }

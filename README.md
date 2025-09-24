@@ -42,6 +42,27 @@ This repo is a React 19 + TypeScript 5 + Vite 7 (Rolldown) app. Below are the es
   - Run a specific folder/file: node --test tests or node --test tests/scanner.client.test.js
   - Inline demo: node --input-type=module --eval "import test from 'node:test'; import assert from 'node:assert/strict'; await test('ok', () => assert.ok(true));"
 
+## E2E tests (Playwright)
+
+This repo includes UI end-to-end tests using Playwright that validate live WebSocket updates and client WS setup.
+
+- One-time setup
+  - Install browsers: npx playwright install
+
+- Running tests
+  - All e2e tests: npm run test:e2e
+  - Interactive UI mode: npm run test:e2e:ui
+
+- What the runner does
+  - The Playwright config (playwright.config.ts) auto-starts the dev stack via npm run dev:serve (backend + Vite dev server) and waits for http://localhost:5173.
+  - Tests live under e2e/ and include:
+    - ws-setup.spec.ts → asserts the app establishes a WebSocket connection (waits for a page websocket and window.__APP_WS__ to be OPEN).
+    - ws-updates.spec.ts → asserts that the first row in both tables updates within a timeout, indicating live data flow.
+
+- Troubleshooting
+  - If you don’t see updates, open the browser console: extensive logs have been added under the WS and TokensPane prefixes to trace what’s happening.
+  - Ensure ports 5173 (frontend) and 3001 (backend) are available or adjust your environment accordingly.
+
 - WebSocket usage during dev
   - For real data, connect to ws://localhost:5173/ws (dev proxy). Send subscribe messages per README sections below.
 

@@ -33,6 +33,10 @@ test('mapIncomingMessageToAction maps known events and ignores unknown', () => {
   const statsMsg = { event: 'pair-stats', data: { pair: { pairAddress: '0xPAIR' }, pairStats: {}, migrationProgress: '0', callCount: 1 } }
   const a3 = mapIncomingMessageToAction(statsMsg)
   assert.equal(a3.type, 'pair/stats')
+  const wpegMsg = { event: 'wpeg-prices', data: { prices: { ETH: '4183.1100', SOL: '210.5' } } }
+  const a4 = mapIncomingMessageToAction(wpegMsg)
+  assert.equal(a4.type, 'wpeg/prices')
+  assert.deepEqual(a4.payload.prices, { ETH: '4183.1100', SOL: '210.5' })
   const unknown = mapIncomingMessageToAction({ event: 'unknown', data: {} })
   assert.equal(unknown, null)
 })
