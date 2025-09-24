@@ -53,6 +53,11 @@ export function mapScannerResultToToken(scanner) {
       honeypot: !!scanner.honeyPot,
       contractVerified: scanner.contractVerified,
     },
+    security: {
+      renounced: scanner.contractRenounced ?? undefined,
+      locked: scanner.liquidityLocked ?? undefined,
+      burned: scanner.burned ?? undefined,
+    },
     tokenCreatedTimestamp,
     liquidity: {
       current: parseFloat(scanner.liquidity || '0') || 0,

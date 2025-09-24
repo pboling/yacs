@@ -104,11 +104,13 @@ function App() {
     const initialSort = useMemo(() => {
         try {
             const sp = new URLSearchParams(window.location.search)
-            const rawSort = (sp.get('sort') || '').toLowerCase()
-            const rawDir = (sp.get('dir') || '').toLowerCase()
-            const dir: 'asc' | 'desc' = rawDir === 'asc' || rawDir === 'desc' ? (rawDir as 'asc' | 'desc') : 'desc'
+            const rawSort = (sp.get('sort') ?? '').toLowerCase()
+            const rawDir = (sp.get('dir') ?? '').toLowerCase()
+            // Narrow dir to the union type using a type guard (avoids unnecessary assertions)
+            const isDir = (v: string): v is 'asc' | 'desc' => v === 'asc' || v === 'desc'
+            const dir: 'asc' | 'desc' = isDir(rawDir) ? rawDir : 'desc'
             // Map server sort keys to client SortKey
-            const map: Record<string, SortKey> = {
+            const map: Partial<Record<string, SortKey>> = {
                 tokenname: 'tokenName',
                 exchange: 'exchange',
                 price: 'priceUsd',

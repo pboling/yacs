@@ -1,5 +1,6 @@
 import NumberCell from './NumberCell'
-import { useEffect } from 'react'
+import AuditIcons from './AuditIcons'
+import { useEffect, useMemo, useState } from 'react'
 
 // Local minimal types to avoid circular deps with App
 interface TokenRow {
@@ -15,6 +16,8 @@ interface TokenRow {
     tokenCreatedTimestamp: Date
     transactions: { buys: number; sells: number }
     liquidity: { current: number; changePc: number }
+    audit?: { contractVerified?: boolean; freezable?: boolean; honeypot?: boolean }
+    security?: { renounced?: boolean; locked?: boolean; burned?: boolean }
 }
 
 type SortKey = 'tokenName' | 'exchange' | 'priceUsd' | 'mcap' | 'volumeUsd' | 'age' | 'tx' | 'liquidity'
@@ -108,22 +111,117 @@ export default function Table({
         } catch { /* no-op */ }
     }, [rows, title])
 
+    // Export helpers
+    const exportFormatOptions = ['csv', 'json'] as const
+    type ExportFormat = typeof exportFormatOptions[number]
+    const [exportFormat, setExportFormat] = useState<ExportFormat>('csv')
+
+    const dataForExport = useMemo(() => {
+        // Shape data similar to visible columns
+        return rows.map((t) => ({
+            id: t.id,
+            tokenName: t.tokenName,
+            tokenSymbol: t.tokenSymbol,
+            chain: t.chain,
+            exchange: t.exchange,
+            priceUsd: t.priceUsd,
+            mcap: t.mcap,
+            volumeUsd: t.volumeUsd,
+            chg5m: t.priceChangePcs['5m'],
+            chg1h: t.priceChangePcs['1h'],
+            chg6h: t.priceChangePcs['6h'],
+            chg24h: t.priceChangePcs['24h'],
+            tokenCreatedTimestamp: t.tokenCreatedTimestamp.toISOString(),
+            buys: t.transactions.buys,
+            sells: t.transactions.sells,
+            liquidity: t.liquidity.current,
+        }))
+    }, [rows])
+
+    function toCsv(objs: Record<string, unknown>[]) {
+        if (objs.length === 0) return ''
+        const headers = Object.keys(objs[0])
+        const escape = (val: unknown) => {
+            if (val == null) return ''
+            let s: string
+            if (typeof val === 'string') s = val
+            else if (typeof val === 'number' || typeof val === 'boolean') s = String(val)
+            else if (val instanceof Date) s = val.toISOString()
+            else s = JSON.stringify(val)
+            // Quote if contains comma, quote or newline
+            if (/[",\n]/.test(s)) {
+                return '"' + s.replace(/"/g, '""') + '"'
+            }
+            return s
+        }
+        const lines = [headers.join(',')]
+        for (const row of objs) {
+            const r: Record<string, unknown> = row
+            lines.push(headers.map((h) => escape(r[h])).join(','))
+        }
+        return lines.join('\n')
+    }
+
+    function download(content: string, filename: string, mime: string) {
+        const blob = new Blob([content], { type: mime })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        setTimeout(() => {
+            document.body.removeChild(a)
+            URL.revokeObjectURL(url)
+        }, 0)
+    }
+
+    function onExport() {
+        const ts = new Date().toISOString().replace(/[:.]/g, '-')
+        const base = title.replace(/\s+/g, '_').toLowerCase()
+        if (exportFormat === 'json') {
+            const json = JSON.stringify(dataForExport, null, 2)
+            download(json, `${base}_${ts}.json`, 'application/json')
+        } else {
+            const csv = toCsv(dataForExport as Record<string, unknown>[])
+            download(csv, `${base}_${ts}.csv`, 'text/csv')
+        }
+    }
+
     return (
         <section>
-            <h2>{title}</h2>
-            {loading && <div className="status">Loading…</div>}
-            {error && <div className="status error">{error}</div>}
-            {!loading && !error && rows.length === 0 && <div className="status">No data</div>}
-            {!loading && !error && rows.length > 0 && (
-                <div className="table-wrap">
-                    <table className="tokens">
-                        <thead>
-                        <tr>
-                            <th onClick={() => { onSort('tokenName') }}
-                                aria-sort={sortKey === 'tokenName' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Token
-                            </th>
-                            <th onClick={() => { onSort('exchange') }}
-                                aria-sort={sortKey === 'exchange' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Exchange
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                <h2 style={{ margin: 0 }}>{title}</h2>
+                <div className="export-controls" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <label className="muted" style={{ fontSize: 12 }}>
+                        Format
+                        <select
+                            aria-label={`Select ${title} export format`}
+                            value={exportFormat}
+                            onChange={(e) => { setExportFormat(e.currentTarget.value as ExportFormat) }}
+                            style={{ marginLeft: 6 }}
+                        >
+                            {exportFormatOptions.map((opt) => (
+                                <option key={opt} value={opt}>{opt.toUpperCase()}</option>
+                            ))}
+                        </select>
+                    </label>
+                    <button type="button" onClick={onExport} title={`Export ${String(rows.length)} rows`} disabled={rows.length === 0}>Export</button>
+                </div>
+
+                {loading && <div className="status">Loading…</div>}
+                {error && <div className="status error">{error}</div>}
+                {!loading && !error && rows.length === 0 && <div className="status">No data</div>}
+                {!loading && !error && rows.length > 0 && (
+                    <div className="table-wrap" style={{ width: '100%' }}>
+                        <table className="tokens">
+                            <thead>
+                            <tr>
+                                <th onClick={() => { onSort('tokenName') }}
+                                    aria-sort={sortKey === 'tokenName' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Token
+                                </th>
+                                <th onClick={() => { onSort('exchange') }}
+                                    aria-sort={sortKey === 'exchange' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Exchange
                             </th>
                             <th onClick={() => { onSort('priceUsd') }}
                                 aria-sort={sortKey === 'priceUsd' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Price
@@ -181,6 +279,16 @@ export default function Table({
                                     <td>
                                         <NumberCell value={t.liquidity.current} prefix="$" formatter={(n) => Math.round(n).toLocaleString()} />
                                     </td>
+                                    <td>
+                                        <AuditIcons flags={{
+                                            verified: t.audit?.contractVerified,
+                                            freezable: t.audit?.freezable,
+                                            renounced: t.security?.renounced,
+                                            locked: t.security?.locked,
+                                            burned: t.security?.burned,
+                                            honeypot: t.audit?.honeypot,
+                                        }} />
+                                    </td>
                                 </tr>
                             )
                         })}
@@ -188,6 +296,7 @@ export default function Table({
                     </table>
                 </div>
             )}
+            </div>
         </section>
     )
 }

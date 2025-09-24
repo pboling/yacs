@@ -19,7 +19,8 @@ interface TokenRow {
     tokenCreatedTimestamp: Date
     transactions: { buys: number; sells: number }
     liquidity: { current: number; changePc: number }
-    audit?: { honeypot?: boolean }
+    audit?: { contractVerified?: boolean; honeypot?: boolean; freezable?: boolean }
+    security?: { renounced?: boolean; locked?: boolean; burned?: boolean }
     // Optional fields present in reducer mapping; used to form WS subscription payloads when rows render
     pairAddress?: string
     tokenAddress?: string

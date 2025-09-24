@@ -130,6 +130,10 @@ export function tokensReducer(state = initialState, action) {
         freezable: !!p.freezeAuthorityRenounced,
         honeypot: !p.token1IsHoneypot,
         contractVerified: !!p.isVerified,
+        // Additional optional audit flags when provided
+        renounced: (p.contractRenounced ?? token.audit?.renounced),
+        locked: (p.liquidityLocked ?? token.audit?.locked),
+        burned: (p.burned ?? token.audit?.burned),
         // Social links + paid flag
         linkDiscord: p.linkDiscord ?? token.audit?.linkDiscord,
         linkTelegram: p.linkTelegram ?? token.audit?.linkTelegram,
@@ -138,7 +142,13 @@ export function tokensReducer(state = initialState, action) {
         dexPaid: p.dexPaid ?? token.audit?.dexPaid,
       }
       const migrationPc = Number(data.migrationProgress ?? token.migrationPc ?? 0) || 0
-      const nextTok = { ...token, audit, migrationPc }
+      const security = {
+        ...(token.security || {}),
+        renounced: (p.contractRenounced ?? (token.security ? token.security.renounced : undefined)),
+        locked: (p.liquidityLocked ?? (token.security ? token.security.locked : undefined)),
+        burned: (p.burned ?? (token.security ? token.security.burned : undefined)),
+      }
+      const nextTok = { ...token, audit, security, migrationPc }
       if (!__REDUCER_SEEN__.has(action)) { __REDUCER_SEEN__.add(action); try { console.log('REDUCER: pair/stats applied', { id: idOrig, audit: { contractVerified: audit.contractVerified, honeypot: audit.honeypot }, migrationPc }) } catch {} }
       return { ...state, byId: { ...state.byId, [id]: nextTok, [idOrig]: nextTok }, version: (state.version || 0) + 1 }
     }
