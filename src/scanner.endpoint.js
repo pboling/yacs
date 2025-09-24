@@ -70,7 +70,6 @@ export function generateScannerResponse(params = {}) {
   const items = []
   const now = Date.now()
   for (let i = 0; i < size; i++) {
-    const base = rnd()
     const createdAgoMs = Math.floor(rnd() * 7 * 24 * 3600 * 1000) // up to 7 days
     const ageIso = new Date(now - createdAgoMs).toISOString()
 

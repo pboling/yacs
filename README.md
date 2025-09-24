@@ -21,11 +21,10 @@ This repo is a React 19 + TypeScript 5 + Vite 7 (Rolldown) app. Below are the es
   - npm ci (preferred for reproducible installs) or npm install
 
 - Dev server
-  - npm run dev → starts Vite dev server with React Fast Refresh (via @vitejs/plugin-react) on http://localhost:5173
-  - API proxy is configured for development (see vite.config.ts):
-    - REST: fetch('/scanner?...') → proxies to https://api-rs.dexcelerate.com/scanner
-    - WS: new WebSocket('ws://localhost:5173/ws') → proxies to wss://api-rs.dexcelerate.com/ws
-  - You can override the base via VITE_API_BASE if needed (e.g., echo "VITE_API_BASE=/" > .env.local). By default, dev prefers a relative base which works with the proxy.
+  - Frontend: npm run dev → starts Vite dev server with React Fast Refresh on http://localhost:5173
+  - Backend: npm run server → starts the Express backend on http://localhost:3001 providing GET /scanner
+  - The frontend REST client in dev defaults to http://localhost:3001 unless VITE_API_BASE is set. Set VITE_API_BASE to override.
+  - WebSocket is proxied in dev at /ws to wss://api-rs.dexcelerate.com/ws (vite.config.ts keeps only the WS proxy).
 
 - Production build
   - npm run build → runs TypeScript project build (tsc -b) for type-checking only (noEmit), then Vite build.
@@ -49,6 +48,8 @@ This repo is a React 19 + TypeScript 5 + Vite 7 (Rolldown) app. Below are the es
 Note on CORS: The dev proxy avoids the need for a CORS extension during development when you use relative URLs as shown above. If you bypass the proxy and hit the public API directly from the browser, a CORS extension may be required.
 
 ## Requirements
+
+Runtime behavior (dev and prod): On page load, the app performs an initial GET /scanner to fetch the initial dataset for both tables, and it also opens a WebSocket connection and subscribes to updates (scanner-filter and per-pair/per-pair-stats). This is true in all environments. In dev, REST may come from a local mock while WebSocket updates flow from the public API via the /ws proxy.
 
 ### 1. Component Structure
 
@@ -377,12 +378,16 @@ You will have to use a no-cors extension from the Chrome web store during develo
   - Example: echo "VITE_API_BASE=/" > .env.local to force relative base; default behavior already uses relative base in dev.
 
 ### Local mock data with reproducible seed
-- To generate deterministic mock data locally (no external API), enable the built-in mock server and set a seed:
-  - Enable mock: set LOCAL_SCANNER=1 (or VITE_USE_LOCAL_SCANNER=1)
-  - Seed sources (first match wins): VITE_SEED, SEED, then the content of a .seed file in the project root; fallback to an internal default.
-  - Example:
-    - On macOS/Linux: LOCAL_SCANNER=1 VITE_SEED=12345 npm run dev
-    - Or create a .seed file containing a number (e.g., 987654321) and run: LOCAL_SCANNER=1 npm run dev
+- The local deterministic mock for /scanner is ENABLED by default during development. You can control it with env vars:
+  - Force-enable mock: set LOCAL_SCANNER=1 (or VITE_USE_LOCAL_SCANNER=1)
+  - Disable mock: set LOCAL_SCANNER=0 (or VITE_USE_LOCAL_SCANNER=0)
+  - Switch to public API and enable proxies: set USE_PUBLIC_API=1 (or VITE_USE_PUBLIC_API=1)
+- Seed sources (first match wins): VITE_SEED, SEED, then the content of a .seed file in the project root; fallback to an internal default.
+- Examples:
+  - Default (mock on): npm run dev
+  - Use a specific seed: VITE_SEED=12345 npm run dev
+  - Use public API via proxy: USE_PUBLIC_API=1 npm run dev
+  - Disable mock without proxies (you provide /scanner): LOCAL_SCANNER=0 npm run dev
 - The REST endpoint /scanner will return data derived from the seed and request params, so the same seed and params always produce the same dataset.
 - This allows you to test initial load without relying on the public API.
 

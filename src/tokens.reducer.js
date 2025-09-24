@@ -27,13 +27,8 @@ export function tokensReducer(state = initialState, action) {
       }
       // set page ids
       next.pages[page] = ids
-      // remove tokens that are no longer in this page
-      const existingIds = Object.keys(next.byId)
-      const pageIdsSet = new Set(ids)
-      for (const id of existingIds) {
-        // if this token belonged to this page before but not anymore, and it is not present in any other page list, we may remove it
-        // Simpler: if it is not in any page list after update of this page, keep it for other pages; we will not remove globally here.
-      }
+      // Note: we purposely avoid global removal here to allow tokens present on other pages
+      // The cleanup strategy can be implemented later if needed.
       return next
     }
     case 'pair/tick': {

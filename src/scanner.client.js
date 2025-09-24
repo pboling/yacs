@@ -13,7 +13,7 @@ const isViteDev = (() => {
   }
 })()
 const viteApiBase = (() => { try { return (import.meta && import.meta.env && import.meta.env.VITE_API_BASE) || null } catch { return null } })()
-export const API_BASE = isViteDev ? '' : (viteApiBase || 'https://api-rs.dexcelerate.com')
+export const API_BASE = isViteDev ? (viteApiBase || 'http://localhost:3001') : (viteApiBase || 'https://api-rs.dexcelerate.com')
 
 // Build URLSearchParams from GetScannerResultParams-like object
 export function buildScannerQuery(params = {}) {
