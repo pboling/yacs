@@ -7,13 +7,11 @@ import { mapScannerResultToToken } from './tdd.runtime.js'
 const isViteDev = (() => {
   try {
     // import.meta is available in ESM; env is injected by Vite in dev
-    // eslint-disable-next-line no-undef
     return Boolean(import.meta && import.meta.env && import.meta.env.DEV)
   } catch (_) {
     return false
   }
 })()
-// eslint-disable-next-line no-undef
 const viteApiBase = (() => { try { return (import.meta && import.meta.env && import.meta.env.VITE_API_BASE) || null } catch { return null } })()
 export const API_BASE = isViteDev ? '' : (viteApiBase || 'https://api-rs.dexcelerate.com')
 

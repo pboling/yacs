@@ -7,18 +7,18 @@ import {
   type ScannerResult,
   chainIdToName,
 } from './test-task-types'
-import { initialState, tokensReducer, actions } from './tokens.reducer.js'
+import { initialState, tokensReducer } from './tokens.reducer.js'
 import { fetchScanner } from './scanner.client.js'
 
 function formatAge(ts: Date) {
   const now = Date.now()
   const diff = Math.max(0, now - ts.getTime())
   const mins = Math.floor(diff / 60000)
-  if (mins < 60) return `${mins}m`
+  if (mins < 60) return String(mins) + 'm'
   const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h`
+  if (hrs < 24) return String(hrs) + 'h'
   const days = Math.floor(hrs / 24)
-  return `${days}d`
+  return String(days) + 'd'
 }
 
 // Minimal row type for table consumption
@@ -38,6 +38,23 @@ interface TokenRow {
 }
 
 type SortKey = 'tokenName' | 'exchange' | 'priceUsd' | 'mcap' | 'volumeUsd' | 'age' | 'tx' | 'liquidity'
+
+// Local state shape matching tokens.reducer.js output
+interface TokensMeta { totalSupply: number; token0Address?: string }
+interface State {
+  byId: Record<string, TokenRow>
+  meta: Record<string, TokensMeta>
+  pages: Partial<Record<number, string[]>>
+  filters: { excludeHoneypots: boolean }
+}
+
+// Local action types matching tokens.reducer.js
+interface ScannerPairsAction { type: 'scanner/pairs'; payload: { page: number; scannerPairs: unknown[] } }
+interface TickAction { type: 'pair/tick'; payload: { pair: { pair: string; token: string; chain: string }; swaps: unknown[] } }
+interface PairStatsAction { type: 'pair/stats'; payload: { data: unknown } }
+interface FiltersAction { type: 'filters/set'; payload: { excludeHoneypots?: boolean } }
+
+type Action = ScannerPairsAction | TickAction | PairStatsAction | FiltersAction
 
 function Table({ title, rows, loading, error, onSort, sortKey, sortDir }: {
   title: string
@@ -59,15 +76,15 @@ function Table({ title, rows, loading, error, onSort, sortKey, sortDir }: {
           <table className="tokens">
             <thead>
               <tr>
-                <th onClick={() => onSort('tokenName')}>Token</th>
-                <th onClick={() => onSort('exchange')}>Exchange</th>
-                <th onClick={() => onSort('priceUsd')}>Price</th>
-                <th onClick={() => onSort('mcap')}>MCap</th>
-                <th onClick={() => onSort('volumeUsd')}>Volume</th>
+                <th onClick={() => { onSort('tokenName') }} aria-sort={sortKey === 'tokenName' ? sortDir : 'none'}>Token</th>
+                <th onClick={() => { onSort('exchange') }} aria-sort={sortKey === 'exchange' ? sortDir : 'none'}>Exchange</th>
+                <th onClick={() => { onSort('priceUsd') }} aria-sort={sortKey === 'priceUsd' ? sortDir : 'none'}>Price</th>
+                <th onClick={() => { onSort('mcap') }} aria-sort={sortKey === 'mcap' ? sortDir : 'none'}>MCap</th>
+                <th onClick={() => { onSort('volumeUsd') }} aria-sort={sortKey === 'volumeUsd' ? sortDir : 'none'}>Volume</th>
                 <th>Chg (5m/1h/6h/24h)</th>
-                <th onClick={() => onSort('age')}>Age</th>
-                <th onClick={() => onSort('tx')}>Buys/Sells</th>
-                <th onClick={() => onSort('liquidity')}>Liquidity</th>
+                <th onClick={() => { onSort('age') }} aria-sort={sortKey === 'age' ? sortDir : 'none'}>Age</th>
+                <th onClick={() => { onSort('tx') }} aria-sort={sortKey === 'tx' ? sortDir : 'none'}>Buys/Sells</th>
+                <th onClick={() => { onSort('liquidity') }} aria-sort={sortKey === 'liquidity' ? sortDir : 'none'}>Liquidity</th>
               </tr>
             </thead>
             <tbody>
@@ -109,11 +126,15 @@ function App() {
   const trendingFilters: GetScannerResultParams = useMemo(() => TRENDING_TOKENS_FILTERS, [])
   const newFilters: GetScannerResultParams = useMemo(() => NEW_TOKENS_FILTERS, [])
 
+  // Typed alias for the JS fetch function to satisfy strict lint rules
+  const fetchScannerTyped = fetchScanner as unknown as (params: unknown) => Promise<{ raw: { page?: number | null; scannerPairs?: unknown[] | null } }>
+
   // minimal local sort state per table
   const [trendSort, setTrendSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'volumeUsd', dir: 'desc' })
   const [newSort, setNewSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'age', dir: 'desc' })
 
-  const [state, dispatch] = useReducer(tokensReducer, initialState)
+  const [state, dispatch] = useReducer<React.Reducer<State, Action>>(tokensReducer as unknown as React.Reducer<State, Action>, initialState as unknown as State)
+  const d: React.Dispatch<Action> = dispatch as unknown as React.Dispatch<Action>
   const [loadingA, setLoadingA] = useState(false)
   const [loadingB, setLoadingB] = useState(false)
   const [errorA, setErrorA] = useState<string | null>(null)
@@ -126,20 +147,21 @@ function App() {
       setLoadingA(true)
       setErrorA(null)
       try {
-        const { raw } = await fetchScanner({ ...trendingFilters, page: 1 })
-        if (!cancelled) dispatch(actions.scannerPairs(raw.page ?? 1, raw.scannerPairs ?? []))
+        const res = await fetchScannerTyped({ ...trendingFilters, page: 1 })
+        const raw = res.raw
+        if (!cancelled) d({ type: 'scanner/pairs', payload: { page: raw.page ?? 1, scannerPairs: raw.scannerPairs ?? [] } })
       } catch (e: unknown) {
-        const msg = e && typeof e === 'object' && 'message' in e ? String((e as any).message) : 'Failed to load trending'
+        const msg = e instanceof Error ? e.message : 'Failed to load trending'
         if (!cancelled) setErrorA(msg)
       } finally {
         if (!cancelled) setLoadingA(false)
       }
     }
-    run()
+    void run()
     return () => {
       cancelled = true
     }
-  }, [trendingFilters, fetchScanner])
+  }, [trendingFilters, d, fetchScannerTyped])
 
   useEffect(() => {
     let cancelled = false
@@ -147,29 +169,35 @@ function App() {
       setLoadingB(true)
       setErrorB(null)
       try {
-        const { raw } = await fetchScanner({ ...newFilters, page: 1 })
-        if (!cancelled) dispatch(actions.scannerPairs((raw.page ?? 1) * 1000, raw.scannerPairs ?? []))
+        const res = await fetchScannerTyped({ ...newFilters, page: 1 })
+        const raw = res.raw
+        if (!cancelled) d({ type: 'scanner/pairs', payload: { page: (raw.page ?? 1) * 1000, scannerPairs: raw.scannerPairs ?? [] } })
       } catch (e: unknown) {
-        const msg = e && typeof e === 'object' && 'message' in e ? String((e as any).message) : 'Failed to load new tokens'
+        const msg = e instanceof Error ? e.message : 'Failed to load new tokens'
         if (!cancelled) setErrorB(msg)
       } finally {
         if (!cancelled) setLoadingB(false)
       }
     }
-    run()
+    void run()
     return () => {
       cancelled = true
     }
-  }, [newFilters, fetchScanner])
+  }, [newFilters, d, fetchScannerTyped])
 
-  // derive rows for each table from pages
-  const trendingIds = state.pages[1] || []
-  const newIds = state.pages[1000] || [] // use a separate page bucket for the second table
-  let trendingRows: TokenRow[] = trendingIds.map((id: string) => state.byId[id]).filter(Boolean)
-  let newRows: TokenRow[] = newIds.map((id: string) => state.byId[id]).filter(Boolean)
+  // derive rows for each table from pages (use a local typed alias to satisfy strict linting)
+  const st = state as unknown as State
+  const trendingIds = st.pages[1] ?? []
+  const newIds = st.pages[1000] ?? [] // use a separate page bucket for the second table
+  let trendingRows: TokenRow[] = trendingIds
+    .map((id: string) => st.byId[id])
+    .filter((t): t is TokenRow => Boolean(t))
+  let newRows: TokenRow[] = newIds
+    .map((id: string) => st.byId[id])
+    .filter((t): t is TokenRow => Boolean(t))
 
   const sorter = (key: SortKey, dir: 'asc' | 'desc') => (a: TokenRow, b: TokenRow) => {
-    const getVal = (t: TokenRow) => {
+    const getVal = (t: TokenRow): number | string => {
       switch (key) {
         case 'age': return t.tokenCreatedTimestamp.getTime()
         case 'tx': return (t.transactions.buys + t.transactions.sells)
@@ -182,19 +210,19 @@ function App() {
         default: return 0
       }
     }
-    const va = getVal(a) as number | string
-    const vb = getVal(b) as number | string
+    const va = getVal(a)
+    const vb = getVal(b)
     let cmp = 0
     if (typeof va === 'string' && typeof vb === 'string') cmp = va.localeCompare(vb)
-    else cmp = va < vb ? -1 : va > vb ? 1 : 0
+    else cmp = (va as number) < (vb as number) ? -1 : (va as number) > (vb as number) ? 1 : 0
     return dir === 'asc' ? cmp : -cmp
   }
 
   trendingRows = [...trendingRows].sort(sorter(trendSort.key, trendSort.dir))
   newRows = [...newRows].sort(sorter(newSort.key, newSort.dir))
 
-  const onTrendSort = (k: SortKey) => setTrendSort((s) => ({ key: k, dir: s.key === k && s.dir === 'desc' ? 'asc' : 'desc' }))
-  const onNewSort = (k: SortKey) => setNewSort((s) => ({ key: k, dir: s.key === k && s.dir === 'desc' ? 'asc' : 'desc' }))
+  const onTrendSort = (k: SortKey) => { setTrendSort((s) => ({ key: k, dir: s.key === k && s.dir === 'desc' ? 'asc' : 'desc' })) }
+  const onNewSort = (k: SortKey) => { setNewSort((s) => ({ key: k, dir: s.key === k && s.dir === 'desc' ? 'asc' : 'desc' })) }
 
   // keep demo type usage to satisfy README guidance
   const demoMap = useMemo(() => {
