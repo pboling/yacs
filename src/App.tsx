@@ -368,15 +368,17 @@ function App() {
         return {chainName}
     }, [])
 
+    const wpegPrices = (state as unknown as { wpegPrices?: Record<string, number> }).wpegPrices
+
     return (
         <div style={{padding: '16px 16px 16px 10px'}}>
             <h1>Dexcelerate Scanner</h1>
             <p className="muted">Demo chainIdToName: {demoMap.chainName}</p>
-            {state && (state as unknown as { wpegPrices?: Record<string, number> }).wpegPrices && Object.keys((state as unknown as { wpegPrices?: Record<string, number> }).wpegPrices!).length > 0 && (
+            {wpegPrices && Object.keys(wpegPrices).length > 0 && (
                 <div style={{ margin: '8px 0', padding: '8px', background: '#0d1117', border: '1px solid #30363d', borderRadius: 6, fontSize: 12 }}>
                     <strong>WPEG reference prices:</strong>{' '}
-                    {Object.entries((state as unknown as { wpegPrices?: Record<string, number> }).wpegPrices!)
-                        .map(([chain, price]) => `${chain}: ${Number(price).toFixed(4)}`)
+                    {Object.entries(wpegPrices)
+                        .map(([chain, price]) => `${chain}: ${price.toFixed(4)}`)
                         .join('  |  ')}
                 </div>
             )}
