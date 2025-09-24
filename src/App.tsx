@@ -64,6 +64,11 @@ interface ScannerPairsAction {
     payload: { page: number; scannerPairs: unknown[] }
 }
 
+interface ScannerAppendAction {
+    type: 'scanner/append';
+    payload: { page: number; scannerPairs: unknown[] }
+}
+
 interface TickAction {
     type: 'pair/tick';
     payload: { pair: { pair: string; token: string; chain: string }; swaps: unknown[] }
@@ -84,7 +89,7 @@ interface FiltersAction {
     payload: { excludeHoneypots?: boolean }
 }
 
-type Action = ScannerPairsAction | TickAction | PairStatsAction | WpegPricesAction | FiltersAction
+type Action = ScannerPairsAction | ScannerAppendAction | TickAction | PairStatsAction | WpegPricesAction | FiltersAction
 
 /**
  * Table component

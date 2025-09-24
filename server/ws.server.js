@@ -105,13 +105,21 @@ export function attachWsServer(server) {
                 n++
                 const price = computePrice(basePrice, pairKey, n)
                 const amt = String(computeAmount(pairKey, n))
+                // Determine a plausible token0 address per chain for buy classification
+                const chainId = Number(item.chainId)
+                const token0Address = (chainId === 56)
+                    ? '0xWBNB'
+                    : (chainId === 900)
+                        ? 'So11111111111111111111111111111111111111112'
+                        : '0xWETH'
+                const isBuyTick = (n % 2) === 1 // odd ticks → buys (token0 in), even ticks → sells (token1 in)
                 const tick = {
                     event: 'tick',
                     data: {
                         pair: { pair: item.pairAddress, token: item.token1Address, chain: String(item.chainId) },
                         swaps: [
-                            { isOutlier: true, priceToken1Usd: String(Math.max(0.000001, basePrice * 0.5)), tokenInAddress: item.token1Address, amountToken1: '1' },
-                            { isOutlier: false, priceToken1Usd: String(price), tokenInAddress: item.token1Address, amountToken1: amt },
+                            { isOutlier: true, priceToken1Usd: String(Math.max(0.000001, basePrice * 0.5)), tokenInAddress: item.token1Address, amountToken1: '1', token0Address },
+                            { isOutlier: false, priceToken1Usd: String(price), tokenInAddress: isBuyTick ? token0Address : item.token1Address, amountToken1: amt, token0Address },
                         ],
                     },
                 }
@@ -184,6 +192,36 @@ export function attachWsServer(server) {
                     subs.pairs.add(pairKey)
                     subs.stats.add(pairKey)
                     startStreamFor(item)
+                }
+
+                // After initial dataset, periodically emit new tokens for this page (scanner-append)
+                // so clients can exercise real-time insertion + sorting behavior.
+                let appendIndex = 0
+                const appendKey = 'append|' + String(page)
+                if (!tickTimers.has(appendKey)) {
+                    const appendIntervalMs = Math.max(100, Math.min(2000, TICK_INTERVAL_MS * 10))
+                    const interval = setInterval(() => {
+                        appendIndex++
+                        // Generate a deterministic different page to get a distinct set of items
+                        const gen = generateScannerResponse({ ...msg.data, page: page + 10_000 + appendIndex })
+                        // Pick the first item that is not already known by pair+token+chain
+                        let newItem = null
+                        for (const cand of gen.scannerPairs) {
+                            const k = cand.pairAddress + '|' + cand.token1Address + '|' + String(cand.chainId)
+                            if (!itemsByKey.has(k)) { newItem = cand; break }
+                        }
+                        if (!newItem) return
+                        const pairKey2 = newItem.pairAddress + '|' + newItem.token1Address + '|' + String(newItem.chainId)
+                        itemsByKey.set(pairKey2, newItem)
+                        // Emit append event
+                        safeSend(ws, { event: 'scanner-append', data: { page, scannerPairs: [newItem] } })
+                        // Auto-subscribe streams for the new item so it starts updating in UI
+                        subs.pairs.add(pairKey2)
+                        subs.stats.add(pairKey2)
+                        startStreamFor(newItem)
+                    }, appendIntervalMs)
+                    try { (interval).unref && (interval).unref() } catch { /* no-op */ }
+                    tickTimers.set(appendKey, interval)
                 }
             } else if (ev === 'subscribe-pair') {
                 const p = msg.data

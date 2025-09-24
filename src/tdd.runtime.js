@@ -86,13 +86,23 @@ export function applyTickToToken(token, swaps, ctx) {
   for (const s of swaps) {
     if (s.isOutlier) continue
     const amt1 = parseNum(s.amountToken1, 0)
-    const px = Number.isFinite(parseNum(s.priceToken1Usd, NaN)) ? parseNum(s.priceToken1Usd, 0) : (Number.isFinite(newPrice) && newPrice > 0 ? newPrice : oldPrice)
+    const pxParsed = parseNum(s.priceToken1Usd, NaN)
+    const px = Number.isFinite(pxParsed) ? pxParsed : (Number.isFinite(newPrice) && newPrice > 0 ? newPrice : oldPrice)
     volumeDelta += px * Math.abs(amt1)
     const tin = (s.tokenInAddress || '').toLowerCase()
     const t0 = (ctx.token0Address || '').toLowerCase()
     const t1 = (ctx.token1Address || '').toLowerCase()
-    if (t0 && tin === t0) buys++
-    else if (t1 && tin === t1) sells++
+    if (t0 && tin === t0) {
+      // Known base token0 coming in => buying token1
+      buys++
+    } else if (t1 && tin === t1) {
+      // Token1 coming in => selling token1
+      sells++
+    } else if (!t0 && t1) {
+      // Fallback inference when token0 unknown: if tokenIn is not token1, treat as a buy
+      // This ensures buys counter updates even before token0Address is learned from WS stream
+      buys++
+    }
   }
 
   // Deterministic liquidity evolution driven by price percent change per tick.

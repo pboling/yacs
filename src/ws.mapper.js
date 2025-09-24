@@ -47,6 +47,9 @@ export function mapIncomingMessageToAction(msg) {
     case 'scanner-pairs':
       // full dataset replacement for a page
       return { type: 'scanner/pairs', payload: { page: msg.data.page ?? 1, scannerPairs: msg.data.scannerPairs ?? [] } }
+    case 'scanner-append':
+      // incremental append of new items for a page
+      return { type: 'scanner/append', payload: { page: msg.data.page ?? 1, scannerPairs: msg.data.scannerPairs ?? [] } }
     case 'tick': {
       // Canonical shape only: { data: { pair: { pair, token, chain }, swaps: [...] } }
       const d = msg.data || {}

@@ -59,6 +59,28 @@ export function tokensReducer(state = initialState, action) {
       // The cleanup strategy can be implemented later if needed.
       return { ...next, version: (state.version || 0) + 1 }
     }
+    case 'scanner/append': {
+      const { page, scannerPairs } = action.payload
+      const next = { ...state, byId: { ...state.byId }, meta: { ...state.meta }, pages: { ...state.pages } }
+      const ids = Array.isArray(next.pages[page]) ? [...next.pages[page]] : []
+      for (const s of scannerPairs) {
+        const tNew = mapScannerResultToToken(s)
+        const id = tNew.id
+        const idLower = String(id || '').toLowerCase()
+        // merge into byId preserving any live-updated fields if present
+        const existing = next.byId[id] || next.byId[idLower]
+        const merged = existing ? { ...tNew, priceUsd: existing.priceUsd, mcap: existing.mcap, volumeUsd: existing.volumeUsd, transactions: existing.transactions } : tNew
+        next.byId[id] = merged
+        next.byId[idLower] = merged
+        const totalSupply = parseFloat(s.token1TotalSupplyFormatted || '0') || 0
+        const newMeta = { ...(next.meta[id] || next.meta[idLower] || {}), totalSupply }
+        next.meta[id] = newMeta
+        next.meta[idLower] = newMeta
+        if (!ids.includes(id)) ids.push(id)
+      }
+      next.pages[page] = ids
+      return { ...next, version: (state.version || 0) + 1 }
+    }
     case 'pair/tick': {
       const { pair, swaps } = action.payload
       // pair = { pair, token, chain }
@@ -70,7 +92,9 @@ export function tokensReducer(state = initialState, action) {
         return state
       }
       const meta = state.meta[id] || state.meta[idOrig] || {}
-      const token0Address = swaps?.[0]?.token0Address || meta.token0Address || ''
+      // Persist token0Address if present on any swap; this enables correct buy/sell classification
+      const token0FromSwaps = Array.isArray(swaps) ? (swaps.find((s) => s && s.token0Address)?.token0Address || '') : ''
+      const token0Address = token0FromSwaps || meta.token0Address || ''
       const ctx = { totalSupply: meta.totalSupply || 0, token0Address, token1Address: token.tokenAddress }
       const updated = applyTickToToken(token, Array.isArray(swaps) ? swaps : [], ctx)
       try {
