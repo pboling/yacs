@@ -376,10 +376,6 @@ function App() {
               try { if (wsToClose.readyState === WebSocket.OPEN) wsToClose.close() } catch { void 0 }
             }
             wsToClose.addEventListener('open', closeIfOpen, { once: true })
-            // Also set a short timeout to avoid lingering sockets
-            setTimeout(() => {
-              try { if (wsToClose.readyState === WebSocket.CONNECTING) wsToClose.close() } catch { void 0 }
-            }, 1000)
           } else {
             currentWs.close()
           }
