@@ -2,41 +2,18 @@
   max-width: 1280px;
   margin: 0 auto;
   padding: 2rem;
-  text-align: center;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
-}
+.muted { color: #666; font-size: 12px; }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
+.table-wrap { overflow: auto; max-height: 70vh; border: 1px solid #e2e2e2; border-radius: 8px; }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
-}
+table.tokens { width: 100%; border-collapse: collapse; font-size: 14px; text-align: left; }
+.tokens thead th { position: sticky; top: 0; background: #fafafa; cursor: pointer; padding: 8px; border-bottom: 1px solid #ddd; }
+.tokens tbody td { padding: 8px; border-bottom: 1px solid #f0f0f0; }
 
-.card {
-  padding: 2em;
-}
+.status { padding: 8px; color: #333; }
+.status.error { color: #b00020; }
 
-.read-the-docs {
-  color: #888;
-}
+.up { color: #1a7f37; }
+.down { color: #b00020; }
