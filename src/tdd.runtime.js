@@ -65,6 +65,7 @@ export function applyTickToToken(token, swaps, ctx) {
   const latest = swaps.filter((s) => !s.isOutlier).pop()
   if (!latest) return token
   const newPrice = parseFloat(latest.priceToken1Usd)
+  const oldPrice = token.priceUsd || 0
   const newMcap = ctx.totalSupply * newPrice
   let buys = 0
   let sells = 0
@@ -76,6 +77,16 @@ export function applyTickToToken(token, swaps, ctx) {
     if (s.tokenInAddress.toLowerCase() === ctx.token0Address.toLowerCase()) buys++
     else if (s.tokenInAddress.toLowerCase() === ctx.token1Address.toLowerCase()) sells++
   }
+
+  // Deterministic liquidity evolution driven by price percent change per tick.
+  // We let liquidity drift by a fraction (10%) of the price percentage change.
+  const prevLiq = token.liquidity?.current ?? 0
+  const pricePct = oldPrice > 0 ? (newPrice - oldPrice) / oldPrice : 0
+  const driftFactor = 0.10 // 10% of price pct change affects liquidity
+  const liqDelta = prevLiq * pricePct * driftFactor
+  const nextLiq = Math.max(0, prevLiq + liqDelta)
+  const liqChangePc = prevLiq > 0 ? ((nextLiq - prevLiq) / prevLiq) * 100 : 0
+
   return {
     ...token,
     priceUsd: newPrice,
@@ -84,6 +95,10 @@ export function applyTickToToken(token, swaps, ctx) {
     transactions: {
       buys: token.transactions.buys + buys,
       sells: token.transactions.sells + sells,
+    },
+    liquidity: {
+      current: nextLiq,
+      changePc: liqChangePc,
     },
   }
 }
