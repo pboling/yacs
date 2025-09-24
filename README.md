@@ -1,15 +1,52 @@
 # React + TypeScript + Vite
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This React app is built with Vite. It provides HMR and some ESLint rules.
 
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+This repository uses [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) (uses [Babel](https://babeljs.io/)) for React Fast Refresh during development.
+See vite.config.ts where the plugin is configured.
 
 ## React Compiler
 
 The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+
+## Usage
+
+This repo is a React 19 + TypeScript 5 + Vite 7 (Rolldown) app. Below are the essential commands to develop, build, lint, and test it locally.
+
+- Prerequisites
+  - Node.js >= 20 (validated with Node 23). ESM only (package.json has "type": "module").
+  - Any package manager works (npm/pnpm/yarn). Examples here use npm.
+
+- Install
+  - npm ci (preferred for reproducible installs) or npm install
+
+- Dev server
+  - npm run dev → starts Vite dev server with React Fast Refresh (via @vitejs/plugin-react) on http://localhost:5173
+  - API proxy is configured for development (see vite.config.ts):
+    - REST: fetch('/scanner?...') → proxies to https://api-rs.dexcelerate.com/scanner
+    - WS: new WebSocket('ws://localhost:5173/ws') → proxies to wss://api-rs.dexcelerate.com/ws
+  - You can override the base via VITE_API_BASE if needed (e.g., echo "VITE_API_BASE=/" > .env.local). By default, dev prefers a relative base which works with the proxy.
+
+- Production build
+  - npm run build → runs TypeScript project build (tsc -b) for type-checking only (noEmit), then Vite build.
+  - TypeScript uses project references via tsconfig.json (tsconfig.app.json for src, tsconfig.node.json for config files).
+
+- Preview production build
+  - npm run preview → serves the built dist/ folder.
+
+- Linting
+  - npm run lint → ESLint (flat config) with type-aware rules and React rules. Targets **/*.ts, **/*.tsx; ignores dist/.
+
+- Testing (dependency-free)
+  - Uses Node’s built-in test runner (node:test). Tests live under tests/ and some src/*.test.js.
+  - Run all discovered tests: node --test
+  - Run a specific folder/file: node --test tests or node --test tests/scanner.client.test.js
+  - Inline demo: node --input-type=module --eval "import test from 'node:test'; import assert from 'node:assert/strict'; await test('ok', () => assert.ok(true));"
+
+- WebSocket usage during dev
+  - For real data, connect to ws://localhost:5173/ws (dev proxy). Send subscribe messages per README sections below.
+
+Note on CORS: The dev proxy avoids the need for a CORS extension during development when you use relative URLs as shown above. If you bypass the proxy and hit the public API directly from the browser, a CORS extension may be required.
 
 ## Requirements
 

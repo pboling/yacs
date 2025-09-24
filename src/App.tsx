@@ -21,13 +21,31 @@ function formatAge(ts: Date) {
   return `${days}d`
 }
 
+// Minimal row type for table consumption
+interface TokenRow {
+  id: string
+  tokenName: string
+  tokenSymbol: string
+  chain: string
+  exchange: string
+  priceUsd: number
+  mcap: number
+  volumeUsd: number
+  priceChangePcs: { '5m': number; '1h': number; '6h': number; '24h': number }
+  tokenCreatedTimestamp: Date
+  transactions: { buys: number; sells: number }
+  liquidity: { current: number; changePc: number }
+}
+
+type SortKey = 'tokenName' | 'exchange' | 'priceUsd' | 'mcap' | 'volumeUsd' | 'age' | 'tx' | 'liquidity'
+
 function Table({ title, rows, loading, error, onSort, sortKey, sortDir }: {
   title: string
-  rows: any[]
+  rows: TokenRow[]
   loading: boolean
   error: string | null
-  onSort: (k: string) => void
-  sortKey: string
+  onSort: (k: SortKey) => void
+  sortKey: SortKey
   sortDir: 'asc' | 'desc'
 }) {
   return (
@@ -41,7 +59,7 @@ function Table({ title, rows, loading, error, onSort, sortKey, sortDir }: {
           <table className="tokens">
             <thead>
               <tr>
-                <th onClick={() => onSort('token')}>Token</th>
+                <th onClick={() => onSort('tokenName')}>Token</th>
                 <th onClick={() => onSort('exchange')}>Exchange</th>
                 <th onClick={() => onSort('priceUsd')}>Price</th>
                 <th onClick={() => onSort('mcap')}>MCap</th>
@@ -87,12 +105,13 @@ function Table({ title, rows, loading, error, onSort, sortKey, sortDir }: {
 }
 
 function App() {
-  const trendingFilters: GetScannerResultParams = TRENDING_TOKENS_FILTERS
-  const newFilters: GetScannerResultParams = NEW_TOKENS_FILTERS
+  // Memoize filters to satisfy exhaustive-deps
+  const trendingFilters: GetScannerResultParams = useMemo(() => TRENDING_TOKENS_FILTERS, [])
+  const newFilters: GetScannerResultParams = useMemo(() => NEW_TOKENS_FILTERS, [])
 
   // minimal local sort state per table
-  const [trendSort, setTrendSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: 'volumeUsd', dir: 'desc' })
-  const [newSort, setNewSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: 'age', dir: 'desc' })
+  const [trendSort, setTrendSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'volumeUsd', dir: 'desc' })
+  const [newSort, setNewSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'age', dir: 'desc' })
 
   const [state, dispatch] = useReducer(tokensReducer, initialState)
   const [loadingA, setLoadingA] = useState(false)
@@ -109,8 +128,9 @@ function App() {
       try {
         const { raw } = await fetchScanner({ ...trendingFilters, page: 1 })
         if (!cancelled) dispatch(actions.scannerPairs(raw.page ?? 1, raw.scannerPairs ?? []))
-      } catch (e: any) {
-        if (!cancelled) setErrorA(e?.message || 'Failed to load trending')
+      } catch (e: unknown) {
+        const msg = e && typeof e === 'object' && 'message' in e ? String((e as any).message) : 'Failed to load trending'
+        if (!cancelled) setErrorA(msg)
       } finally {
         if (!cancelled) setLoadingA(false)
       }
@@ -119,7 +139,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [trendingFilters, fetchScanner])
 
   useEffect(() => {
     let cancelled = false
@@ -129,8 +149,9 @@ function App() {
       try {
         const { raw } = await fetchScanner({ ...newFilters, page: 1 })
         if (!cancelled) dispatch(actions.scannerPairs((raw.page ?? 1) * 1000, raw.scannerPairs ?? []))
-      } catch (e: any) {
-        if (!cancelled) setErrorB(e?.message || 'Failed to load new tokens')
+      } catch (e: unknown) {
+        const msg = e && typeof e === 'object' && 'message' in e ? String((e as any).message) : 'Failed to load new tokens'
+        if (!cancelled) setErrorB(msg)
       } finally {
         if (!cancelled) setLoadingB(false)
       }
@@ -139,26 +160,41 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [newFilters, fetchScanner])
 
   // derive rows for each table from pages
   const trendingIds = state.pages[1] || []
   const newIds = state.pages[1000] || [] // use a separate page bucket for the second table
-  let trendingRows = trendingIds.map((id: string) => state.byId[id]).filter(Boolean)
-  let newRows = newIds.map((id: string) => state.byId[id]).filter(Boolean)
+  let trendingRows: TokenRow[] = trendingIds.map((id: string) => state.byId[id]).filter(Boolean)
+  let newRows: TokenRow[] = newIds.map((id: string) => state.byId[id]).filter(Boolean)
 
-  const sorter = (key: string, dir: 'asc' | 'desc') => (a: any, b: any) => {
-    const va = key === 'age' ? a.tokenCreatedTimestamp.getTime() : a[key]
-    const vb = key === 'age' ? b.tokenCreatedTimestamp.getTime() : b[key]
-    const cmp = va < vb ? -1 : va > vb ? 1 : 0
+  const sorter = (key: SortKey, dir: 'asc' | 'desc') => (a: TokenRow, b: TokenRow) => {
+    const getVal = (t: TokenRow) => {
+      switch (key) {
+        case 'age': return t.tokenCreatedTimestamp.getTime()
+        case 'tx': return (t.transactions.buys + t.transactions.sells)
+        case 'liquidity': return t.liquidity.current
+        case 'tokenName': return t.tokenName.toLowerCase()
+        case 'exchange': return t.exchange.toLowerCase()
+        case 'priceUsd': return t.priceUsd
+        case 'mcap': return t.mcap
+        case 'volumeUsd': return t.volumeUsd
+        default: return 0
+      }
+    }
+    const va = getVal(a) as number | string
+    const vb = getVal(b) as number | string
+    let cmp = 0
+    if (typeof va === 'string' && typeof vb === 'string') cmp = va.localeCompare(vb)
+    else cmp = va < vb ? -1 : va > vb ? 1 : 0
     return dir === 'asc' ? cmp : -cmp
   }
 
   trendingRows = [...trendingRows].sort(sorter(trendSort.key, trendSort.dir))
   newRows = [...newRows].sort(sorter(newSort.key, newSort.dir))
 
-  const onTrendSort = (k: string) => setTrendSort((s) => ({ key: k, dir: s.key === k && s.dir === 'desc' ? 'asc' : 'desc' }))
-  const onNewSort = (k: string) => setNewSort((s) => ({ key: k, dir: s.key === k && s.dir === 'desc' ? 'asc' : 'desc' }))
+  const onTrendSort = (k: SortKey) => setTrendSort((s) => ({ key: k, dir: s.key === k && s.dir === 'desc' ? 'asc' : 'desc' }))
+  const onNewSort = (k: SortKey) => setNewSort((s) => ({ key: k, dir: s.key === k && s.dir === 'desc' ? 'asc' : 'desc' }))
 
   // keep demo type usage to satisfy README guidance
   const demoMap = useMemo(() => {
