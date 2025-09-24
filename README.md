@@ -219,6 +219,31 @@ const totalSupply = parseFloat(token1TotalSupplyFormatted);
 const marketCap = totalSupply * parseFloat(price);
 ```
 
+### Lexicon
+
+- Swap: A single trade on a pair. Provided in tick events as elements of data.swaps. Relevant fields:
+  - priceToken1Usd: USD price implied for token1 in this swap. Used to update priceUsd.
+  - amountToken1: Absolute token1 amount traded in this swap. Used to accumulate volumeUsd as price × |amountToken1|.
+  - tokenInAddress: Address of the token sent into the pool for this swap. Used to classify buys (token0 in) vs sells (token1 in).
+  - token0Address: Base token of the pair (e.g., WETH/WSOL/WBNB). When known, it makes buy/sell classification exact.
+  - isOutlier: True when the swap should be ignored for price/volume/tx counts. The app filters these out.
+- Tick: A WebSocket event carrying recent swaps for a pair. Shape: { event: 'tick', data: { pair, swaps } }. The reducer picks the latest non-outlier swap to set price, then recalculates mcap and updates volume and transactions.
+- Pair: The liquidity pool (pairAddress) that trades between token0 (base/wrapped coin) and token1 (the tracked token).
+- token1: The tracked token for the table row. token1Address identifies it. Its priceUsd is derived from swaps.priceToken1Usd.
+- token0: The base/quote token in the pool (e.g., WETH, WSOL). token0Address may arrive via swaps; until known, buy/sell inference falls back to heuristics.
+- Market Cap (mcap): Market capitalization of token1. Initially taken from scanner fields; after ticks, recalculated as totalSupply × priceUsd.
+- totalSupply: token1TotalSupplyFormatted from scanner. Used with new price to compute mcap.
+- Volume (volumeUsd): Cumulative USD volume computed from non-outlier swaps: sum(price × |amountToken1|).
+- Transactions: Count of buys and sells derived from non-outlier swaps using tokenInAddress vs token0Address/token1Address.
+- Liquidity: Displayed as liquidity.current and liquidity.changePc. current drifts deterministically based on price percent changes in the reducer to provide a stable demo.
+- Scanner: Initial dataset source. REST GET /scanner and WS event scanner-pairs/scanner-append provide TokenData rows for pages (Trending/New) and parameters for subsequent per-pair subscriptions.
+- Pair Stats: WebSocket event pair-stats that updates audit flags (mintable, freezable, honeypot, contractVerified), social links, and migrationPc.
+- WPEG Prices: WebSocket event wpeg-prices delivering a map of wrapped native token prices by chain (used for potential conversions).
+- Exchange (router): The DEX router or virtual router identifier shown in the Exchange column.
+- Chain: One of ETH, SOL, BASE, BSC. Chain IDs map to names in code: 1→ETH, 56→BSC, 8453→BASE, 900→SOL, 11155111→ETH (sepolia treated as ETH).
+- Age: tokenCreatedTimestamp from scanner, displayed as how long the token has existed.
+- Honeypot: Audit flag indicating whether a token is likely unsafe to sell. In this app, honeypot is derived as !pair.token1IsHoneypot from pair-stats.
+
 ### 5. Required WebSocket Integration
 
 #### Connection & Subscription
