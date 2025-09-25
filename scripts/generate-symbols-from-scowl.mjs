@@ -18,7 +18,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const projectRoot = path.resolve(__dirname, '..')
-const srcPath = path.join(projectRoot, 'src', 'config', 'en_US-large.txt')
+const srcPath = path.join(projectRoot, 'scripts', 'en_US-large.txt')
 const outPath = path.join(projectRoot, 'src', 'config', 'symbols.yaml')
 
 const raw = fs.readFileSync(srcPath, 'utf-8')
