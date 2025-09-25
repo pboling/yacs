@@ -73,11 +73,19 @@ export default function NumberCell({
         }
     }, [desiredClass, stableMs, noFade])
 
-    const text = Number.isFinite(num)
-        ? formatter
-            ? formatter(num)
-            : String(num)
-        : String(value)
+    // Format number with scientific notation if whole-number part has more than 9 digits
+    let text: string
+    if (Number.isFinite(num)) {
+        const absNum = Math.abs(num)
+        if (absNum >= 1_000_000_000) {
+            // Use scientific notation with 6 significant digits for readability
+            text = num.toExponential(6)
+        } else {
+            text = formatter ? formatter(num) : String(num)
+        }
+    } else {
+        text = String(value)
+    }
 
     return <span className={appliedClassRef.current}>{prefix}{text}{suffix}</span>
 }
