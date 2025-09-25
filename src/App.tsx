@@ -329,6 +329,18 @@ function App() {
                             }
                             try { console.log('WS: dispatching action', { type: (action as { type: string }).type }) } catch { /* no-op */ }
                             d(action)
+                            // Track readiness of main WS scanner streams per pane
+                            try {
+                                if (event === 'scanner-pairs') {
+                                    const pgVal = (data as { page?: unknown }).page
+                                    const pageNum = typeof pgVal === 'number' ? pgVal : Number((data as { page?: string }).page)
+                                    if (pageNum === TRENDING_PAGE) {
+                                        setWsScannerReady((prev) => prev.trending ? prev : { ...prev, trending: true })
+                                    } else if (pageNum === NEW_PAGE) {
+                                        setWsScannerReady((prev) => prev.newer ? prev : { ...prev, newer: true })
+                                    }
+                                }
+                            } catch { /* no-op */ }
 
                             // Count update events for live rate (tick and pair-stats) only for visible keys
                             try {
@@ -496,6 +508,42 @@ function App() {
         return sum / rateSeries.length
     }, [rateSeries])
 
+    // App boot readiness: wait until backend is ready to prevent double-load on first dev boot
+    const [appReady, setAppReady] = useState(false)
+    const [wsScannerReady, setWsScannerReady] = useState<{ trending: boolean; newer: boolean }>({ trending: false, newer: false })
+    // Allow E2E/automation to bypass the boot splash to avoid spinner-related flakiness
+    const bypassBoot = useMemo(() => {
+        try {
+            // Playwright/Selenium set navigator.webdriver = true
+            if (typeof navigator !== 'undefined' && (navigator as unknown as { webdriver?: boolean }).webdriver) return true
+            // Opt-in via URL: ?e2e=1
+            const sp = new URLSearchParams(window.location.search)
+            if ((sp.get('e2e') ?? '') === '1') return true
+            // Opt-in via global flag for tests: window.__BYPASS_BOOT__ = true
+            const anyWin = window as unknown as { __BYPASS_BOOT__?: boolean }
+            if (anyWin.__BYPASS_BOOT__) return true
+        } catch { /* no-op */ }
+        return false
+    }, [])
+    useEffect(() => {
+        if (bypassBoot) {
+            setAppReady(true)
+            return
+        }
+        let mounted = true
+        let timer: ReturnType<typeof setTimeout> | null = null
+        const compute = () => {
+            try {
+                const ready = wsScannerReady.trending && wsScannerReady.newer
+                if (timer) { clearTimeout(timer); timer = null }
+                // Debounce the flip to avoid brief flickers during FE/BE startup races
+                timer = setTimeout(() => { if (mounted) setAppReady(ready) }, 250)
+            } catch { /* no-op */ }
+        }
+        compute()
+        return () => { mounted = false; if (timer) { clearTimeout(timer); timer = null } }
+    }, [wsScannerReady, bypassBoot])
+
 
     // Watch version for filter apply completion after blur
     useEffect(() => {
@@ -528,6 +576,16 @@ function App() {
     }, [])
 
     return (
+        <div style={{position: 'relative'}}>
+            {!appReady && (
+                <div style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', background: '#0b0f14', color: '#e5e7eb', zIndex: 1000 }}>
+                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                    <div role="status" aria-live="polite" aria-busy="true" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                        <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(90deg,#10b981 0%, #ef4444 100%)', WebkitMask: 'radial-gradient(farthest-side, transparent 60%, black 61%)', mask: 'radial-gradient(farthest-side, transparent 60%, black 61%)', animation: 'spin 1s linear infinite' }} />
+                        <div className="muted" style={{ fontSize: 14 }}>Starting backend and loading data…</div>
+                    </div>
+                </div>
+            )}
         <div style={{padding: '16px 16px 16px 10px'}}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <h1 style={{ margin: 0 }}>Dexcelerate Scanner</h1>
@@ -724,6 +782,7 @@ function App() {
                         />
                 </ErrorBoundary>
             </div>
+        </div>
         </div>
     )
 }

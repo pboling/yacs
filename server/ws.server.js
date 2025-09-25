@@ -35,6 +35,21 @@ function getTiming() {
 export function attachWsServer(server) {
     const wss = new WebSocketServer({ server, path: '/ws' })
 
+    // Proactively close WS server when HTTP server.close() is invoked to avoid hanging tests.
+    try {
+        const origClose = server.close.bind(server)
+        server.close = (...args) => {
+            try {
+                for (const client of wss.clients) {
+                    try { client.terminate() } catch { /* ignore */ }
+                }
+                try { wss.close() } catch { /* ignore */ }
+            } catch { /* ignore */ }
+            // @ts-ignore - preserve callback signature
+            return origClose(...args)
+        }
+    } catch { /* no-op */ }
+
     // Ensure the WS server is closed when the underlying HTTP server closes,
     // so Node's test runner can exit cleanly without lingering handles.
     try {
@@ -131,13 +146,18 @@ export function attachWsServer(server) {
                     const slowFactor = slowFactorByKey.get(key) ?? DEFAULT_SLOW_FACTOR
                     const shouldSendTick = isFast || (isSlow && (n % slowFactor === 0))
                     if (shouldSendTick) {
+                        // Emit both a buy and a sell (non-outlier) each tick so Buys and Sells counters progress deterministically
                         const tick = {
                             event: 'tick',
                             data: {
                                 pair: { pair: item.pairAddress, token: item.token1Address, chain: String(item.chainId) },
                                 swaps: [
+                                    // Outlier used as a guard/sample; ignored by UI logic
                                     { isOutlier: true, priceToken1Usd: String(Math.max(0.000001, basePrice * 0.5)), tokenInAddress: item.token1Address, amountToken1: '1', token0Address },
+                                    // Directional swap based on tick parity
                                     { isOutlier: false, priceToken1Usd: String(price), tokenInAddress: isBuyTick ? token0Address : item.token1Address, amountToken1: amt, token0Address },
+                                    // Companion opposite-direction swap to ensure both buys and sells increment each tick
+                                    { isOutlier: false, priceToken1Usd: String(price), tokenInAddress: isBuyTick ? item.token1Address : token0Address, amountToken1: String(Math.max(0.001, Number(amt) * 0.7)), token0Address },
                                 ],
                             },
                         }
@@ -209,7 +229,7 @@ export function attachWsServer(server) {
                 }
 
                 // Begin deterministic streams for the first few items to ensure visible rows update quickly
-                const bootstrapCount = 6
+                const bootstrapCount = 24
                 for (let i = 0; i < Math.min(bootstrapCount, res.scannerPairs.length); i++) {
                     const item = res.scannerPairs[i]
                     if (!item) continue

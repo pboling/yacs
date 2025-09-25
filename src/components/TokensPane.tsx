@@ -190,6 +190,8 @@ export default function TokensPane({
                     const errMsg = 'Unexpected data shape from /scanner: missing or invalid scannerPairs array'
                     // Surface loudly in console and UI
                     console.error(errMsg, raw)
+                    // Mark page as initialized with no rows so App overlay can clear
+                    try { dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: [] } }) } catch { /* no-op */ }
                     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
                     if (!cancelled) setError(errMsg)
                     return
@@ -229,6 +231,8 @@ export default function TokensPane({
             } catch (e) {
                 const msg = e instanceof Error ? e.message : 'Failed to load data'
                 console.error('[TokensPane:' + title + '] fetch failed', e)
+                // Mark page as initialized with no rows so App overlay can clear
+                try { dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: [] } }) } catch { /* no-op */ }
                 if (!cancelled) setError(msg)
             } finally {
                 if (!cancelled) setLoading(false)

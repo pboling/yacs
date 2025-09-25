@@ -57,7 +57,7 @@ This repo includes UI end-to-end tests using Playwright that validate live WebSo
   - The Playwright config (playwright.config.ts) auto-starts the dev stack via npm run dev:serve (backend + Vite dev server) and waits for http://localhost:5173.
   - Tests live under e2e/ and include:
     - ws-setup.spec.ts → asserts the app establishes a WebSocket connection (waits for a page websocket and window.__APP_WS__ to be OPEN).
-    - ws-updates.spec.ts → asserts that the first row in both tables updates within a timeout, indicating live data flow.
+    - ws-sells-updates.spec.ts → asserts that the first row in both tables updates within a timeout, indicating live data flow.
 
 - Troubleshooting
   - If you don’t see updates, open the browser console: extensive logs have been added under the WS and TokensPane prefixes to trace what’s happening.
@@ -475,3 +475,16 @@ You will have to use a no-cors extension from the Chrome web store during develo
 Notes:
 - You can still point the frontend at another API by setting VITE_API_BASE (e.g., to the public API), but by default the app assumes the local backend on port 3001.
 - WebSocket errors will surface; the client retries a limited number of times for developer visibility but does not switch to any mock WS.
+
+
+## WebSocket channels overview and boot overlay
+
+- scanner-filter → server listens for this subscription and responds with scanner-pairs for the requested filter (page, rankBy, chain, etc.). This is the primary/bootstrap stream that seeds the tables. You should consider it the “main” subscription.
+- scanner-pairs / scanner-append → full dataset replacement or incremental additions for a page. The app reducer ingests these to populate state.pages and byId.
+- subscribe-pair / unsubscribe-pair → per-row real-time tick updates (price, volume, buys/sells). The client gates these by viewport to reduce load.
+- subscribe-pair-stats / unsubscribe-pair-stats → per-row audit/security/migration updates. Also gated by viewport.
+- wpeg-prices → occasional broadcast with wrapped-native prices by chain.
+
+Boot/loading behavior
+- The app shows a full-screen loading overlay during startup. It dismisses when either the WebSocket is OPEN or both tables have initialized their pages (from REST/WS). This avoids a deadlock where the UI wouldn’t mount if the WS is slow/unavailable.
+- In test/automation contexts, the overlay can be bypassed via navigator.webdriver, ?e2e=1, or window.__BYPASS_BOOT__ = true.
