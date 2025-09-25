@@ -462,3 +462,16 @@ You will have to use a no-cors extension from the Chrome web store during develo
 - WS: new WebSocket('ws://localhost:5173/ws') → proxies to wss://api-rs.dexcelerate.com/ws
 - The client prefers a relative base in dev; you can override with VITE_API_BASE.
   - Example: echo "VITE_API_BASE=/" > .env.local to force relative base; default behavior already uses relative base in dev.
+
+## Development server expectations (no fallbacks)
+
+- The Vite dev server always proxies REST and WS to a local backend at http://localhost:3001.
+  - REST: fetch('/scanner?...') → proxies to http://localhost:3001/scanner
+  - WS: new WebSocket('ws://localhost:5173/ws') → proxies to ws://localhost:3001/ws
+- There are no automatic REST fallbacks in development. If the backend is not running, requests will fail and errors will surface in the console/logs. This is intentional to validate primary functionality.
+- Start both servers together during development/testing with:
+  - npm run dev:serve (starts the Express backend and the Vite dev server)
+
+Notes:
+- You can still point the frontend at another API by setting VITE_API_BASE (e.g., to the public API), but by default the app assumes the local backend on port 3001.
+- WebSocket errors will surface; the client retries a limited number of times for developer visibility but does not switch to any mock WS.

@@ -1,7 +1,7 @@
 import NumberCell from './NumberCell'
 import AuditIcons from './AuditIcons'
-import { useEffect, useMemo, useState } from 'react'
-import { Twitter, Globe, MessageCircle, Send } from 'lucide-react'
+import { useEffect, useMemo, useState, useRef } from 'react'
+import { Globe, MessageCircle, Send, ExternalLink } from 'lucide-react'
 
 // Local minimal types to avoid circular deps with App
 interface TokenRow {
@@ -46,6 +46,7 @@ export default function Table({
                                    onSort,
                                    sortKey,
                                    sortDir,
+                                   onRowVisibilityChange,
                                }: {
     title: string
     rows: TokenRow[]
@@ -54,6 +55,7 @@ export default function Table({
     onSort: (k: SortKey) => void
     sortKey: SortKey
     sortDir: 'asc' | 'desc'
+    onRowVisibilityChange?: (row: TokenRow, visible: boolean) => void
 }) {
     // Dev-only: log a compact snapshot of the first row whenever rows change
     useEffect(() => {
@@ -189,6 +191,46 @@ export default function Table({
         }
     }
 
+    // IntersectionObserver for row visibility
+    const observerRef = useRef<IntersectionObserver | null>(null)
+    const rowMapRef = useRef<Map<Element, TokenRow>>(new Map())
+
+    useEffect(() => {
+        if (!onRowVisibilityChange) return
+        const cb: IntersectionObserverCallback = (entries) => {
+            for (const e of entries) {
+                const row = rowMapRef.current.get(e.target)
+                if (!row) continue
+                const visible = e.isIntersecting || e.intersectionRatio > 0
+                onRowVisibilityChange(row, visible)
+            }
+        }
+        const obs = new IntersectionObserver(cb, { root: null, rootMargin: '0px', threshold: 0 })
+        observerRef.current = obs
+        // Observe any rows already registered
+        for (const el of rowMapRef.current.keys()) {
+            try { obs.observe(el) } catch { /* ignore observe errors */ }
+        }
+        return () => { try { obs.disconnect() } catch { /* ignore disconnect errors */ } }
+    }, [onRowVisibilityChange])
+
+    function registerRow(el: HTMLTableRowElement | null, row: TokenRow) {
+        const obs = observerRef.current
+        const map = rowMapRef.current
+        if (!el) {
+            // unobserve
+            for (const [k, v] of map.entries()) {
+                if (v === row) {
+                    try { obs?.unobserve(k) } catch { /* ignore unobserve errors */ }
+                    map.delete(k)
+                }
+            }
+            return
+        }
+        map.set(el, row)
+        try { obs?.observe(el) } catch { /* ignore observe errors */ }
+    }
+
     return (
         <section>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
@@ -250,37 +292,42 @@ export default function Table({
                             const suffix = title === 'Trending Tokens' ? 'TREND' : title === 'New Tokens' ? 'NEW' : title.replace(/\s+/g, '-').toUpperCase()
                             const composedId = `${t.id}::${suffix}`
                             return (
-                                <tr key={composedId}>
+                                <tr key={composedId} ref={(el) => { registerRow(el, t) }}>
                                     <td>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                                             <div>
                                                 <strong>{t.tokenName}</strong> <span>({t.tokenSymbol})</span>
                                             </div>
                                             <div className="muted" style={{ fontSize: 12 }}>{t.chain}</div>
-                                            {(t.audit?.linkDiscord || t.audit?.linkTelegram || t.audit?.linkTwitter || t.audit?.linkWebsite) && (
-                                                <div className="muted" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
-                                                    {t.audit?.linkWebsite && (
-                                                        <a href={t.audit.linkWebsite} target="_blank" rel="noopener noreferrer" title="Website" aria-label="Website" style={{ color: 'inherit' }}>
-                                                            <Globe size={14} />
-                                                        </a>
-                                                    )}
-                                                    {t.audit?.linkTwitter && (
-                                                        <a href={t.audit.linkTwitter} target="_blank" rel="noopener noreferrer" title="Twitter" aria-label="Twitter" style={{ color: 'inherit' }}>
-                                                            <Twitter size={14} />
-                                                        </a>
-                                                    )}
-                                                    {t.audit?.linkTelegram && (
-                                                        <a href={t.audit.linkTelegram} target="_blank" rel="noopener noreferrer" title="Telegram" aria-label="Telegram" style={{ color: 'inherit' }}>
-                                                            <Send size={14} />
-                                                        </a>
-                                                    )}
-                                                    {t.audit?.linkDiscord && (
-                                                        <a href={t.audit.linkDiscord} target="_blank" rel="noopener noreferrer" title="Discord" aria-label="Discord" style={{ color: 'inherit' }}>
-                                                            <MessageCircle size={14} />
-                                                        </a>
-                                                    )}
-                                                </div>
-                                            )}
+                                            {(() => {
+                                                const { linkWebsite, linkTwitter, linkTelegram, linkDiscord } = t.audit ?? {}
+                                                const hasAnyLink = [linkWebsite, linkTwitter, linkTelegram, linkDiscord].some(Boolean)
+                                                if (!hasAnyLink) return null
+                                                return (
+                                                    <div className="muted" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                                                        {linkWebsite && (
+                                                            <a href={linkWebsite} target="_blank" rel="noopener noreferrer" title="Website" aria-label="Website" style={{ color: 'inherit' }}>
+                                                                <Globe size={14} />
+                                                            </a>
+                                                        )}
+                                                        {linkTwitter && (
+                                                            <a href={linkTwitter} target="_blank" rel="noopener noreferrer" title="Twitter" aria-label="Twitter" style={{ color: 'inherit' }}>
+                                                                <ExternalLink size={14} />
+                                                            </a>
+                                                        )}
+                                                        {linkTelegram && (
+                                                            <a href={linkTelegram} target="_blank" rel="noopener noreferrer" title="Telegram" aria-label="Telegram" style={{ color: 'inherit' }}>
+                                                                <Send size={14} />
+                                                            </a>
+                                                        )}
+                                                        {linkDiscord && (
+                                                            <a href={linkDiscord} target="_blank" rel="noopener noreferrer" title="Discord" aria-label="Discord" style={{ color: 'inherit' }}>
+                                                                <MessageCircle size={14} />
+                                                            </a>
+                                                        )}
+                                                    </div>
+                                                )
+                                            })()}
                                         </div>
                                     </td>
                                     <td>{t.exchange}</td>

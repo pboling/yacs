@@ -61,41 +61,15 @@ export async function fetchScanner(params, opts = {}) {
   const fetchImpl = opts.fetchImpl ?? fetch
   const qp = buildScannerQuery(params)
 
-  // Helper to try a URL and parse JSON if ok
-  const tryFetch = async (fullUrl) => {
-    const res = await fetchImpl(fullUrl, { headers: { 'accept': 'application/json' } })
-    if (!res.ok) {
-      const text = await res.text().catch(() => '')
-      const err = new Error(`Scanner request failed ${res.status}: ${text}`)
-      err.status = res.status
-      throw err
-    }
-    return res.json()
+  const url = `${baseUrl}/scanner?${qp.toString()}`
+  const res = await fetchImpl(url, { headers: { 'accept': 'application/json' } })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    const err = new Error(`Scanner request failed ${res.status}: ${text}`)
+    // @ts-expect-error augment for callers in JS
+    err.status = res.status
+    throw err
   }
-
-  // Attempt 1: configured base ('' in dev → relative '/scanner')
-  const url1 = `${baseUrl}/scanner?${qp.toString()}`
-  try {
-    const json = await tryFetch(url1)
-    return { raw: json, tokens: mapScannerPage(json) }
-  } catch (e) {
-    // If network error or connection refused in dev, fall back to generating locally
-    const isNetworkErr = (e && (e.name === 'TypeError' || e.code === 'ECONNREFUSED' || e.message?.includes('Failed to fetch')))
-    if (isNetworkErr) {
-      try {
-        const { generateScannerResponse } = await import('./scanner.endpoint.js')
-        const raw = generateScannerResponse(Object.fromEntries(qp.entries()))
-        return { raw, tokens: mapScannerPage(raw) }
-      } catch (_) {
-        // As a secondary attempt, if dev explicitly pointed to localhost and failed, try relative path
-        try {
-          const json = await tryFetch(`/scanner?${qp.toString()}`)
-          return { raw: json, tokens: mapScannerPage(json) }
-        } catch {
-          throw e
-        }
-      }
-    }
-    throw e
-  }
+  const json = await res.json()
+  return { raw: json, tokens: mapScannerPage(json) }
 }

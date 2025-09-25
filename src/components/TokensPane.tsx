@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Table from './Table'
 import { fetchScanner } from '../scanner.client.js'
-import { buildPairStatsSubscription, buildPairSubscription } from '../ws.mapper.js'
+import { buildPairStatsSubscription, buildPairSubscription, buildPairUnsubscription, buildPairStatsUnsubscription } from '../ws.mapper.js'
 import { computePairPayloads } from '../ws.subs.js'
 import type { GetScannerResultParams, ScannerResult } from '../test-task-types'
 
@@ -84,6 +84,9 @@ export default function TokensPane({
     const buildPairStatsSubscriptionSafe = buildPairStatsSubscription as unknown as (p: { pair: string; token: string; chain: string }) => { event: 'subscribe-pair-stats'; data: { pair: string; token: string; chain: string } }
     const computePairPayloadsSafe = computePairPayloads as unknown as (items: ScannerResult[] | unknown[]) => { pair: string; token: string; chain: string }[]
 
+    // Track currently visible subscription keys (pair|token|chain)
+    const visibleKeysRef = useRef<Set<string>>(new Set())
+
     // Allow App to share a single WebSocket but also support direct sends if present on window.
     useEffect(() => {
         // Discover the shared WS ref stashed by App (escape hatch to avoid extra props)
@@ -106,27 +109,13 @@ export default function TokensPane({
             if (ws && wsRef.current !== ws) {
                 wsRef.current = ws
                 console.log('[TokensPane:' + title + '] detected __APP_WS__ later; readyState=' + String(ws.readyState))
-                // If we already computed payloads and socket is OPEN, (re)send subscriptions now
+                // If socket is OPEN, (re)send subscriptions for currently visible keys
                 if (ws.readyState === WebSocket.OPEN) {
                     try {
-                        if (payloadsRef.current.length > 0) {
-                            console.log('[TokensPane:' + title + '] sending ' + String(payloadsRef.current.length) + ' pair subscriptions on late WS attach')
-                            for (const p of payloadsRef.current) {
-                                ws.send(JSON.stringify(buildPairSubscriptionSafe(p)))
-                                ws.send(JSON.stringify(buildPairStatsSubscriptionSafe(p)))
-                            }
-                        }
-                        // Also ensure visible-row subscriptions on late attach
-                        const seen = new Set<string>()
-                        const anyRows = Array.isArray(rowsRef.current) ? rowsRef.current : []
-                        for (const t of anyRows) {
-                            const pair = t.pairAddress
-                            const token = t.tokenAddress
-                            if (!pair || !token) continue
-                            const chain = toChainId(t.chain)
-                            const key = pair + '|' + token + '|' + chain
-                            if (seen.has(key)) continue
-                            seen.add(key)
+                        const keys = Array.from(visibleKeysRef.current)
+                        console.log('[TokensPane:' + title + '] late attach subscribing visible keys:', keys.length)
+                        for (const key of keys) {
+                            const [pair, token, chain] = key.split('|')
                             ws.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
                             ws.send(JSON.stringify(buildPairStatsSubscriptionSafe({ pair, token, chain })))
                         }
@@ -200,21 +189,7 @@ export default function TokensPane({
                 console.log('[TokensPane:' + title + `] computed ${String(payloads.length)} pair subscription payloads and ${String(localIds.length)} unique pair ids for table`)
                 // Merge into global store (byId/meta) — page value is irrelevant for panes
                 dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: list } })
-                // Subscribe per-pair if WS is already open
-                const ws = wsRef.current
-                const rs = ws?.readyState
-                console.log('[TokensPane:' + title + '] WS readyState at subscription time: ' + String(rs))
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    try {
-                        console.log('[TokensPane:' + title + '] sending ' + String(payloads.length) + ' pair subscriptions (immediate)')
-                        for (const p of payloads) {
-                            ws.send(JSON.stringify(buildPairSubscriptionSafe(p)))
-                            ws.send(JSON.stringify(buildPairStatsSubscriptionSafe(p)))
-                        }
-                    } catch (err) {
-                        console.error(`[TokensPane:${title}] failed to send immediate subscriptions`, err)
-                    }
-                }
+                // Do not subscribe all pairs here; subscriptions are gated by row viewport visibility.
             } catch (e) {
                 const msg = e instanceof Error ? e.message : 'Failed to load data'
                 console.error('[TokensPane:' + title + '] fetch failed', e)
@@ -330,29 +305,7 @@ export default function TokensPane({
         }
     }, [sort])
 
-    // Ensure per-row subscriptions for all currently visible rows — this protects
-    // against any races where App-level scanner-pairs handling didn't issue subs yet.
-    useEffect(() => {
-        const ws = wsRef.current
-        if (!ws || ws.readyState !== WebSocket.OPEN) return
-        try {
-            const sent = new Set<string>()
-            for (const t of rows) {
-                const pair = t.pairAddress
-                const token = t.tokenAddress
-                if (!pair || !token) continue // require both to avoid malformed subs
-                const chain = toChainId(t.chain)
-                const key = pair + '|' + token + '|' + chain
-                if (sent.has(key)) continue
-                sent.add(key)
-                ws.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
-                ws.send(JSON.stringify(buildPairStatsSubscriptionSafe({ pair, token, chain })))
-            }
-            try { console.log(`[TokensPane:${title}] ensured subscriptions for ${String(sent.size)} visible rows`) } catch { /* no-op */ }
-        } catch (err) {
-            console.error(`[TokensPane:${title}] failed ensuring row subscriptions`, err)
-        }
-    }, [rows, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, title])
+    // Viewport-gated subscriptions are handled via onRowVisibilityChange below.
 
     // Imperative loadMore function (memoized)
     const loadMore = useCallback(async () => {
@@ -409,6 +362,63 @@ export default function TokensPane({
         return () => { observer.unobserve(el); observer.disconnect() }
     }, [loadMore])
 
+    // Handler wired to Table row visibility
+    const onRowVisibilityChange = useCallback((row: TokenRow, visible: boolean) => {
+        const pair = row.pairAddress
+        const token = row.tokenAddress
+        if (!pair || !token) return
+        const chain = toChainId(row.chain)
+        const key = pair + '|' + token + '|' + chain
+        const set = visibleKeysRef.current
+        const ws = wsRef.current
+        if (visible) {
+            if (!set.has(key)) {
+                set.add(key)
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    try {
+                        ws.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
+                        ws.send(JSON.stringify(buildPairStatsSubscriptionSafe({ pair, token, chain })))
+                    } catch (err) {
+                        console.error(`[TokensPane:${title}] subscribe failed for`, key, err)
+                    }
+                }
+            }
+        } else {
+            if (set.has(key)) {
+                set.delete(key)
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    try {
+                        ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
+                        ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+                    } catch (err) {
+                        console.error(`[TokensPane:${title}] unsubscribe failed for`, key, err)
+                    }
+                }
+            }
+        }
+    }, [title, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe])
+
+    // Unsubscribe all visible on unmount (outside dev optional)
+    useEffect(() => {
+        // Snapshot refs at effect creation to satisfy react-hooks rules
+        const wsAtMount = wsRef.current
+        const setAtMount = visibleKeysRef.current
+        return () => {
+            try {
+                const ws = wsAtMount
+                const keys = Array.from(setAtMount)
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    for (const key of keys) {
+                        const [pair, token, chain] = key.split('|')
+                        ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
+                        ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+                    }
+                }
+                setAtMount.clear()
+            } catch { /* ignore unmount unsubscribe errors */ }
+        }
+    }, [])
+
     return (
         <div>
             <Table
@@ -419,6 +429,7 @@ export default function TokensPane({
                 onSort={onSort}
                 sortKey={sort.key}
                 sortDir={sort.dir}
+                onRowVisibilityChange={onRowVisibilityChange}
             />
             <div ref={sentinelRef} style={{ height: 1 }} />
             {loadingMore && <div className="status">Loading more…</div>}

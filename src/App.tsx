@@ -204,6 +204,13 @@ function App() {
 
             const attemptConnect = () => {
                 if (cancelled) return
+                // Stop after a bounded number of attempts in dev to surface actionable guidance
+                if (attempt >= maxAttempts) {
+                    if (import.meta.env.DEV) {
+                        console.warn('WS: giving up after', attempt, 'attempts. The backend WebSocket server is likely not running. Start both servers with: npm run dev:serve (or run npm run server separately).')
+                    }
+                    return
+                }
                 // Cycle through provided urls; in dev there is typically one (devUrl)
                 const url = urls[(attempt++) % Math.max(1, urls.length)]
                 if (!url) {
@@ -308,19 +315,9 @@ function App() {
                                 } catch { /* no-op */ }
                             }
 
-                            // After valid scanner-pairs, subscribe to pair & pair-stats for the included tokens
-                            if (
-                                event === 'scanner-pairs' &&
-                                Array.isArray((data as { scannerPairs: unknown[] }).scannerPairs)
-                            ) {
-                                const payloads = computePairPayloadsSafe((data as { scannerPairs: unknown[] }).scannerPairs)
-                                for (const p of payloads) {
-                                    const subPair = JSON.stringify(buildPairSubscriptionSafe(p))
-                                    const subStats = JSON.stringify(buildPairStatsSubscriptionSafe(p))
-                                    ws.send(subPair)
-                                    ws.send(subStats)
-                                }
-                            }
+                            // Note: we no longer auto-subscribe to all pairs here.
+                            // Pair and pair-stats subscriptions are now gated by viewport
+                            // visibility inside TokensPane to reduce WS traffic.
                         } catch (err) {
                             console.error('WS: failed to process message', err)
                         }

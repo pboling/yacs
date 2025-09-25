@@ -5,8 +5,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig(() => {
   const plugins = [react()]
 
-  // WebSocket proxy remains enabled for development
-  // Note: target must be HTTP for ws upgrades; http-proxy handles the WS upgrade when ws: true
+  // Always proxy to the local backend in development. No REST fallbacks.
   const proxy = {
     '/ws': {
       target: 'http://localhost:3001',
