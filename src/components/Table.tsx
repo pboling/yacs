@@ -3,6 +3,14 @@ import AuditIcons from './AuditIcons'
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { Globe, MessageCircle, Send, ExternalLink, Eye, PauseCircle, Timer, Snail } from 'lucide-react'
 
+// Typed helper to find the last index matching a predicate (avoids using Array.prototype.findLastIndex for broader TS lib support)
+function findLastIndexSafe<T>(arr: T[], predicate: (v: T) => boolean): number {
+    for (let i = arr.length - 1; i >= 0; i--) {
+        if (predicate(arr[i])) return i
+    }
+    return -1
+}
+
 // Local minimal types to avoid circular deps with App
 interface TokenRow {
     id: string
@@ -244,13 +252,7 @@ export default function Table({
                     if (vis.length === 0) return []
                     const indices = new Set<number>()
                     const firstIdx = ordered.findIndex(o => o.el === vis[0].el)
-                    const lastIdx = ordered.findLastIndex ? ordered.findLastIndex(o => o.el === vis[vis.length - 1].el) : (() => {
-                        let idx = -1
-                        for (let i = ordered.length - 1; i >= 0; i--) {
-                            if (ordered[i].el === vis[vis.length - 1].el) { idx = i; break }
-                        }
-                        return idx
-                    })()
+                    const lastIdx = findLastIndexSafe(ordered, (o) => o.el === vis[vis.length - 1].el)
                     const start = Math.max(0, Math.min(firstIdx, lastIdx) - 3)
                     const end = Math.min(ordered.length - 1, Math.max(firstIdx, lastIdx) + 3)
                     for (let i = start; i <= end; i++) indices.add(i)

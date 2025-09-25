@@ -18,7 +18,6 @@ import {
     TRENDING_TOKENS_FILTERS,
     type GetScannerResultParams,
     type ScannerResult,
-    chainIdToName,
 } from './test-task-types'
 import {initialState, tokensReducer} from './tokens.reducer.js'
 import { buildScannerSubscription, buildScannerUnsubscription, buildPairSubscription, buildPairStatsSubscription, mapIncomingMessageToAction } from './ws.mapper.js'
@@ -56,7 +55,7 @@ interface State {
     byId: Record<string, TokenRow>
     meta: Record<string, TokensMeta>
     pages: Partial<Record<number, string[]>>
-    filters: { excludeHoneypots?: boolean; chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number }
+    filters: { excludeHoneypots?: boolean; chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number; limit?: number }
     wpegPrices?: Record<string, number>
 }
 
@@ -88,7 +87,7 @@ interface WpegPricesAction {
 
 interface FiltersAction {
     type: 'filters/set';
-    payload: { excludeHoneypots?: boolean; chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number }
+    payload: { excludeHoneypots?: boolean; chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number; limit?: number }
 }
 
 type Action = ScannerPairsAction | ScannerAppendAction | TickAction | PairStatsAction | WpegPricesAction | FiltersAction
@@ -99,6 +98,31 @@ type Action = ScannerPairsAction | ScannerAppendAction | TickAction | PairStatsA
  * Props are intentionally minimal to keep rendering logic decoupled from data shaping.
  */
 
+// Tiny sparkline component (top-level to satisfy lint rules)
+export function Sparkline({ data, width = 120, height = 24 }: { data: number[]; width?: number; height?: number }) {
+    const pad = 2
+    const w = width
+    const h = height
+    const n = data.length
+    const max = Math.max(1, ...data)
+    const min = 0
+    const xStep = n > 1 ? (w - pad * 2) / (n - 1) : 0
+    const points: string[] = []
+    for (let i = 0; i < n; i++) {
+        const x = pad + i * xStep
+        const y = pad + (h - pad * 2) * (1 - (data[i] - min) / (max - min))
+        points.push(String(x) + ',' + String(y))
+    }
+    const path = points.length > 0 ? 'M ' + points.join(' L ') : ''
+    const viewBox = '0 0 ' + String(w) + ' ' + String(h)
+    const baseLine = String(pad) + ',' + String(h - pad) + ' ' + String(w - pad) + ',' + String(h - pad)
+    return (
+        <svg width={w} height={h} viewBox={viewBox} aria-hidden="true" focusable="false">
+            <polyline points={baseLine} stroke="#374151" strokeWidth="1" fill="none" />
+            {path && <path d={path} stroke="#10b981" strokeWidth="1.5" fill="none" />}
+        </svg>
+    )
+}
 
 function App() {
     // Derive initial sort from URL (?sort=...&dir=...)
@@ -406,65 +430,6 @@ function App() {
         }
     }, [trendingFilters, newFilters, d, buildScannerSubscriptionSafe, mapIncomingMessageToActionSafe, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, computePairPayloadsSafe, buildScannerUnsubscriptionSafe])
 
-    // keep demo type usage to satisfy README guidance
-    const demoMap = useMemo(() => {
-        const example: ScannerResult = {
-            age: new Date().toISOString(),
-            bundlerHoldings: '0',
-            callCount: 0,
-            chainId: 1,
-            contractRenounced: false,
-            contractVerified: false,
-            currentMcap: '0',
-            devHoldings: '0',
-            dexPaid: false,
-            diff1H: '0',
-            diff24H: '0',
-            diff5M: '0',
-            diff6H: '0',
-            fdv: '0',
-            first1H: '0',
-            first24H: '0',
-            first5M: '0',
-            first6H: '0',
-            initialMcap: '0',
-            insiderHoldings: '0',
-            insiders: 0,
-            isFreezeAuthDisabled: false,
-            isMintAuthDisabled: false,
-            liquidity: '0',
-            liquidityLocked: false,
-            liquidityLockedAmount: '0',
-            liquidityLockedRatio: '0',
-            migratedFromVirtualRouter: null,
-            virtualRouterType: null,
-            pairAddress: '0x',
-            pairMcapUsd: '0',
-            pairMcapUsdInitial: '0',
-            percentChangeInLiquidity: '0',
-            percentChangeInMcap: '0',
-            price: '0',
-            reserves0: '0',
-            reserves0Usd: '0',
-            reserves1: '0',
-            reserves1Usd: '0',
-            routerAddress: '0x',
-            sniperHoldings: '0',
-            snipers: 0,
-            token0Decimals: 18,
-            token0Symbol: 'WETH',
-            token1Address: '0x',
-            token1Decimals: '18',
-            token1Name: 'Token',
-            token1Symbol: 'TKN',
-            token1TotalSupplyFormatted: '0',
-            top10Holdings: '0',
-            volume: '0',
-        }
-        const chainName = chainIdToName(example.chainId)
-        return {chainName}
-    }, [])
-
     const wpegPrices = (state as unknown as { wpegPrices?: Record<string, number> }).wpegPrices
 
     // Live update rate tracker: 2s resolution over a 1-minute window (30 samples)
@@ -478,29 +443,6 @@ function App() {
         return sum / rateSeries.length
     }, [rateSeries])
 
-    // Tiny inline Sparkline component
-    const Sparkline = ({ data, width = 120, height = 24 }: { data: number[]; width?: number; height?: number }) => {
-        const pad = 2
-        const w = width
-        const h = height
-        const n = data.length
-        const max = Math.max(1, ...data)
-        const min = 0
-        const xStep = n > 1 ? (w - pad * 2) / (n - 1) : 0
-        const points: string[] = []
-        for (let i = 0; i < n; i++) {
-            const x = pad + i * xStep
-            const y = pad + (h - pad * 2) * (1 - (data[i] - min) / (max - min))
-            points.push(`${x},${y}`)
-        }
-        const path = points.length > 0 ? 'M ' + points.join(' L ') : ''
-        return (
-            <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true" focusable="false">
-                <polyline points={`${pad},${h - pad} ${w - pad},${h - pad}`} stroke="#374151" strokeWidth="1" fill="none" />
-                {path && <path d={path} stroke="#10b981" strokeWidth="1.5" fill="none" />}
-            </svg>
-        )
-    }
 
     // Sample every 2 seconds and convert count to per-second rate
     useEffect(() => {
@@ -529,7 +471,6 @@ function App() {
                     <span className="muted" style={{ fontSize: 12 }}>(v{String((state as unknown as { version?: number }).version ?? 0)})</span>
                 )}
             </div>
-            <p className="muted">Demo chainIdToName: {demoMap.chainName}</p>
             {/* Filters Bar */}
             <div className="filters">
                 <div className="row">
@@ -551,6 +492,16 @@ function App() {
                                 </label>
                             )
                         })}
+                    </div>
+                    <div className="group">
+                        <label>Limit (rows)</label>
+                        <input
+                            type="number"
+                            min={1}
+                            step={50}
+                            value={state.filters.limit ?? 200}
+                            onChange={(e) => { d({ type: 'filters/set', payload: { limit: Math.max(1, Number(e.currentTarget.value || 0)) } } as FiltersAction); }}
+                        />
                     </div>
                     <div className="group">
                         <label>Min Volume ($)</label>

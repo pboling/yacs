@@ -50,7 +50,7 @@ export default function TokensPane({
     state: { byId: Record<string, TokenRow | undefined>, pages: Partial<Record<number, string[]>> } & { version?: number }
     dispatch: React.Dispatch<ScannerPairsAction | ScannerAppendAction>
     defaultSort: { key: SortKey; dir: Dir }
-    clientFilters?: { chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number; excludeHoneypots?: boolean }
+    clientFilters?: { chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number; excludeHoneypots?: boolean; limit?: number }
 }) {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -69,6 +69,8 @@ export default function TokensPane({
     // Track last update timestamps per key and previous value snapshots
     const lastUpdatedRef = useRef<Map<string, number>>(new Map())
     const prevSnapRef = useRef<Map<string, { price: number; mcap: number; vol: number; buys: number; sells: number; liq: number }>>(new Map())
+    // Track previously rendered keys to unsubscribe when rows fall out due to limit/sort
+    const prevRenderedKeysRef = useRef<Set<string>>(new Set())
 
     // Normalize chain to the server's expected id format for subscriptions
     const toChainId = (c: string | number | undefined): string => {
@@ -279,7 +281,9 @@ export default function TokensPane({
             return dir === 'asc' ? cmp : -cmp
         }
         const sorted = [...base].sort(sorter(sort.key, sort.dir))
-        const out = sorted.slice(0, visibleCount)
+        const limit = (clientFilters && typeof clientFilters.limit === 'number' && clientFilters.limit > 0) ? clientFilters.limit : Number.POSITIVE_INFINITY
+        const cap = Math.min(visibleCount, limit)
+        const out = sorted.slice(0, Number.isFinite(cap) ? cap : visibleCount)
         return out
     }, [state.byId, state.pages, page, sort, clientFilters, visibleCount])
 
@@ -303,6 +307,47 @@ export default function TokensPane({
             }
         } catch { /* no-op */ }
     }, [rows])
+
+    // When the rendered rows change (due to limit/sort), unsubscribe keys that dropped out entirely
+    useEffect(() => {
+        try {
+            const currentKeys = new Set<string>()
+            for (const row of rows) {
+                const pair = row.pairAddress
+                const token = row.tokenAddress
+                if (!pair || !token) continue
+                const key = pair + '|' + token + '|' + toChainId(row.chain)
+                currentKeys.add(key)
+            }
+            const prev = prevRenderedKeysRef.current
+            const removed: string[] = []
+            for (const key of prev) {
+                if (!currentKeys.has(key)) removed.push(key)
+            }
+            prevRenderedKeysRef.current = currentKeys
+
+            const ws = wsRef.current
+            if (removed.length > 0 && ws && ws.readyState === WebSocket.OPEN) {
+                for (const key of removed) {
+                    try {
+                        // purge local tracking
+                        visibleKeysRef.current.delete(key)
+                        slowKeysRef.current.delete(key)
+                        const idx = slowResubQueueRef.current.indexOf(key)
+                        if (idx >= 0) slowResubQueueRef.current.splice(idx, 1)
+                        // only unsubscribe if no pane has it visible (fast)
+                        if (getCount(key) === 0) {
+                            const [pair, token, chain] = key.split('|')
+                            ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
+                            ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+                        }
+                    } catch (err) {
+                        console.error(`[TokensPane:${title}] unsubscribe on removal failed for`, key, String(err))
+                    }
+                }
+            }
+        } catch { /* no-op */ }
+    }, [rows, title])
 
     // Log rows derivation once per version to avoid duplicate logs under React StrictMode
     const lastLoggedVersionRef = useRef<number>(-1)
@@ -537,9 +582,9 @@ export default function TokensPane({
                     visibleKeysRef.current.clear()
                     slowKeysRef.current.clear()
                 }}
-                getRowStatus={(row) => {
-                    const pair = row.pairAddress
-                    const token = row.tokenAddress
+                getRowStatus={(row: TokenRow) => {
+                    const pair = row.pairAddress ?? ''
+                    const token = row.tokenAddress ?? ''
                     if (!pair || !token) return undefined
                     const key = pair + '|' + token + '|' + toChainId(row.chain)
                     const ts = lastUpdatedRef.current.get(key)
@@ -557,8 +602,8 @@ export default function TokensPane({
                     // Compute visible keys
                     const visKeys: string[] = []
                     for (const row of visibleRows) {
-                        const pair = row.pairAddress
-                        const token = row.tokenAddress
+                        const pair = row.pairAddress ?? ''
+                        const token = row.tokenAddress ?? ''
                         if (!pair || !token) continue
                         const chain = toChainId(row.chain)
                         const key = pair + '|' + token + '|' + chain
@@ -567,8 +612,8 @@ export default function TokensPane({
                     const visSet = new Set(visKeys)
                     const allRenderedKeys: string[] = []
                     for (const row of rowsRef.current) {
-                        const pair = row.pairAddress
-                        const token = row.tokenAddress
+                        const pair = row.pairAddress ?? ''
+                        const token = row.tokenAddress ?? ''
                         if (!pair || !token) continue
                         const chain = toChainId(row.chain)
                         allRenderedKeys.push(pair + '|' + token + '|' + chain)
