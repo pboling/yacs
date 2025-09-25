@@ -3,6 +3,7 @@ import Table from './Table'
 import { fetchScanner } from '../scanner.client.js'
 import { buildPairStatsSubscription, buildPairSubscription, buildPairUnsubscription, buildPairStatsUnsubscription, buildPairSlowSubscription, buildPairStatsSlowSubscription } from '../ws.mapper.js'
 import { computePairPayloads } from '../ws.subs.js'
+import { markVisible, markHidden, getCount } from '../visibility.bus.js'
 import type { GetScannerResultParams, ScannerResult } from '../test-task-types'
 
 // Local minimal types mirroring the reducer output
@@ -383,11 +384,13 @@ export default function TokensPane({
         const slowSet = slowKeysRef.current
         const ws = wsRef.current
         if (visible) {
-            // promote to fast
+            // promote to fast (only if this pane wasn't already tracking it)
             slowSet.delete(key)
             if (!fastSet.has(key)) {
+                const { prev } = markVisible(key)
                 fastSet.add(key)
-                if (ws && ws.readyState === WebSocket.OPEN) {
+                // Only send a fast subscription when this pane is the first visible viewer
+                if (prev === 0 && ws && ws.readyState === WebSocket.OPEN) {
                     try {
                         ws.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
                         ws.send(JSON.stringify(buildPairStatsSubscriptionSafe({ pair, token, chain })))
@@ -397,15 +400,19 @@ export default function TokensPane({
                 }
             }
         } else {
-            if (fastSet.has(key)) fastSet.delete(key)
+            const wasFast = fastSet.has(key)
+            if (wasFast) fastSet.delete(key)
             if (!slowSet.has(key)) slowSet.add(key)
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                try {
-                    // Switch to slow subscriptions instead of fully unsubscribing so off-viewport rows keep updating more slowly
-                    ws.send(JSON.stringify(buildPairSlowSubscriptionSafe({ pair, token, chain })))
-                    ws.send(JSON.stringify(buildPairStatsSlowSubscriptionSafe({ pair, token, chain })))
-                } catch (err) {
-                    console.error(`[TokensPane:${title}] slow-subscribe failed for`, key, err)
+            if (wasFast) {
+                const { next } = markHidden(key)
+                // Only downgrade to slow if no other pane is still viewing it
+                if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
+                    try {
+                        ws.send(JSON.stringify(buildPairSlowSubscriptionSafe({ pair, token, chain })))
+                        ws.send(JSON.stringify(buildPairStatsSlowSubscriptionSafe({ pair, token, chain })))
+                    } catch (err) {
+                        console.error(`[TokensPane:${title}] slow-subscribe failed for`, key, err)
+                    }
                 }
             }
         }
@@ -423,8 +430,13 @@ export default function TokensPane({
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     for (const key of keys) {
                         const [pair, token, chain] = key.split('|')
-                        ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
-                        ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+                        // On unmount, this pane is no longer a visible viewer for these keys
+                        const { next } = markHidden(key)
+                        // Only unsubscribe if no other pane still requires the fast subscription
+                        if (next === 0) {
+                            ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
+                            ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+                        }
                     }
                 }
                 setAtMount.clear()
@@ -464,15 +476,31 @@ export default function TokensPane({
                     slowResubQueueRef.current = []
 
                     const ws = wsRef.current
-                    const allKeys = new Set<string>([...visibleKeysRef.current, ...slowKeysRef.current])
+                    const visibleNow = new Set<string>(visibleKeysRef.current)
+                    const slowNow = new Set<string>(slowKeysRef.current)
                     if (ws && ws.readyState === WebSocket.OPEN) {
-                        for (const key of allKeys) {
+                        // Unsubscribe fast keys only if this pane is the sole visible viewer
+                        for (const key of visibleNow) {
                             const [pair, token, chain] = key.split('|')
                             try {
-                                ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
-                                ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+                                if (getCount(key) <= 1) {
+                                    ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
+                                    ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+                                }
                             } catch (err) {
                                 console.error(`[TokensPane:${title}] bulk-unsubscribe failed for`, key, String(err))
+                            }
+                        }
+                        // Unsubscribe slow keys only if no pane currently views them
+                        for (const key of slowNow) {
+                            const [pair, token, chain] = key.split('|')
+                            try {
+                                if (getCount(key) === 0) {
+                                    ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
+                                    ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+                                }
+                            } catch (err) {
+                                console.error(`[TokensPane:${title}] bulk-unsubscribe slow failed for`, key, String(err))
                             }
                         }
                     }
