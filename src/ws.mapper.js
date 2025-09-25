@@ -46,6 +46,13 @@ export function buildPairStatsUnsubscription({ pair, token, chain }) {
   return { event: 'unsubscribe-pair-stats', data: { pair, token, chain } }
 }
 
+export function buildPairX5Subscription({ pair, token, chain }) {
+  return { event: 'subscribe-pair-x5', data: { pair, token, chain } }
+}
+export function buildPairStatsX5Subscription({ pair, token, chain }) {
+  return { event: 'subscribe-pair-stats-x5', data: { pair, token, chain } }
+}
+
 // Map incoming WS message to reducer action (plain object), or null if not handled
 export function mapIncomingMessageToAction(msg) {
   if (!msg || typeof msg !== 'object') return null

@@ -96,6 +96,8 @@ export function attachWsServer(server) {
         // Default slow factor fallback; overridden per-key using dynamic ratio to total rows
         /** @type {Map<string, number>} */
         const slowFactorByKey = new Map()
+        /** @type {Map<string, number>} */
+        const fastMultiplierByKey = new Map()
 
         function hash32(str) {
             let h = 2166136261 >>> 0
@@ -141,75 +143,81 @@ export function attachWsServer(server) {
             const basePrice = Number(item.price)
 
             const sendTick = () => {
-                            // One global tick counter per pair stream. Every TICK_INTERVAL_MS we increment n and
-                            // decide what to emit per subscription type:
-                            //   - Normal/fast pair subscription: send a 'tick' on every increment (n=1,2,3,...).
-                            //   - Slow pair subscription: send a 'tick' only when n % slowFactor === 0.
-                            // The same pattern applies to pair-stats, but with its own indicator:
-                            //   - Fast stats: send on every other tick (n % 2 === 0) to emulate a different cadence
-                            //     from price ticks while still being derived from the same base tick.
-                            //   - Slow stats: send when n % slowFactorStats === 0.
-                            // In short: TICK_INTERVAL_MS defines the scheduler cadence; fast/slow modes gate off
-                            // that cadence using simple modulo checks so rates remain proportional and deterministic.
-                n++
-                const price = computePrice(basePrice, pairKey, n)
-                const amt = String(computeAmount(pairKey, n))
-                // Determine a plausible token0 address per chain for buy classification
-                const chainId = Number(item.chainId)
-                const token0Address = (chainId === 56)
-                    ? '0xWBNB'
-                    : (chainId === 900)
-                        ? 'So11111111111111111111111111111111111111112'
-                        : '0xWETH'
-                const isBuyTick = (n % 2) === 1 // odd ticks → buys (token0 in), even ticks → sells (token1 in)
+                // We may emit multiple logical ticks per interval when a fast multiplier is set for this key.
                 const key = item.pairAddress + '|' + item.token1Address + '|' + String(item.chainId)
-                const isFast = subs.pairsFast.has(key)
-                const isSlow = subs.pairsSlow.has(key)
-                if (isFast || isSlow) {
-                    const slowFactor = slowFactorByKey.get(key) ?? DEFAULT_SLOW_FACTOR
-                    const shouldSendTick = isFast || (isSlow && (n % slowFactor === 0))
-                    if (shouldSendTick) {
-                        // Emit both a buy and a sell (non-outlier) each tick so Buys and Sells counters progress deterministically
-                        const tick = {
-                            event: 'tick',
-                            data: {
-                                pair: { pair: item.pairAddress, token: item.token1Address, chain: String(item.chainId) },
-                                swaps: [
-                                    // Outlier used as a guard/sample; ignored by UI logic
-                                    { isOutlier: true, priceToken1Usd: String(Math.max(0.000001, basePrice * 0.5)), tokenInAddress: item.token1Address, amountToken1: '1', token0Address },
-                                    // Directional swap based on tick parity
-                                    { isOutlier: false, priceToken1Usd: String(price), tokenInAddress: isBuyTick ? token0Address : item.token1Address, amountToken1: amt, token0Address },
-                                    // Companion opposite-direction swap to ensure both buys and sells increment each tick
-                                    { isOutlier: false, priceToken1Usd: String(price), tokenInAddress: isBuyTick ? item.token1Address : token0Address, amountToken1: String(Math.max(0.001, Number(amt) * 0.7)), token0Address },
-                                ],
-                            },
-                        }
-                        safeSend(ws, tick)
-                    }
-                    const isStatsFast = subs.statsFast.has(key)
-                    const isStatsSlow = subs.statsSlow.has(key)
-                    if (isStatsFast || isStatsSlow) {
-                        const slowFactorStats = slowFactorByKey.get(key) ?? DEFAULT_SLOW_FACTOR
-                        const shouldSendStats = isStatsFast ? (n % 2 === 0) : (n % slowFactorStats === 0)
-                        if (shouldSendStats) {
-                            const ver = ((hash32(pairKey) + n) & 1) === 0
-                            const hp = ((hash32(pairKey) ^ n) & 3) === 0
-                            const stats = {
-                                event: 'pair-stats',
+                const multiplier = fastMultiplierByKey.get(key) || 1
+                const doOne = () => {
+                    // One global tick counter per pair stream. Every TICK_INTERVAL_MS we increment n and
+                    // decide what to emit per subscription type:
+                    //   - Normal/fast pair subscription: send a 'tick' on every increment (n=1,2,3,...).
+                    //   - Slow pair subscription: send a 'tick' only when n % slowFactor === 0.
+                    // The same pattern applies to pair-stats, but with its own indicator:
+                    //   - Fast stats: send on every other tick (n % 2 === 0) to emulate a different cadence
+                    //     from price ticks while still being derived from the same base tick.
+                    //   - Slow stats: send when n % slowFactorStats === 0.
+                    // In short: TICK_INTERVAL_MS defines the scheduler cadence; fast/slow modes gate off
+                    // that cadence using simple modulo checks so rates remain proportional and deterministic.
+                    n++
+                    const price = computePrice(basePrice, pairKey, n)
+                    const amt = String(computeAmount(pairKey, n))
+                    // Determine a plausible token0 address per chain for buy classification
+                    const chainId = Number(item.chainId)
+                    const token0Address = (chainId === 56)
+                        ? '0xWBNB'
+                        : (chainId === 900)
+                            ? 'So11111111111111111111111111111111111111112'
+                            : '0xWETH'
+                    const isBuyTick = (n % 2) === 1 // odd ticks → buys (token0 in), even ticks → sells (token1 in)
+                    const isFast = subs.pairsFast.has(key)
+                    const isSlow = subs.pairsSlow.has(key)
+                    if (isFast || isSlow) {
+                        const slowFactor = slowFactorByKey.get(key) ?? DEFAULT_SLOW_FACTOR
+                        const shouldSendTick = isFast || (isSlow && (n % slowFactor === 0))
+                        if (shouldSendTick) {
+                            // Emit both a buy and a sell (non-outlier) each tick so Buys and Sells counters progress deterministically
+                            const tick = {
+                                event: 'tick',
                                 data: {
-                                    pair: {
-                                        pairAddress: item.pairAddress,
-                                        token1IsHoneypot: hp,
-                                        isVerified: ver,
-                                        mintAuthorityRenounced: true,
-                                        freezeAuthorityRenounced: true,
-                                    },
+                                    pair: { pair: item.pairAddress, token: item.token1Address, chain: String(item.chainId) },
+                                    swaps: [
+                                        // Outlier used as a guard/sample; ignored by UI logic
+                                        { isOutlier: true, priceToken1Usd: String(Math.max(0.000001, basePrice * 0.5)), tokenInAddress: item.token1Address, amountToken1: '1', token0Address },
+                                        // Directional swap based on tick parity
+                                        { isOutlier: false, priceToken1Usd: String(price), tokenInAddress: isBuyTick ? token0Address : item.token1Address, amountToken1: amt, token0Address },
+                                        // Companion opposite-direction swap to ensure both buys and sells increment each tick
+                                        { isOutlier: false, priceToken1Usd: String(price), tokenInAddress: isBuyTick ? item.token1Address : token0Address, amountToken1: String(Math.max(0.001, Number(amt) * 0.7)), token0Address },
+                                    ],
                                 },
                             }
-                            safeSend(ws, stats)
+                            safeSend(ws, tick)
+                        }
+                        const isStatsFast = subs.statsFast.has(key)
+                        const isStatsSlow = subs.statsSlow.has(key)
+                        if (isStatsFast || isStatsSlow) {
+                            const slowFactorStats = slowFactorByKey.get(key) ?? DEFAULT_SLOW_FACTOR
+                            const shouldSendStats = isStatsFast ? (n % 2 === 0) : (n % slowFactorStats === 0)
+                            if (shouldSendStats) {
+                                const ver = ((hash32(pairKey) + n) & 1) === 0
+                                const hp = ((hash32(pairKey) ^ n) & 3) === 0
+                                const stats = {
+                                    event: 'pair-stats',
+                                    data: {
+                                        pair: {
+                                            pairAddress: item.pairAddress,
+                                            token1IsHoneypot: hp,
+                                            isVerified: ver,
+                                            mintAuthorityRenounced: true,
+                                            freezeAuthorityRenounced: true,
+                                        },
+                                    },
+                                }
+                                safeSend(ws, stats)
+                            }
                         }
                     }
                 }
+                const reps = Math.max(1, multiplier | 0)
+                for (let r = 0; r < reps; r++) doOne()
             }
 
             // Stagger the first emission based on pairKey to avoid synchronized updates
@@ -304,6 +312,7 @@ export function attachWsServer(server) {
                 subs.pairsFast.add(key)
                 subs.pairsSlow.delete(key)
                 slowFactorByKey.delete(key)
+                fastMultiplierByKey.delete(key)
                 let item = itemsByKey.get(key)
                 if (!item) {
                     // Be tolerant to chain format mismatches (e.g., 'ETH' vs '1'): try to resolve by pair+token only
@@ -344,6 +353,31 @@ export function attachWsServer(server) {
                     itemsByKey.set(stubKey, item)
                 }
                 if (item) startStreamFor(item)
+            } else if (ev === 'subscribe-pair-x5') {
+                const p = msg.data
+                const key = p?.pair + '|' + p?.token + '|' + p?.chain
+                subs.pairsFast.add(key)
+                subs.pairsSlow.delete(key)
+                slowFactorByKey.delete(key)
+                fastMultiplierByKey.set(key, 5)
+                let item = itemsByKey.get(key)
+                if (!item && p && p.pair && p.token) {
+                    const toId = (c) => {
+                        const n = Number(c)
+                        if (Number.isFinite(n)) return n
+                        const s = String(c || '').toUpperCase()
+                        if (s === 'ETH') return 1
+                        if (s === 'BSC') return 56
+                        if (s === 'BASE') return 8453
+                        if (s === 'SOL') return 900
+                        return 1
+                    }
+                    const chainId = toId(p.chain)
+                    item = { pairAddress: String(p.pair), token1Address: String(p.token), chainId, price: '1.0' }
+                    const stubKey = item.pairAddress + '|' + item.token1Address + '|' + String(item.chainId)
+                    itemsByKey.set(stubKey, item)
+                }
+                if (item) startStreamFor(item)
             } else if (ev === 'subscribe-pair-slow') {
                 const p = msg.data
                 const key = p?.pair + '|' + p?.token + '|' + p?.chain
@@ -374,6 +408,7 @@ export function attachWsServer(server) {
                 subs.pairsFast.delete(key)
                 subs.pairsSlow.delete(key)
                 slowFactorByKey.delete(key)
+                fastMultiplierByKey.delete(key)
             } else if (ev === 'subscribe-pair-stats') {
                 const p = msg.data
                 const key = p?.pair + '|' + p?.token + '|' + p?.chain
@@ -412,6 +447,44 @@ export function attachWsServer(server) {
                         chainId,
                         price: '1.0',
                     }
+                    const stubKey = item.pairAddress + '|' + item.token1Address + '|' + String(item.chainId)
+                    itemsByKey.set(stubKey, item)
+                }
+                if (item) startStreamFor(item)
+            } else if (ev === 'subscribe-pair-stats-x5') {
+                const p = msg.data
+                const key = p?.pair + '|' + p?.token + '|' + p?.chain
+                subs.statsFast.add(key)
+                subs.statsSlow.delete(key)
+                slowFactorByKey.delete(key)
+                fastMultiplierByKey.set(key, 5)
+                // If only stats-x5 arrives first, also start stream so that stats get emitted too
+                let item = itemsByKey.get(key)
+                if (!item) {
+                    let prefix = p?.pair + '|' + p?.token + '|'
+                    for (const [k, v] of itemsByKey.entries()) {
+                        if (typeof k === 'string' && k.startsWith(prefix)) { item = v; break }
+                    }
+                    if (!item) {
+                        prefix = p?.pair + '|'
+                        for (const [k, v] of itemsByKey.entries()) {
+                            if (typeof k === 'string' && k.startsWith(prefix)) { item = v; break }
+                        }
+                    }
+                }
+                if (!item && p && p.pair && p.token) {
+                    const toId = (c) => {
+                        const n = Number(c)
+                        if (Number.isFinite(n)) return n
+                        const s = String(c || '').toUpperCase()
+                        if (s === 'ETH') return 1
+                        if (s === 'BSC') return 56
+                        if (s === 'BASE') return 8453
+                        if (s === 'SOL') return 900
+                        return 1
+                    }
+                    const chainId = toId(p.chain)
+                    item = { pairAddress: String(p.pair), token1Address: String(p.token), chainId, price: '1.0' }
                     const stubKey = item.pairAddress + '|' + item.token1Address + '|' + String(item.chainId)
                     itemsByKey.set(stubKey, item)
                 }

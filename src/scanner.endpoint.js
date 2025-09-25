@@ -303,7 +303,7 @@ export function generateScannerResponse(params = {}) {
       first24H: toFixedStr(price * 0.8),
       first5M: toFixedStr(price * 0.95),
       first6H: toFixedStr(price * 0.92),
-      honeyPot: rnd() > 0.95 ? true : false,
+      honeyPot: rnd() > 0.95,
       initialMcap: String(m2),
       insiderHoldings: toFixedStr(rnd() * 1000),
       insiders: Math.floor(rnd() * 100),
@@ -349,6 +349,27 @@ export function generateScannerResponse(params = {}) {
       volume: String(volume),
       webLink: null,
     }
+
+    // --- Burn-related fields (deterministic) ---
+    // Deterministic totalSupply between 1,000,000 and 1,000,000,000
+    const supplySeed = mixSeeds(seed, hashParams({ k: String(pairAddress) + '|supply' }))
+    const rndSupply = mulberry32(supplySeed)
+    const totalSupply = Math.floor(1_000_000 + rndSupply() * (1_000_000_000 - 1_000_000))
+    // Deterministic burnedSupply between 0 and totalSupply
+    const burnedSeed = mixSeeds(seed, hashParams({ k: String(pairAddress) + '|burned' }))
+    const rndBurned = mulberry32(burnedSeed)
+    const burnedSupply = Math.floor(rndBurned() * totalSupply)
+    const percentBurned = totalSupply > 0 ? (burnedSupply / totalSupply) * 100 : 0
+    const deadAddress = '0x000000000000000000000000000000000000dEaD'
+    // Deterministic ownerAddress: 20% chance to be dead address, otherwise random
+    const ownerSeed = mixSeeds(seed, hashParams({ k: String(pairAddress) + '|owner' }))
+    const rndOwner = mulberry32(ownerSeed)
+    const ownerAddress = rndOwner() < 0.2 ? deadAddress : `0x${Math.floor(rndOwner() * 1e16).toString(16).padStart(40, '0')}`
+    item.totalSupply = totalSupply
+    item.burnedSupply = burnedSupply
+    item.percentBurned = percentBurned
+    item.deadAddress = deadAddress
+    item.ownerAddress = ownerAddress
 
     // Deterministic social links with ~80% chance per link, derived from seed + token + slow epoch
     try {
@@ -480,6 +501,7 @@ export function createScannerMockPlugin() {
   return {
     name: 'local-mock-scanner-endpoint',
     apply: 'serve',
+
     configureServer(server) {
       const enabled = process.env.LOCAL_SCANNER === '1' || process.env.VITE_USE_LOCAL_SCANNER === '1'
       if (!enabled) return
@@ -488,3 +510,4 @@ export function createScannerMockPlugin() {
     },
   }
 }
+

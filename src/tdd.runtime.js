@@ -56,6 +56,23 @@ export function mapScannerResultToToken(scanner) {
   const volumeUsd = parseFloat(scanner.volume || '0') || 0
   const mcap = calcMarketCapFromResponse(scanner)
   const tokenCreatedTimestamp = new Date(scanner.age)
+  // Relay burn-related fields
+  const totalSupply = scanner.totalSupply
+  const burnedSupply = scanner.burnedSupply
+  const percentBurned = scanner.percentBurned
+  const deadAddress = scanner.deadAddress
+  const ownerAddress = scanner.ownerAddress
+  // Derive burned status
+  let burned
+  if (typeof percentBurned === 'number' && typeof ownerAddress === 'string' && typeof deadAddress === 'string') {
+    if (percentBurned > 50 || ownerAddress.toLowerCase() === deadAddress.toLowerCase()) {
+      burned = true
+    } else if (percentBurned >= 0) {
+      burned = false
+    }
+  } else {
+    burned = undefined
+  }
   return {
     id: scanner.pairAddress || scanner.token1Address,
     tokenName: scanner.token1Name,
@@ -88,10 +105,15 @@ export function mapScannerResultToToken(scanner) {
       ...(scanner.linkTwitter || scanner.twitterLink ? { linkTwitter: scanner.linkTwitter || scanner.twitterLink } : {}),
       ...(scanner.linkWebsite || scanner.webLink ? { linkWebsite: scanner.linkWebsite || scanner.webLink } : {}),
     },
+    totalSupply,
+    burnedSupply,
+    percentBurned,
+    deadAddress,
+    ownerAddress,
     security: {
       renounced: scanner.contractRenounced ?? undefined,
       locked: scanner.liquidityLocked ?? undefined,
-      burned: scanner.burned ?? undefined,
+      burned,
     },
     tokenCreatedTimestamp,
     liquidity: {

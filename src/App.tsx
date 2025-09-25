@@ -20,14 +20,16 @@ import {
     type ScannerResult,
 } from './test-task-types'
 import {initialState, tokensReducer} from './tokens.reducer.js'
-import { buildScannerSubscription, buildScannerUnsubscription, buildPairSubscription, buildPairStatsSubscription, mapIncomingMessageToAction } from './ws.mapper.js'
+import { buildScannerSubscription, buildScannerUnsubscription, buildPairSubscription, buildPairStatsSubscription, mapIncomingMessageToAction, buildPairX5Subscription, buildPairStatsX5Subscription } from './ws.mapper.js'
 import {computePairPayloads} from './ws.subs.js'
 import ErrorBoundary from './components/ErrorBoundary'
 import NumberCell from './components/NumberCell'
 import TokensPane from './components/TokensPane'
+import DetailModal from './components/DetailModal'
 import { emitFilterFocusStart, emitFilterApplyComplete } from './filter.bus.js'
 import { fetchScanner } from './scanner.client.js'
 import { getCount } from './visibility.bus.js'
+import { emitUpdate } from './updates.bus'
 
 // Theme allow-list and cookie helpers
 const THEME_ALLOW = ['cherry-sour', 'rocket-lake', 'legendary'] as const
@@ -45,10 +47,9 @@ function writeThemeCookie(v: ThemeName) {
     } catch { /* no-op */ }
 }
 
-function TopBar({ title, avgRate, rateSeries, version, theme, onThemeChange }: {
+import UpdateRate from './components/UpdateRate'
+function TopBar({ title, version, theme, onThemeChange }: {
     title: string
-    avgRate: number
-    rateSeries: number[]
     version: number
     theme: ThemeName
     onThemeChange: (v: ThemeName) => void
@@ -57,13 +58,7 @@ function TopBar({ title, avgRate, rateSeries, version, theme, onThemeChange }: {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <h1 style={{ margin: 0 }}>{title}</h1>
-                <div className="muted" style={{ fontSize: 14 }} title="Average token updates per second over the last 1 minute">
-                    {avgRate.toFixed(2)} upd/s (1m avg)
-                </div>
-                <Sparkline data={rateSeries} />
-                {import.meta.env.DEV && (
-                    <span className="muted" style={{ fontSize: 12 }}>(v{String(version)})</span>
-                )}
+                <UpdateRate version={import.meta.env.DEV ? version : undefined} />
             </div>
             <label className="muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                 Theme
@@ -157,31 +152,6 @@ type Action = ScannerPairsAction | ScannerAppendAction | TickAction | PairStatsA
  * Props are intentionally minimal to keep rendering logic decoupled from data shaping.
  */
 
-// Tiny sparkline component (top-level to satisfy lint rules)
-export function Sparkline({ data, width = 120, height = 24 }: { data: number[]; width?: number; height?: number }) {
-    const pad = 2
-    const w = width
-    const h = height
-    const n = data.length
-    const max = Math.max(1, ...data)
-    const min = 0
-    const xStep = n > 1 ? (w - pad * 2) / (n - 1) : 0
-    const points: string[] = []
-    for (let i = 0; i < n; i++) {
-        const x = pad + i * xStep
-        const y = pad + (h - pad * 2) * (1 - (data[i] - min) / (max - min))
-        points.push(String(x) + ',' + String(y))
-    }
-    const path = points.length > 0 ? 'M ' + points.join(' L ') : ''
-    const viewBox = '0 0 ' + String(w) + ' ' + String(h)
-    const baseLine = String(pad) + ',' + String(h - pad) + ' ' + String(w - pad) + ',' + String(h - pad)
-    return (
-        <svg width={w} height={h} viewBox={viewBox} aria-hidden="true" focusable="false">
-            <polyline points={baseLine} stroke="#374151" strokeWidth="1" fill="none" />
-            {path && <path d={path} stroke="#10b981" strokeWidth="1.5" fill="none" />}
-        </svg>
-    )
-}
 
 function App() {
     // App theme state (allow-list + cookie persistence)
@@ -243,6 +213,8 @@ function App() {
         token: string;
         chain: string
     }) => { event: 'subscribe-pair-stats'; data: { pair: string; token: string; chain: string } }
+    const buildPairX5SubscriptionSafe = buildPairX5Subscription as unknown as (p: { pair: string; token: string; chain: string }) => { event: 'subscribe-pair-x5'; data: { pair: string; token: string; chain: string } }
+    const buildPairStatsX5SubscriptionSafe = buildPairStatsX5Subscription as unknown as (p: { pair: string; token: string; chain: string }) => { event: 'subscribe-pair-stats-x5'; data: { pair: string; token: string; chain: string } }
     const buildScannerUnsubscriptionSafe = buildScannerUnsubscription as unknown as (params: GetScannerResultParams) => { event: 'unsubscribe-scanner-filter'; data: GetScannerResultParams }
     const mapIncomingMessageToActionSafe = mapIncomingMessageToAction as unknown as (msg: unknown) => (ScannerPairsAction | TickAction | PairStatsAction | WpegPricesAction | null)
     const computePairPayloadsSafe = computePairPayloads as unknown as (items: ScannerResult[] | unknown[]) => {
@@ -412,6 +384,8 @@ function App() {
                                     const chain = p.chain ?? ''
                                     if (pair && token && chain) {
                                         const key = pair + '|' + token + '|' + chain
+                                        // Emit per-key update for subscribers (modal, topbar, etc.)
+                                        try { emitUpdate({ key, type: 'tick', data }) } catch { /* no-op */ }
                                         if (getCount(key) > 0) {
                                             updatesCounterRef.current += 1
                                         }
@@ -434,6 +408,8 @@ function App() {
                                                 return '1'
                                             }
                                             const key = pairAddress + '|' + row.tokenAddress + '|' + toChainId(chainName)
+                                            // Emit per-key update
+                                            try { emitUpdate({ key, type: 'pair-stats', data }) } catch { /* no-op */ }
                                             if (getCount(key) > 0) {
                                                 updatesCounterRef.current += 1
                                             }
@@ -561,12 +537,9 @@ function App() {
     const updatesCounterRef = useRef(0)
     const [rateSeries, setRateSeries] = useState<number[]>([])
 
-    // Compute 1-minute average (per-second) from the last up to 30 samples
-    const avgRate = useMemo(() => {
-        if (rateSeries.length === 0) return 0
-        const sum = rateSeries.reduce((a, b) => a + b, 0)
-        return sum / rateSeries.length
-    }, [rateSeries])
+    // Dev-only touch to keep rateSeries referenced; retained for potential future diagnostics
+    useEffect(() => { /* no-op */ }, [rateSeries])
+
 
     // App boot readiness: wait until backend is ready to prevent double-load on first dev boot
     const [appReady, setAppReady] = useState(false)
@@ -635,6 +608,63 @@ function App() {
         return () => { clearInterval(id) }
     }, [])
 
+    // Modal state & helpers
+    const [detailRow, setDetailRow] = useState<TokenRow | null>(null)
+    const toChainId = (c: string | number | undefined): string => {
+        if (c == null) return '1'
+        const n = typeof c === 'number' ? c : Number(c)
+        if (Number.isFinite(n)) return String(n)
+        const s = String(c).toUpperCase()
+        if (s === 'ETH') return '1'
+        if (s === 'BSC') return '56'
+        if (s === 'BASE') return '8453'
+        if (s === 'SOL') return '900'
+        return '1'
+    }
+    const wsSend = (obj: unknown) => {
+        try {
+            const anyWin = window as unknown as { __APP_WS__?: WebSocket }
+            const ws = anyWin.__APP_WS__
+            if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj))
+        } catch { /* no-op */ }
+    }
+    const getRowById = (id: string): TokenRow | undefined => {
+        try {
+            const byId = (state as unknown as { byId?: Record<string, TokenRow | undefined> }).byId ?? {}
+            return byId[id] ?? byId[id.toLowerCase()]
+        } catch { return undefined }
+    }
+    const openDetails = (row: TokenRow) => {
+        setDetailRow(row)
+        try { emitFilterFocusStart() } catch { /* no-op */ }
+        // Cancel current subs and switch to 5x for this row
+        const pair = row.pairAddress ?? ''
+        const token = row.tokenAddress ?? ''
+        if (pair && token) {
+            const chain = toChainId(row.chain)
+            // Unsubscribe first to avoid duplicate modes
+            wsSend({ event: 'unsubscribe-pair', data: { pair, token, chain } })
+            wsSend({ event: 'unsubscribe-pair-stats', data: { pair, token, chain } })
+            wsSend(buildPairX5SubscriptionSafe({ pair, token, chain }))
+            wsSend(buildPairStatsX5SubscriptionSafe({ pair, token, chain }))
+        }
+    }
+    const closeDetails = () => {
+        const row = detailRow
+        setDetailRow(null)
+        try { emitFilterApplyComplete() } catch { /* no-op */ }
+        if (row) {
+            const pair = row.pairAddress ?? ''
+            const token = row.tokenAddress ?? ''
+            if (pair && token) {
+                const chain = toChainId(row.chain)
+                // Revert to normal fast subscription
+                wsSend(buildPairSubscriptionSafe({ pair, token, chain }))
+                wsSend(buildPairStatsSubscriptionSafe({ pair, token, chain }))
+            }
+        }
+    }
+
     return (
         <div style={{position: 'relative'}}>
             {!appReady && (
@@ -647,10 +677,9 @@ function App() {
                 </div>
             )}
         <div style={{padding: '16px 16px 16px 10px'}}>
+            <DetailModal open={!!detailRow} row={detailRow} currentRow={detailRow ? (getRowById(detailRow.id) ?? detailRow) : null} onClose={closeDetails} getRowById={getRowById} />
             <TopBar
                 title="Dexcelerate Scanner"
-                avgRate={avgRate}
-                rateSeries={rateSeries}
                 version={(state as unknown as { version?: number }).version ?? 0}
                 theme={theme}
                 onThemeChange={(v) => { setTheme(v) }}
@@ -788,6 +817,7 @@ function App() {
                 )}>
                         <TokensPane
                             title="Trending Tokens"
+                            onOpenRowDetails={openDetails}
                             filters={trendingFilters}
                             page={TRENDING_PAGE}
                             state={{ byId: state.byId, pages: state.pages, version: (state as unknown as { version?: number }).version ?? 0 } as unknown as { byId: Record<string, TokenRow>, pages: Partial<Record<number, string[]>> }}
@@ -819,6 +849,7 @@ function App() {
                 )}>
                         <TokensPane
                             title="New Tokens"
+                            onOpenRowDetails={openDetails}
                             filters={newFilters}
                             page={NEW_PAGE}
                             state={{ byId: state.byId, pages: state.pages, version: (state as unknown as { version?: number }).version ?? 0 } as unknown as { byId: Record<string, TokenRow>, pages: Partial<Record<number, string[]>> }}

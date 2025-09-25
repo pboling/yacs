@@ -1,7 +1,7 @@
 import NumberCell from './NumberCell'
 import AuditIcons from './AuditIcons'
 import { useEffect, useMemo, useState, useRef } from 'react'
-import { Globe, MessageCircle, Send, ExternalLink, Eye, PauseCircle, Timer, Snail } from 'lucide-react'
+import { Globe, MessageCircle, Send, ExternalLink, Eye, PauseCircle, Timer, Snail, ChartNoAxesCombined } from 'lucide-react'
 
 // Typed helper to find the last index matching a predicate (avoids using Array.prototype.findLastIndex for broader TS lib support)
 function findLastIndexSafe<T>(arr: T[], predicate: (v: T) => boolean): number {
@@ -56,6 +56,7 @@ export default function Table({
                                    getRowStatus,
                                    onBothEndsVisible,
                                    onContainerRef,
+                                   onOpenRowDetails,
                                }: {
     title: string
     rows: TokenRow[]
@@ -70,6 +71,7 @@ export default function Table({
     getRowStatus?: (row: TokenRow) => { state: 'fast' | 'unsubscribed' | 'queued-slow' | 'slow'; tooltip?: string } | undefined
     onBothEndsVisible?: (v: boolean) => void
     onContainerRef?: (el: HTMLDivElement | null) => void
+    onOpenRowDetails?: (row: TokenRow) => void
 }) {
     // Dev-only: log a compact snapshot of the first row whenever rows change
     useEffect(() => {
@@ -473,33 +475,6 @@ export default function Table({
                                     <td>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                {(() => {
-                                                    const s = getRowStatus?.(t)
-                                                    if (!s) return null
-                                                    const size = 14
-                                                    const color = s.state === 'fast' ? '#16a34a' : s.state === 'slow' ? '#6b7280' : s.state === 'queued-slow' ? '#f59e0b' : '#9ca3af'
-                                                    const title = s.tooltip ?? ''
-                                                    if (s.state === 'fast') return (
-                                                        <span title={title} aria-label="Subscribed (fast)" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                                                            <Eye size={size} color={color} />
-                                                        </span>
-                                                    )
-                                                    if (s.state === 'slow') return (
-                                                        <span title={title} aria-label="Subscribed (slow)" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                                                            <Snail size={size} color={color} />
-                                                        </span>
-                                                    )
-                                                    if (s.state === 'queued-slow') return (
-                                                        <span title={title} aria-label="Queued for slow subscription" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                                                            <Timer size={size} color={color} />
-                                                        </span>
-                                                    )
-                                                    return (
-                                                        <span title={title} aria-label="Unsubscribed during scroll" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                                                            <PauseCircle size={size} color={color} />
-                                                        </span>
-                                                    )
-                                                })()}
                                                 <span>
                                                     <strong title={`${t.tokenName}/${t.tokenSymbol}/${t.chain}`}>
                                                         {ellipsed(t.tokenName.toUpperCase() + '/' + t.tokenSymbol, 6)}
@@ -507,6 +482,45 @@ export default function Table({
                                                     /{t.chain}
                                                 </span>
                                             </div>
+                                            {/* Row 2: subscription indicator + chart icon */}
+                                            <div className="muted" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                                                {(() => {
+                                                    const s = getRowStatus?.(t)
+                                                    if (s) {
+                                                        const size = 14
+                                                        const color = s.state === 'fast' ? '#16a34a' : s.state === 'slow' ? '#6b7280' : s.state === 'queued-slow' ? '#f59e0b' : '#9ca3af'
+                                                        const title = s.tooltip ?? ''
+                                                        if (s.state === 'fast') return (
+                                                            <span title={title} aria-label="Subscribed (fast)" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                                                <Eye size={size} color={color} />
+                                                            </span>
+                                                        )
+                                                        if (s.state === 'slow') return (
+                                                            <span title={title} aria-label="Subscribed (slow)" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                                                <Snail size={size} color={color} />
+                                                            </span>
+                                                        )
+                                                        if (s.state === 'queued-slow') return (
+                                                            <span title={title} aria-label="Queued for slow subscription" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                                                <Timer size={size} color={color} />
+                                                            </span>
+                                                        )
+                                                        return (
+                                                            <span title={title} aria-label="Unsubscribed during scroll" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                                                <PauseCircle size={14} color={color} />
+                                                            </span>
+                                                        )
+                                                    }
+                                                    return null
+                                                })()}
+                                                <button type="button" title="Open details"
+                                                        aria-label="Open details"
+                                                        onClick={() => { try { if (typeof onOpenRowDetails === 'function') { (onOpenRowDetails as (row: TokenRow) => void)(t) } } catch { /* no-op */ } }}
+                                                        style={{ background: 'transparent', border: 'none', padding: 0, margin: 0, display: 'inline-flex', alignItems: 'center', cursor: 'pointer', color: 'inherit' }}>
+                                                    <ChartNoAxesCombined size={14} />
+                                                </button>
+                                            </div>
+                                            {/* Row 3: social icons */}
                                             {(() => {
                                                 const { linkWebsite, linkTwitter, linkTelegram, linkDiscord } = t.audit ?? {}
                                                 const hasAnyLink = [linkWebsite, linkTwitter, linkTelegram, linkDiscord].some(Boolean)

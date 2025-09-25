@@ -47,6 +47,7 @@ export default function TokensPane({
                                         clientFilters,
                                         onChainCountsChange,
                                         syncSortToUrl = false,
+                                        onOpenRowDetails,
                                     }: {
     title: string
     filters: GetScannerResultParams
@@ -57,6 +58,7 @@ export default function TokensPane({
     clientFilters?: { chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number; excludeHoneypots?: boolean; limit?: number }
     onChainCountsChange?: (counts: Record<string, number>) => void
     syncSortToUrl?: boolean
+    onOpenRowDetails?: (row: TokenRow) => void
 }) {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -797,6 +799,7 @@ export default function TokensPane({
                 onRowVisibilityChange={onRowVisibilityChange}
                 onBothEndsVisible={(v) => { setBothEndsVisible(v) }}
                 onContainerRef={(el) => { scrollContainerRef.current = el }}
+                onOpenRowDetails={onOpenRowDetails}
                 onScrollStart={() => {
                     // Enter scrolling: pause any in-flight slow re-subscription schedule and clear its queue
                     scrollingRef.current = true
@@ -846,7 +849,7 @@ export default function TokensPane({
                     if (!pair || !token) return undefined
                     const key = pair + '|' + token + '|' + toChainId(row.chain)
                     const ts = lastUpdatedRef.current.get(key)
-                    const tooltip = ts ? formatAge(ts) : 'No updates yet'
+                    const tooltip = ts ? 'Data Age: ' + formatAge(ts) : 'No updates yet'
                     if (scrollingRef.current) return { state: 'unsubscribed', tooltip }
                     if (visibleKeysRef.current.has(key)) return { state: 'fast', tooltip }
                     if (slowKeysRef.current.has(key)) return { state: 'slow', tooltip }
