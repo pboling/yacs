@@ -1,4 +1,20 @@
 // JS runtime utilities for tests (ESM)
+/**
+ * Derive market capitalization from a heterogeneous Scanner-like payload.
+ *
+ * Algorithm
+ * - Consider several candidate fields that may contain the market cap, in order of preference:
+ *   currentMcap, initialMcap, pairMcapUsd, pairMcapUsdInitial.
+ * - Coerce each candidate to a finite number via parseFloat; pick the first > 0.
+ * - If none is valid, return 0.
+ *
+ * Rationale
+ * - Upstream sources are inconsistent across chains and routers; this selection logic reduces
+ *   NaN propagation and ensures stable UI metrics without branching elsewhere.
+ *
+ * @param {object} scanner - Raw scanner item.
+ * @returns {number} Market capitalization in USD; 0 if not provided.
+ */
 export function calcMarketCapFromResponse(scanner) {
   const toNum = (s) => (s ? parseFloat(s) : 0)
   const candidates = [scanner.currentMcap, scanner.initialMcap, scanner.pairMcapUsd, scanner.pairMcapUsdInitial]
@@ -20,6 +36,20 @@ function chainIdToName(chainId) {
   return map[Number(chainId)] ?? 'ETH'
 }
 
+/**
+ * Normalize a raw ScannerResult-like object into a UI Token model.
+ *
+ * - Resolves chain name from chainId (test/dev map treats sepolia as ETH).
+ * - Parses numeric fields defensively, defaulting to 0 when missing/invalid.
+ * - Aggregates audit/security facets and social links with backward-compatible
+ *   fallbacks (link* vs *Link legacy fields).
+ * - Computes tokenCreatedTimestamp from ISO age field.
+ *
+ * This function is pure and safe to run in both Node and browser contexts.
+ *
+ * @param {object} scanner - ScannerResult-like object (see test-task-types.ts for reference).
+ * @returns {object} Token model suitable for UI consumption.
+ */
 export function mapScannerResultToToken(scanner) {
   const chainName = chainIdToName(scanner.chainId)
   const priceUsd = parseFloat(scanner.price || '0') || 0
@@ -71,6 +101,39 @@ export function mapScannerResultToToken(scanner) {
   }
 }
 
+/**
+ * Apply a stream tick (batch of swaps) to a Token model, producing a new snapshot.
+ *
+ * Algorithm overview (cognitive hotspots):
+ * 1) Price update with robust fallbacks
+ *    - Take the latest non-outlier swap as the primary source of price.
+ *    - If missing/invalid, scan for any non-outlier swap with a finite positive price.
+ *    - If still unavailable, retain the old price to avoid NaN cascades.
+ * 2) Market cap recomputation
+ *    - mcap = totalSupply (from ctx) × newPrice; if invalid, keep previous mcap.
+ * 3) Volume accumulation
+ *    - For each non-outlier swap, volume += (effectivePrice × |amountToken1|).
+ *      The effectivePrice is the swap’s own price when finite, otherwise the
+ *      resolved newPrice (or oldPrice as last resort). This stabilizes volume
+ *      under partial data.
+ * 4) Transaction direction inference (buys vs sells)
+ *    - If tokenInAddress matches known token0 → buy of token1.
+ *    - Else if matches token1 → sell of token1.
+ *    - Else when token0 is unknown but token1 known → treat as buy to keep
+ *      counters progressing during early discovery.
+ * 5) Liquidity drift model (deterministic, bounded)
+ *    - Liquidity evolves by a fraction (10%) of the price percent change.
+ *      nextLiq = max(0, prevLiq + prevLiq × pricePct × 0.10).
+ *    - changePc is computed relative to prevLiq and expressed in percent.
+ *
+ * The function is side-effect free and returns a new object, preserving
+ * immutability expectations in React state updates.
+ *
+ * @param {object} token - Current Token snapshot (UI shape).
+ * @param {Array<object>} swaps - Batch of swap ticks; outliers are ignored.
+ * @param {object} ctx - Context: totalSupply, token0Address, token1Address.
+ * @returns {object} Next Token snapshot with updated price, mcap, volume, txns and liquidity.
+ */
 export function applyTickToToken(token, swaps, ctx) {
   const latest = swaps.filter((s) => !s.isOutlier).pop()
   if (!latest) return token

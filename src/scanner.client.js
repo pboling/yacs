@@ -28,8 +28,14 @@ export const API_BASE = isViteDev ? (viteApiBase || '') : (viteApiBase || 'https
 // Build URLSearchParams from GetScannerResultParams-like object
 /**
  * Build URLSearchParams from a Scanner filter-like object.
- * - Arrays are expanded as repeated params.
+ *
+ * Rules
+ * - Arrays are expanded as repeated params (?k=a&k=b).
  * - Null/undefined/empty string values are omitted.
+ * - Other values are coerced to string.
+ *
+ * @param {Record<string, any>} [params]
+ * @returns {URLSearchParams}
  */
 export function buildScannerQuery(params = {}) {
   const qp = new URLSearchParams()
@@ -49,6 +55,9 @@ export function buildScannerQuery(params = {}) {
 /**
  * Map a ScannerApiResponse-like object to an array of TokenData (UI shape).
  * Delegates per-item conversion to mapScannerResultToToken.
+ *
+ * @param {{ scannerPairs?: any[] }} apiResponse
+ * @returns {any[]} TokenData[]
  */
 export function mapScannerPage(apiResponse) {
   const items = apiResponse?.scannerPairs ?? []
@@ -56,6 +65,16 @@ export function mapScannerPage(apiResponse) {
 }
 
 // Fetch scanner page and return mapped TokenData[] and raw payload
+/**
+ * Fetch a scanner page and map it to TokenData[] with the raw payload.
+ *
+ * Networking is injectable for tests via opts.fetchImpl; baseUrl is also overridable.
+ * Errors include response status on the thrown Error instance (err.status).
+ *
+ * @param {Record<string, any>} params - Scanner filter params.
+ * @param {{ baseUrl?: string, fetchImpl?: typeof fetch }} [opts]
+ * @returns {Promise<{ raw: any, tokens: any[] }>}
+ */
 export async function fetchScanner(params, opts = {}) {
   const baseUrl = opts.baseUrl ?? API_BASE
   const fetchImpl = opts.fetchImpl ?? fetch

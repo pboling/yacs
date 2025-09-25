@@ -13,6 +13,15 @@
 // Provides deterministic, param-influenced mock data for development and tests.
 
 // Deterministic PRNG (mulberry32)
+/**
+ * Create a fast deterministic PRNG based on mulberry32.
+ *
+ * - Produces a function that returns floats in [0, 1).
+ * - Suitable for mock data generation where reproducibility matters.
+ *
+ * @param {number} seed - 32-bit integer seed.
+ * @returns {() => number} Random generator function.
+ */
 function mulberry32(seed) {
   let t = seed >>> 0
   return function () {
@@ -23,6 +32,20 @@ function mulberry32(seed) {
   }
 }
 
+/**
+ * Simple FNV-1a-like hash of a params object, stable across key order.
+ *
+ * Algorithm
+ * - Stringify with sorted keys to ensure deterministic representation.
+ * - Fold characters into a 32-bit accumulator with bit mixing.
+ *
+ * Purpose
+ * - Combine with a base seed to produce page- and filter-specific streams that
+ *   remain reproducible for the same inputs.
+ *
+ * @param {Record<string, any>} params
+ * @returns {number} Unsigned 32-bit hash.
+ */
 function hashParams(params = {}) {
   const json = JSON.stringify(params, Object.keys(params).sort())
   let h = 2166136261
@@ -33,10 +56,23 @@ function hashParams(params = {}) {
   return h >>> 0
 }
 
+/**
+ * Pick a random element from an array using provided PRNG.
+ * @template T
+ * @param {T[]} arr
+ * @param {() => number} rnd - PRNG returning [0,1).
+ * @returns {T}
+ */
 function pick(arr, rnd) {
   return arr[Math.floor(rnd() * arr.length)]
 }
 
+/**
+ * Map a human chain name to a numeric chainId used in payloads.
+ * Defaults to ETH when unknown to keep consumers simple during dev.
+ * @param {string} name - 'ETH' | 'BSC' | 'BASE' | 'SOL'
+ * @returns {number}
+ */
 function chainNameToId(name) {
   switch (name) {
     case 'ETH': return 1
@@ -47,10 +83,22 @@ function chainNameToId(name) {
   }
 }
 
+/**
+ * Format a number with fixed 6 decimal places as a string.
+ * @param {number|string} num
+ * @returns {string}
+ */
 function toFixedStr(num) {
   return Number(num).toFixed(6)
 }
 
+/**
+ * Produce a deterministic pseudo-address suffixed with a human prefix for readability.
+ * The body is 0x + 38 hex chars derived via rnd(); the suffix helps test expectations.
+ * @param {string} prefix - e.g., 'PAIR' | 'TKN'.
+ * @param {() => number} rnd - PRNG.
+ * @returns {string}
+ */
 function mkAddress(prefix, rnd) {
   const hex = '0123456789abcdef'
   let s = '0x'
@@ -60,6 +108,27 @@ function mkAddress(prefix, rnd) {
 
 import { getBaseSeed, mixSeeds } from './seed.util.js'
 
+/**
+ * Generate a deterministic ScannerApiResponse-like payload for GET /scanner.
+ *
+ * Algorithm highlights
+ * - Seeding: mix a stable baseSeed (from env/.seed) with a hash of normalized
+ *   request params (including page) to produce a page-/filter-specific stream.
+ * - Cohesive fields: values are cross-correlated (e.g., price affects fdv), yet
+ *   randomized to look realistic. Some mcap fields are intentionally zeroed to
+ *   exercise consumer fallback logic.
+ * - Social links: derived from a long epoch window so links rarely change,
+ *   improving snapshot stability while remaining seed-driven.
+ * - Deduplication: ensure unique pairAddress rows to mimic backend guarantees.
+ *
+ * Parameters support
+ * - page: number (1-based)
+ * - chain: 'ETH' | 'BSC' | 'BASE' | 'SOL'
+ * - sort/dir: applied by the dev middleware, not by this generator directly.
+ *
+ * @param {Record<string, any>} params
+ * @returns {{ page: number, totalPages: number, scannerPairs: any[] }}
+ */
 export function generateScannerResponse(params = {}) {
   const page = Number(params.page ?? 1) || 1
   const totalPages = 10
@@ -224,7 +293,19 @@ export function generateScannerResponse(params = {}) {
   return { page, totalPages, scannerPairs: uniqueItems }
 }
 
-// Minimal Vite dev middleware to serve /scanner using the generator above
+/**
+ * Create a minimal Connect-style middleware that serves /scanner from the generator.
+ *
+ * Behavior
+ * - Parses URLSearchParams, normalizes a few known params (page: number, isNotHP: boolean).
+ * - Delegates data generation to generateScannerResponse.
+ * - Optionally applies allow-listed sorting on the server side for convenience in dev.
+ * - Responds with application/json.
+ *
+ * This is intended for local development and tests; not a production server.
+ *
+ * @returns {(req: any, res: any, next: Function) => Promise<void>} Connect middleware.
+ */
 export function createScannerMockMiddleware() {
   return async function scannerMiddleware(req, res, next) {
     if (!req.url) return next()
@@ -285,7 +366,11 @@ export function createScannerMockMiddleware() {
   }
 }
 
-// Vite plugin to register the middleware when enabled
+/**
+ * Create a Vite plugin that registers the mock /scanner middleware in dev.
+ * Activation is gated by env: LOCAL_SCANNER=1 or VITE_USE_LOCAL_SCANNER=1.
+ * @returns {{ name: string, apply: 'serve', configureServer(server: any): void }}
+ */
 export function createScannerMockPlugin() {
   return {
     name: 'local-mock-scanner-endpoint',
