@@ -458,12 +458,12 @@ export default function Table({
                             <th onClick={() => { onSort('volumeUsd') }}
                                 aria-sort={sortKey === 'volumeUsd' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Volume
                             </th>
-                            <th>Chg (5m/1h/6h/24h)</th>
+                            <th>Chg (5m/1h<br/>6h/24h)</th>
                             <th onClick={() => { onSort('age') }}
                                 aria-sort={sortKey === 'age' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Age
                             </th>
                             <th onClick={() => { onSort('tx') }}
-                                aria-sort={sortKey === 'tx' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Buys/Sells
+                                aria-sort={sortKey === 'tx' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Buys<br/>Sells
                             </th>
                             <th onClick={() => { onSort('liquidity') }}
                                 aria-sort={sortKey === 'liquidity' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Liquidity
@@ -507,7 +507,14 @@ export default function Table({
                                                         </span>
                                                     )
                                                 })()}
-                                                <strong title={`${t.tokenName}/${t.tokenSymbol}/${t.chain}`}>{`${ellipsed(t.tokenName + '/' + t.tokenSymbol, 6)}/${t.chain}`}</strong>
+                                                <span>
+                                                    <strong title={`${t.tokenName}/${t.tokenSymbol}/${t.chain}`}>
+                                                        {ellipsed(t.tokenName.toUpperCase() + '/' + t.tokenSymbol, 6)}
+                                                    </strong>
+                                                </span>
+                                                <span className="muted">
+                                                    /{t.chain}
+                                                </span>
                                             </div>
                                             {(() => {
                                                 const { linkWebsite, linkTwitter, linkTelegram, linkDiscord } = t.audit ?? {}
@@ -552,13 +559,16 @@ export default function Table({
                                     </td>
                                     <td>
                                         <NumberCell noFade value={t.priceChangePcs['5m']} suffix="%" />{' / '}
-                                        <NumberCell noFade value={t.priceChangePcs['1h']} suffix="%" />{' / '}
+                                        <NumberCell noFade value={t.priceChangePcs['1h']} suffix="%" />
+                                        <br/>
                                         <NumberCell noFade value={t.priceChangePcs['6h']} suffix="%" />{' / '}
                                         <NumberCell noFade value={t.priceChangePcs['24h']} suffix="%" />
                                     </td>
                                     <td>{formatAge(t.tokenCreatedTimestamp)}</td>
                                     <td>
-                                        <NumberCell value={t.transactions.buys} />/<NumberCell value={t.transactions.sells} />
+                                        B:<NumberCell value={t.transactions.buys} />
+                                        <br/>
+                                        S:<NumberCell value={t.transactions.sells} />
                                     </td>
                                     <td>
                                         <NumberCell value={t.liquidity.current} prefix="$" formatter={(n) => Math.round(n).toLocaleString()} />
