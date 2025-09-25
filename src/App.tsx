@@ -23,6 +23,7 @@ import {
 import {initialState, tokensReducer} from './tokens.reducer.js'
 import { buildScannerSubscription, buildScannerUnsubscription, buildPairSubscription, buildPairStatsSubscription, mapIncomingMessageToAction } from './ws.mapper.js'
 import {computePairPayloads} from './ws.subs.js'
+import ErrorBoundary from './components/ErrorBoundary'
 import TokensPane from './components/TokensPane'
 import { fetchScanner } from './scanner.client.js'
 
@@ -172,6 +173,7 @@ function App() {
         let attempt = 0
         let currentWs: WebSocket | null = null
         let openTimeout: ReturnType<typeof setTimeout> | null = null
+        let retryTimer: ReturnType<typeof setTimeout> | null = null
 
         // If a shared WS is already present and connecting/open, reuse it and skip creating another.
         try {
@@ -192,143 +194,163 @@ function App() {
         // In dev, avoid falling back to production WS to prevent duplicate connections and race conditions
         const urls: string[] = import.meta.env.DEV ? [envUrl, devUrl].filter(Boolean) as string[] : [envUrl, prodUrl].filter(Boolean) as string[]
 
-        function connectNext() {
+        function connectNext(delayMs = 0) {
             if (cancelled) return
-            const url = urls[attempt++]
-            if (!url) {
-                // no more options; give up silently
-                console.log('WS: no endpoints left to try; giving up')
-                return
+            // Clear any pending retry
+            if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
+
+            const attemptConnect = () => {
+                if (cancelled) return
+                // Cycle through provided urls; in dev there is typically one (devUrl)
+                const url = urls[(attempt++) % Math.max(1, urls.length)]
+                if (!url) {
+                    // No endpoints configured; retry same cycle after small backoff
+                    const backoff = Math.min(2000, 200 + attempt * 100)
+                    console.log('WS: no endpoints; retrying in', backoff, 'ms')
+                    retryTimer = setTimeout(() => { connectNext(0) }, backoff)
+                    return
+                }
+                try {
+                    console.log('WS: attempting connection to', url)
+                    const ws = new WebSocket(url)
+                    currentWs = ws
+                    let settled = false
+                    const settle = () => {
+                        if (settled) return true
+                        settled = true
+                        if (openTimeout) { clearTimeout(openTimeout); openTimeout = null }
+                        return false
+                    }
+
+                    // If connection does not open within a short window, retry with backoff
+                    if (openTimeout) clearTimeout(openTimeout)
+                    openTimeout = setTimeout(() => {
+                        if (!opened && ws.readyState !== WebSocket.OPEN) {
+                            if (settle()) return
+                            const backoff = Math.min(2000, 200 + attempt * 100)
+                            console.log('WS: open timeout; retrying in', backoff, 'ms')
+                            connectNext(backoff)
+                        }
+                    }, 2000)
+
+                    ws.onopen = () => {
+                        opened = true
+                        if (openTimeout) {
+                            clearTimeout(openTimeout);
+                            openTimeout = null
+                        }
+                        console.log('WS: open', { url })
+                        // expose WS to panes so they can send pair subscriptions without prop-drilling
+                        try { (window as unknown as { __APP_WS__?: WebSocket }).__APP_WS__ = ws } catch { /* no-op */ }
+                        // Subscribe to scanner filters for both panes so we receive scanner-pairs datasets
+                        // for Trending and New tokens. This allows us to compute and send per-pair
+                        // subscriptions for all visible rows across both tables.
+                        ws.send(JSON.stringify(buildScannerSubscriptionSafe({ ...trendingFilters, page: TRENDING_PAGE })))
+                        ws.send(JSON.stringify(buildScannerSubscriptionSafe({ ...newFilters, page: NEW_PAGE })))
+                    }
+                    ws.onmessage = (ev) => {
+                        try {
+                            const parsed = JSON.parse(typeof ev.data === 'string' ? ev.data : String(ev.data)) as unknown
+                            const event = (parsed && typeof parsed === 'object') ? (parsed as { event?: unknown }).event : undefined
+                            const data = (parsed && typeof parsed === 'object') ? (parsed as { data?: unknown }).data : undefined
+                            try { console.log('WS: message event', event) } catch { /* noop */ }
+                            // Basic validation per expected event types; fail loud in console on bad shapes
+                            if (event === 'scanner-pairs') {
+                                const pairs = (data && typeof data === 'object') ? (data as { scannerPairs?: unknown[] }).scannerPairs : undefined
+                                if (!Array.isArray(pairs)) {
+                                    console.error('WS: invalid scanner-pairs payload: missing scannerPairs array', parsed)
+                                    return
+                                }
+                            } else if (event === 'tick') {
+                                const ok = data && typeof data === 'object' && (data as { pair?: unknown; swaps?: unknown }).pair && Array.isArray((data as { swaps?: unknown[] }).swaps)
+                                if (!ok) {
+                                    console.error('WS: invalid tick payload: expected { pair, swaps[] }', parsed)
+                                    return
+                                }
+                            } else if (event === 'pair-stats') {
+                                const ok = data && typeof data === 'object' && (data as { pair?: { pairAddress?: unknown } }).pair && typeof (data as { pair: { pairAddress?: unknown } }).pair.pairAddress === 'string'
+                                if (!ok) {
+                                    console.error('WS: invalid pair-stats payload: expected pair.pairAddress', parsed)
+                                    return
+                                }
+                            } else if (event === 'wpeg-prices') {
+                                const ok = data && typeof data === 'object' && typeof (data as { prices?: unknown }).prices === 'object'
+                                if (!ok) {
+                                    console.error('WS: invalid wpeg-prices payload: expected { prices: Record<string,string|number> }', parsed)
+                                    return
+                                }
+                            }
+
+                            // Map to action; if unhandled, log for visibility
+                            const action = mapIncomingMessageToActionSafe(parsed)
+                            if (!action) {
+                                console.error('WS: unhandled or malformed message', parsed)
+                                return
+                            }
+                            try { console.log('WS: dispatching action', { type: (action as { type: string }).type }) } catch { /* no-op */ }
+                            d(action)
+
+                            // Helpful diagnostics: log compact payload details
+                            if (event === 'pair-stats') {
+                                try {
+                                    const p = (data as { pair?: { pairAddress?: string, token1IsHoneypot?: boolean, isVerified?: boolean } }).pair
+                                    console.log('WS: pair-stats data', { pairAddress: p?.pairAddress, hp: p?.token1IsHoneypot, verified: p?.isVerified })
+                                } catch { /* no-op */ }
+                            } else if (event === 'tick') {
+                                try {
+                                    const dd = data as { pair?: { pair?: string }, swaps?: { isOutlier?: boolean, priceToken1Usd?: string | number }[] }
+                                    const latest = Array.isArray(dd.swaps) ? dd.swaps.filter(s => !s.isOutlier).pop() : undefined
+                                    const latestPrice = latest ? (typeof latest.priceToken1Usd === 'number' ? latest.priceToken1Usd : parseFloat(latest.priceToken1Usd ?? 'NaN')) : undefined
+                                    console.log('WS: tick data summary', { pair: dd.pair?.pair, swaps: Array.isArray(dd.swaps) ? dd.swaps.length : undefined, latestPrice })
+                                } catch { /* no-op */ }
+                            }
+
+                            // After valid scanner-pairs, subscribe to pair & pair-stats for the included tokens
+                            if (
+                                event === 'scanner-pairs' &&
+                                Array.isArray((data as { scannerPairs: unknown[] }).scannerPairs)
+                            ) {
+                                const payloads = computePairPayloadsSafe((data as { scannerPairs: unknown[] }).scannerPairs)
+                                for (const p of payloads) {
+                                    const subPair = JSON.stringify(buildPairSubscriptionSafe(p))
+                                    const subStats = JSON.stringify(buildPairStatsSubscriptionSafe(p))
+                                    ws.send(subPair)
+                                    ws.send(subStats)
+                                }
+                            }
+                        } catch (err) {
+                            console.error('WS: failed to process message', err)
+                        }
+                    }
+                    ws.onerror = () => {
+                        try { console.log('WS: error before open?', { opened }) } catch { /* no-op */ }
+                        // If not opened yet, retry with backoff (avoid closing unopened sockets to reduce console noise)
+                        if (!opened) {
+                            if (settle()) return
+                            const backoff = Math.min(2000, 200 + attempt * 100)
+                            connectNext(backoff)
+                        }
+                    }
+                    ws.onclose = () => {
+                        try { console.log('WS: close', { opened }) } catch { /* no-op */ }
+                        // If closed before opening, retry with backoff; otherwise keep closed (no auto-reconnect for now)
+                        if (!opened) {
+                            if (settle()) return
+                            const backoff = Math.min(2000, 200 + attempt * 100)
+                            connectNext(backoff)
+                        }
+                    }
+                } catch {
+                    // If construction fails, retry
+                    const backoff = Math.min(2000, 200 + attempt * 100)
+                    connectNext(backoff)
+                }
             }
-            try {
-                console.log('WS: attempting connection to', url)
-                const ws = new WebSocket(url)
-                currentWs = ws
-                let settled = false
-                const settle = () => {
-                    if (settled) return true
-                    settled = true
-                    if (openTimeout) { clearTimeout(openTimeout); openTimeout = null }
-                    return false
-                }
 
-                // If connection does not open within a short window, try next URL
-                if (openTimeout) clearTimeout(openTimeout)
-                openTimeout = setTimeout(() => {
-                    if (!opened && ws.readyState !== WebSocket.OPEN) {
-                        if (settle()) return
-                        connectNext()
-                    }
-                }, 2000)
-
-                ws.onopen = () => {
-                    opened = true
-                    if (openTimeout) {
-                        clearTimeout(openTimeout);
-                        openTimeout = null
-                    }
-                    console.log('WS: open', { url })
-                    // expose WS to panes so they can send pair subscriptions without prop-drilling
-                    try { (window as unknown as { __APP_WS__?: WebSocket }).__APP_WS__ = ws } catch { /* no-op */ }
-                    // Subscribe to scanner filters for both panes so we receive scanner-pairs datasets
-                    // for Trending and New tokens. This allows us to compute and send per-pair
-                    // subscriptions for all visible rows across both tables.
-                    ws.send(JSON.stringify(buildScannerSubscriptionSafe({ ...trendingFilters, page: TRENDING_PAGE })))
-                    ws.send(JSON.stringify(buildScannerSubscriptionSafe({ ...newFilters, page: NEW_PAGE })))
-                }
-                ws.onmessage = (ev) => {
-                    try {
-                        const parsed = JSON.parse(typeof ev.data === 'string' ? ev.data : String(ev.data)) as unknown
-                        const event = (parsed && typeof parsed === 'object') ? (parsed as { event?: unknown }).event : undefined
-                        const data = (parsed && typeof parsed === 'object') ? (parsed as { data?: unknown }).data : undefined
-                        try { console.log('WS: message event', event) } catch { /* noop */ }
-                        // Basic validation per expected event types; fail loud in console on bad shapes
-                        if (event === 'scanner-pairs') {
-                            const pairs = (data && typeof data === 'object') ? (data as { scannerPairs?: unknown[] }).scannerPairs : undefined
-                            if (!Array.isArray(pairs)) {
-                                console.error('WS: invalid scanner-pairs payload: missing scannerPairs array', parsed)
-                                return
-                            }
-                        } else if (event === 'tick') {
-                            const ok = data && typeof data === 'object' && (data as { pair?: unknown; swaps?: unknown }).pair && Array.isArray((data as { swaps?: unknown[] }).swaps)
-                            if (!ok) {
-                                console.error('WS: invalid tick payload: expected { pair, swaps[] }', parsed)
-                                return
-                            }
-                        } else if (event === 'pair-stats') {
-                            const ok = data && typeof data === 'object' && (data as { pair?: { pairAddress?: unknown } }).pair && typeof (data as { pair: { pairAddress?: unknown } }).pair.pairAddress === 'string'
-                            if (!ok) {
-                                console.error('WS: invalid pair-stats payload: expected pair.pairAddress', parsed)
-                                return
-                            }
-                        } else if (event === 'wpeg-prices') {
-                            const ok = data && typeof data === 'object' && typeof (data as { prices?: unknown }).prices === 'object'
-                            if (!ok) {
-                                console.error('WS: invalid wpeg-prices payload: expected { prices: Record<string,string|number> }', parsed)
-                                return
-                            }
-                        }
-
-                        // Map to action; if unhandled, log for visibility
-                        const action = mapIncomingMessageToActionSafe(parsed)
-                        if (!action) {
-                            console.error('WS: unhandled or malformed message', parsed)
-                            return
-                        }
-                        try { console.log('WS: dispatching action', { type: (action as { type: string }).type }) } catch { /* no-op */ }
-                        d(action)
-
-                        // Helpful diagnostics: log compact payload details
-                        if (event === 'pair-stats') {
-                            try {
-                                const p = (data as { pair?: { pairAddress?: string, token1IsHoneypot?: boolean, isVerified?: boolean } }).pair
-                                console.log('WS: pair-stats data', { pairAddress: p?.pairAddress, hp: p?.token1IsHoneypot, verified: p?.isVerified })
-                            } catch { /* no-op */ }
-                        } else if (event === 'tick') {
-                            try {
-                                const dd = data as { pair?: { pair?: string }, swaps?: { isOutlier?: boolean, priceToken1Usd?: string | number }[] }
-                                const latest = Array.isArray(dd.swaps) ? dd.swaps.filter(s => !s.isOutlier).pop() : undefined
-                                const latestPrice = latest ? (typeof latest.priceToken1Usd === 'number' ? latest.priceToken1Usd : parseFloat(latest.priceToken1Usd ?? 'NaN')) : undefined
-                                console.log('WS: tick data summary', { pair: dd.pair?.pair, swaps: Array.isArray(dd.swaps) ? dd.swaps.length : undefined, latestPrice })
-                            } catch { /* no-op */ }
-                        }
-
-                        // After valid scanner-pairs, subscribe to pair & pair-stats for the included tokens
-                        if (
-                            event === 'scanner-pairs' &&
-                            Array.isArray((data as { scannerPairs: unknown[] }).scannerPairs)
-                        ) {
-                            const payloads = computePairPayloadsSafe((data as { scannerPairs: unknown[] }).scannerPairs)
-                            for (const p of payloads) {
-                                const subPair = JSON.stringify(buildPairSubscriptionSafe(p))
-                                const subStats = JSON.stringify(buildPairStatsSubscriptionSafe(p))
-                                ws.send(subPair)
-                                ws.send(subStats)
-                            }
-                        }
-                    } catch (err) {
-                        console.error('WS: failed to process message', err)
-                    }
-                }
-                ws.onerror = () => {
-                    try { console.log('WS: error before open?', { opened }) } catch { /* no-op */ }
-                    // If not opened yet, try next endpoint (avoid closing unopened sockets to reduce console noise)
-                    if (!opened) {
-                        if (settle()) return
-                        connectNext()
-                    }
-                }
-                ws.onclose = () => {
-                    try { console.log('WS: close', { opened }) } catch { /* no-op */ }
-                    // If closed before opening, try next; otherwise keep closed (no auto-reconnect for now)
-                    if (!opened) {
-                        if (settle()) return
-                        connectNext()
-                    }
-                }
-            } catch {
-                // If construction fails, move to next
-                connectNext()
+            if (delayMs > 0) {
+                retryTimer = setTimeout(attemptConnect, delayMs)
+            } else {
+                attemptConnect()
             }
         }
 
@@ -340,6 +362,10 @@ function App() {
             if (openTimeout) {
                 clearTimeout(openTimeout);
                 openTimeout = null
+            }
+            if (retryTimer) {
+                clearTimeout(retryTimer);
+                retryTimer = null
             }
             // Attempt to unsubscribe from scanner filters before closing (only outside dev)
             try {
@@ -513,24 +539,42 @@ function App() {
                 </div>
             )}
             <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16}}>
-                <TokensPane
-                    title="Trending Tokens"
-                    filters={trendingFilters}
-                    page={TRENDING_PAGE}
-                    state={{ byId: state.byId, pages: state.pages, version: (state as unknown as { version?: number }).version ?? 0 } as unknown as { byId: Record<string, TokenRow>, pages: Partial<Record<number, string[]>> }}
-                    dispatch={dispatch as unknown as React.Dispatch<ScannerPairsAction>}
-                    defaultSort={initialSort ?? { key: 'tokenName', dir: 'asc' }}
-                    clientFilters={state.filters as unknown as { chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number; excludeHoneypots?: boolean }}
-                />
-                <TokensPane
-                    title="New Tokens"
-                    filters={newFilters}
-                    page={NEW_PAGE}
-                    state={{ byId: state.byId, pages: state.pages, version: (state as unknown as { version?: number }).version ?? 0 } as unknown as { byId: Record<string, TokenRow>, pages: Partial<Record<number, string[]>> }}
-                    dispatch={dispatch as unknown as React.Dispatch<ScannerPairsAction>}
-                    defaultSort={initialSort ?? { key: 'age', dir: 'desc' }}
-                    clientFilters={state.filters as unknown as { chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number; excludeHoneypots?: boolean }}
-                />
+                <ErrorBoundary fallback={(
+                    <section>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                            <h2 style={{ margin: 0 }}>Trending Tokens</h2>
+                            <div className="status">Loading…</div>
+                        </div>
+                    </section>
+                )}>
+                        <TokensPane
+                            title="Trending Tokens"
+                            filters={trendingFilters}
+                            page={TRENDING_PAGE}
+                            state={{ byId: state.byId, pages: state.pages, version: (state as unknown as { version?: number }).version ?? 0 } as unknown as { byId: Record<string, TokenRow>, pages: Partial<Record<number, string[]>> }}
+                            dispatch={dispatch as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>}
+                            defaultSort={initialSort ?? { key: 'tokenName', dir: 'asc' }}
+                            clientFilters={state.filters as unknown as { chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number; excludeHoneypots?: boolean }}
+                        />
+                </ErrorBoundary>
+                <ErrorBoundary fallback={(
+                    <section>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                            <h2 style={{ margin: 0 }}>New Tokens</h2>
+                            <div className="status">Loading…</div>
+                        </div>
+                    </section>
+                )}>
+                        <TokensPane
+                            title="New Tokens"
+                            filters={newFilters}
+                            page={NEW_PAGE}
+                            state={{ byId: state.byId, pages: state.pages, version: (state as unknown as { version?: number }).version ?? 0 } as unknown as { byId: Record<string, TokenRow>, pages: Partial<Record<number, string[]>> }}
+                            dispatch={dispatch as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>}
+                            defaultSort={initialSort ?? { key: 'age', dir: 'desc' }}
+                            clientFilters={state.filters as unknown as { chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number; excludeHoneypots?: boolean }}
+                        />
+                </ErrorBoundary>
             </div>
         </div>
     )

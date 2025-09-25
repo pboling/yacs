@@ -88,7 +88,7 @@ export function attachWsServer(server) {
             // smooth-ish drift in +-3%
             const drift = (rnd() * 2 - 1) * 0.03
             const p = Math.max(0.000001, basePrice * (1 + drift))
-            return Number(p.toFixed(6))
+            return Number(p.toFixed(8))
         }
         function computeAmount(pairKey, tickIndex) {
             const seed = mixSeeds(BASE_SEED, mixSeeds(hash32(pairKey) ^ 0x9e3779b9, tickIndex >>> 0))
@@ -242,6 +242,30 @@ export function attachWsServer(server) {
                         }
                     }
                 }
+                if (!item && p && p.pair && p.token) {
+                    // As a last resort, construct a minimal stub so the stream can start deterministically.
+                    const toId = (c) => {
+                        const n = Number(c)
+                        if (Number.isFinite(n)) return n
+                        const s = String(c || '').toUpperCase()
+                        if (s === 'ETH') return 1
+                        if (s === 'BSC') return 56
+                        if (s === 'BASE') return 8453
+                        if (s === 'SOL') return 900
+                        return 1
+                    }
+                    const chainId = toId(p.chain)
+                    item = {
+                        pairAddress: String(p.pair),
+                        token1Address: String(p.token),
+                        chainId,
+                        // Provide a tiny non-zero price for deterministic stream generation
+                        price: '1.0',
+                    }
+                    // Index the stub so stats subscription can also find it
+                    const stubKey = item.pairAddress + '|' + item.token1Address + '|' + String(item.chainId)
+                    itemsByKey.set(stubKey, item)
+                }
                 if (item) startStreamFor(item)
             } else if (ev === 'subscribe-pair-stats') {
                 const p = msg.data
@@ -260,6 +284,27 @@ export function attachWsServer(server) {
                             if (typeof k === 'string' && k.startsWith(prefix)) { item = v; break }
                         }
                     }
+                }
+                if (!item && p && p.pair && p.token) {
+                    const toId = (c) => {
+                        const n = Number(c)
+                        if (Number.isFinite(n)) return n
+                        const s = String(c || '').toUpperCase()
+                        if (s === 'ETH') return 1
+                        if (s === 'BSC') return 56
+                        if (s === 'BASE') return 8453
+                        if (s === 'SOL') return 900
+                        return 1
+                    }
+                    const chainId = toId(p.chain)
+                    item = {
+                        pairAddress: String(p.pair),
+                        token1Address: String(p.token),
+                        chainId,
+                        price: '1.0',
+                    }
+                    const stubKey = item.pairAddress + '|' + item.token1Address + '|' + String(item.chainId)
+                    itemsByKey.set(stubKey, item)
                 }
                 if (item) startStreamFor(item)
             }

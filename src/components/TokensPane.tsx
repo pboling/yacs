@@ -65,6 +65,19 @@ export default function TokensPane({
     const payloadsRef = useRef<{ pair: string; token: string; chain: string }[]>([])
     const rowsRef = useRef<TokenRow[]>([])
 
+    // Normalize chain to the server's expected id format for subscriptions
+    const toChainId = (c: string | number | undefined): string => {
+        if (c == null) return '1'
+        const n = typeof c === 'number' ? c : Number(c)
+        if (Number.isFinite(n)) return String(n)
+        const s = String(c).toUpperCase()
+        if (s === 'ETH') return '1'
+        if (s === 'BSC') return '56'
+        if (s === 'BASE') return '8453'
+        if (s === 'SOL') return '900'
+        return '1'
+    }
+
     // Fetch function as typed alias to keep TS happy with JS module
     const fetchScannerTyped = fetchScanner as unknown as (p: GetScannerResultParams) => Promise<{ raw: { page?: number | null; scannerPairs?: ScannerResult[] | null } }>
     const buildPairSubscriptionSafe = buildPairSubscription as unknown as (p: { pair: string; token: string; chain: string }) => { event: 'subscribe-pair'; data: { pair: string; token: string; chain: string } }
@@ -110,7 +123,7 @@ export default function TokensPane({
                             const pair = t.pairAddress
                             const token = t.tokenAddress
                             if (!pair || !token) continue
-                            const chain = t.chain
+                            const chain = toChainId(t.chain)
                             const key = pair + '|' + token + '|' + chain
                             if (seen.has(key)) continue
                             seen.add(key)
@@ -227,9 +240,9 @@ export default function TokensPane({
         }
         // Apply client-side filters before sorting/truncation
         const cf = clientFilters ?? {}
-        // Treat an empty chains array as "no chains selected" (i.e., filter out all rows),
-        // and only use null (no chain filtering) when chains is truly undefined/null.
-        const selectedChains = Array.isArray(cf.chains) ? new Set(cf.chains) : null
+        // Treat an empty chains array as "no filtering" so defaults show data;
+        // only apply a chains filter when the array is non-empty.
+        const selectedChains = (Array.isArray(cf.chains) && cf.chains.length > 0) ? new Set(cf.chains) : null
         const minVol = cf.minVolume ?? 0
         const minMcap = cf.minMcap ?? 0
         const maxAgeMs = (cf.maxAgeHours == null || Number.isNaN(cf.maxAgeHours)) ? null : Math.max(0, cf.maxAgeHours) * 3600_000
@@ -328,7 +341,7 @@ export default function TokensPane({
                 const pair = t.pairAddress
                 const token = t.tokenAddress
                 if (!pair || !token) continue // require both to avoid malformed subs
-                const chain = t.chain // may be a name (ETH/BASE). Server-side is tolerant.
+                const chain = toChainId(t.chain)
                 const key = pair + '|' + token + '|' + chain
                 if (sent.has(key)) continue
                 sent.add(key)
@@ -340,21 +353,6 @@ export default function TokensPane({
             console.error(`[TokensPane:${title}] failed ensuring row subscriptions`, err)
         }
     }, [rows, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, title])
-
-    // Load more on intersection (infinite scroll)
-    useEffect(() => {
-        if (!sentinelRef.current) return
-        const el = sentinelRef.current
-        const observer = new IntersectionObserver((entries) => {
-            for (const entry of entries) {
-                if (entry.isIntersecting) {
-                    void loadMore()
-                }
-            }
-        }, { root: null, rootMargin: '200px', threshold: 0 })
-        observer.observe(el)
-        return () => { observer.unobserve(el); observer.disconnect() }
-    }, [loadMore])
 
     // Imperative loadMore function (memoized)
     const loadMore = useCallback(async () => {
@@ -395,6 +393,21 @@ export default function TokensPane({
             setLoadingMore(false)
         }
     }, [loadingMore, hasMore, currentPage, fetchScannerTyped, filters, dispatch, page, title])
+
+    // Load more on intersection (infinite scroll)
+    useEffect(() => {
+        if (!sentinelRef.current) return
+        const el = sentinelRef.current
+        const observer = new IntersectionObserver((entries) => {
+            for (const entry of entries) {
+                if (entry.isIntersecting) {
+                    void loadMore()
+                }
+            }
+        }, { root: null, rootMargin: '200px', threshold: 0 })
+        observer.observe(el)
+        return () => { observer.unobserve(el); observer.disconnect() }
+    }, [loadMore])
 
     return (
         <div>

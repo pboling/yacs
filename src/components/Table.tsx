@@ -212,16 +212,15 @@ export default function Table({
                 {loading && <div className="status">Loading…</div>}
                 {error && <div className="status error">{error}</div>}
                 {!loading && !error && rows.length === 0 && <div className="status">No data</div>}
-                {!loading && !error && rows.length > 0 && (
-                    <div className="table-wrap" style={{ width: '100%' }}>
-                        <table className="tokens">
-                            <thead>
-                            <tr>
-                                <th onClick={() => { onSort('tokenName') }}
-                                    aria-sort={sortKey === 'tokenName' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Token
-                                </th>
-                                <th onClick={() => { onSort('exchange') }}
-                                    aria-sort={sortKey === 'exchange' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Exchange
+                <div className="table-wrap" style={{ width: '100%' }}>
+                    <table className="tokens">
+                        <thead>
+                        <tr>
+                            <th onClick={() => { onSort('tokenName') }}
+                                aria-sort={sortKey === 'tokenName' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Token
+                            </th>
+                            <th onClick={() => { onSort('exchange') }}
+                                aria-sort={sortKey === 'exchange' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Exchange
                             </th>
                             <th onClick={() => { onSort('priceUsd') }}
                                 aria-sort={sortKey === 'priceUsd' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Price
@@ -242,6 +241,7 @@ export default function Table({
                             <th onClick={() => { onSort('liquidity') }}
                                 aria-sort={sortKey === 'liquidity' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Liquidity
                             </th>
+                            <th>Audit</th>
                         </tr>
                         </thead>
                         <tbody>
@@ -258,7 +258,7 @@ export default function Table({
                                     </td>
                                     <td>{t.exchange}</td>
                                     <td>
-                                        <NumberCell value={t.priceUsd} prefix="$" formatter={(n) => n.toFixed(6)} />
+                                        <NumberCell value={t.priceUsd} prefix="$" formatter={(n) => n.toFixed(8)} />
                                     </td>
                                     <td>
                                         <NumberCell value={t.mcap} prefix="$" formatter={(n) => Math.round(n).toLocaleString()} />
@@ -295,7 +295,6 @@ export default function Table({
                         </tbody>
                     </table>
                 </div>
-            )}
             </div>
         </section>
     )
