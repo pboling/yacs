@@ -31,20 +31,8 @@ interface TokenRow {
 
 type SortKey = 'tokenName' | 'exchange' | 'priceUsd' | 'mcap' | 'volumeUsd' | 'age' | 'tx' | 'liquidity'
 
-/**
- * Format a creation timestamp into a short relative age (e.g., 12m, 3h, 2d).
- * Pure helper used by table rows; safe for frequent calls.
- */
-function formatAge(ts: Date) {
-    const now = Date.now()
-    const diff = Math.max(0, now - ts.getTime())
-    const mins = Math.floor(diff / 60000)
-    if (mins < 60) return String(mins) + 'm'
-    const hrs = Math.floor(mins / 60)
-    if (hrs < 24) return String(hrs) + 'h'
-    const days = Math.floor(hrs / 24)
-    return String(days) + 'd'
-}
+// Age formatter moved to shared helper for reuse
+import { formatAge } from '../helpers/format'
 
 function ellipsed(input: string, length = 5) {
     if (typeof input !== 'string') return ''
@@ -67,6 +55,7 @@ export default function Table({
                                    onScrollStop,
                                    getRowStatus,
                                    onBothEndsVisible,
+                                   onContainerRef,
                                }: {
     title: string
     rows: TokenRow[]
@@ -80,6 +69,7 @@ export default function Table({
     onScrollStop?: (visibleRows: TokenRow[]) => void
     getRowStatus?: (row: TokenRow) => { state: 'fast' | 'unsubscribed' | 'queued-slow' | 'slow'; tooltip?: string } | undefined
     onBothEndsVisible?: (v: boolean) => void
+    onContainerRef?: (el: HTMLDivElement | null) => void
 }) {
     // Dev-only: log a compact snapshot of the first row whenever rows change
     useEffect(() => {
@@ -439,7 +429,7 @@ export default function Table({
                 {loading && <div className="status">Loading…</div>}
                 {error && <div className="status error">{error}</div>}
                 {!loading && !error && rows.length === 0 && <div className="status">No data</div>}
-                <div ref={containerRef} className="table-wrap" style={{ width: '100%' }}>
+                <div ref={(el) => { containerRef.current = el; try { onContainerRef?.(el) } catch { /* no-op */ } }} className="table-wrap" style={{ width: '100%' }}>
                     <table className="tokens">
                         <thead ref={theadRef}>
                         <tr>
@@ -472,11 +462,14 @@ export default function Table({
                         </tr>
                         </thead>
                         <tbody>
-                        {rows.map((t) => {
+                        {rows.map((t, idx) => {
                             const suffix = title === 'Trending Tokens' ? 'TREND' : title === 'New Tokens' ? 'NEW' : title.replace(/\s+/g, '-').toUpperCase()
                             const composedId = `${t.id}::${suffix}`
                             return (
-                                <tr key={composedId} data-row-id={composedId} ref={(el) => { registerRow(el, t) }}>
+                                <tr key={composedId} data-row-id={composedId} ref={(el) => { registerRow(el, t) }}
+                                                                    {...(idx === rows.length - 1 ? ({ 'data-last-row': '1' } as Record<string, string>) : {})}
+                                                                    {...(idx === Math.max(0, rows.length - 10) ? ({ 'data-scroll-trigger': '1' } as Record<string, string>) : {})}
+                                                                >
                                     <td>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -511,8 +504,6 @@ export default function Table({
                                                     <strong title={`${t.tokenName}/${t.tokenSymbol}/${t.chain}`}>
                                                         {ellipsed(t.tokenName.toUpperCase() + '/' + t.tokenSymbol, 6)}
                                                     </strong>
-                                                </span>
-                                                <span className="muted">
                                                     /{t.chain}
                                                 </span>
                                             </div>

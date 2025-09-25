@@ -1,0 +1,33 @@
+Lint and test discipline for this repo
+
+Audience: internal (Junie) and contributors
+
+1) Always run lint before committing or opening a PR
+- Command: npm run lint
+- Fixable issues: npm run lint:fix (then review the diff)
+- The ESLint config is strict (flat config, TypeScript + React). Do not suppress rules unless discussed.
+
+2) Run the combined check locally
+- Command: npm run test:all
+- This runs: lint, then the Node test suite (node --test).
+- CI should mirror: npm ci && npm run test:all
+
+3) TypeScript/React notes to avoid introducing lint errors
+- No explicit any. Prefer precise types. If unavoidable, use unknown and narrow, or create a small interface/type.
+- Avoid unused variables/parameters. Prefix intentional unused with _.
+- Prefer function components and hooks; follow react-hooks rules (rules-of-hooks, exhaustive-deps).
+- Keep ESM-only conventions (no require, no __dirname); use import.meta.*.
+
+4) Before pushing
+- npm ci (fresh) if dependencies changed
+- npm run lint
+- node --test (or npm run test)
+- npm run build (optional smoke)
+
+5) Quick reference
+- Lint: npm run lint
+- Lint (auto-fix): npm run lint:fix
+- Tests: npm run test
+- All: npm run test:all
+
+Last updated: 2025-09-25

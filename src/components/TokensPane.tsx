@@ -5,6 +5,7 @@ import { buildPairStatsSubscription, buildPairSubscription, buildPairUnsubscript
 import { computePairPayloads } from '../ws.subs.js'
 import { markVisible, markHidden, getCount } from '../visibility.bus.js'
 import { onFilterFocusStart, onFilterApplyComplete } from '../filter.bus.js'
+import { formatAge } from '../helpers/format'
 import type { GetScannerResultParams, ScannerResult } from '../test-task-types'
 
 // Local minimal types mirroring the reducer output
@@ -66,6 +67,8 @@ export default function TokensPane({
     const [loadingMore, setLoadingMore] = useState(false)
     const [hasMore, setHasMore] = useState(true)
     const sentinelRef = useRef<HTMLDivElement | null>(null)
+    // Root scroll container for the table (overflowing pane); used to scope infinite scroll
+    const scrollContainerRef = useRef<HTMLDivElement | null>(null)
     const [bothEndsVisible, setBothEndsVisible] = useState(false)
 
     const wsRef = useRef<WebSocket | null>(null)
@@ -468,24 +471,57 @@ export default function TokensPane({
         }
     }, [loadingMore, hasMore, currentPage, fetchScannerTyped, filters, dispatch, page, title, bothEndsVisible])
 
-    // Load more on intersection (infinite scroll)
+    // Load more when the scroll-trigger row (10 above the last) enters the viewport of the pane
+    // We rely on Table to tag rows with data-last-row and data-scroll-trigger.
+    // Rebind the observer whenever the identity of the last/trigger row changes, not only when length changes.
+    // Debounced so bulk updates (e.g., append many rows) only cause a single rebind.
+    const triggerObserverRef = useRef<IntersectionObserver | null>(null)
+    const observedTriggerRef = useRef<Element | null>(null)
+    const rebindTimeoutRef = useRef<number | null>(null)
+    // Compute stable markers from rows order
+    const lastRowId = rows.length > 0 ? rows[rows.length - 1]?.id : null
+    const triggerRowId = rows.length > 0 ? rows[Math.max(0, rows.length - 10)]?.id : null
     useEffect(() => {
-        if (!sentinelRef.current) return
-        // If there are no rows (all filtered out), do not attach observer (prevents thrash/infinite requests).
+        const root = scrollContainerRef.current
+        if (!root) return
         if (rowsRef.current.length === 0) return
-        // Disable infinite scroll when both header and footer are visible
         if (bothEndsVisible) return
-        const el = sentinelRef.current
-        const observer = new IntersectionObserver((entries) => {
-            for (const entry of entries) {
-                if (entry.isIntersecting) {
-                    void loadMore()
-                }
+        // debounce rebind by 100ms
+        if (rebindTimeoutRef.current != null) {
+            try { window.clearTimeout(rebindTimeoutRef.current) } catch { /* no-op */ }
+            rebindTimeoutRef.current = null
+        }
+        rebindTimeoutRef.current = window.setTimeout(() => {
+            // find current trigger element in DOM (tagged by Table)
+            const triggerEl = root.querySelector('[data-scroll-trigger="1"]')
+            const prevEl = observedTriggerRef.current
+            // If same element, nothing to do
+            if (triggerEl === prevEl && triggerObserverRef.current) return
+            // Clean up previous observer if any
+            if (triggerObserverRef.current) {
+                try { if (prevEl) triggerObserverRef.current.unobserve(prevEl) } catch { /* no-op */ }
+                try { triggerObserverRef.current.disconnect() } catch { /* no-op */ }
+                triggerObserverRef.current = null
             }
-        }, { root: null, rootMargin: '200px', threshold: 0 })
-        observer.observe(el)
-        return () => { observer.unobserve(el); observer.disconnect() }
-    }, [loadMore, clientFilters, bothEndsVisible])
+            observedTriggerRef.current = triggerEl
+            if (!triggerEl) return
+            const observer = new IntersectionObserver((entries) => {
+                for (const entry of entries) {
+                    if (entry.isIntersecting || entry.intersectionRatio > 0) {
+                        void loadMore()
+                    }
+                }
+            }, { root, rootMargin: '100px 0px', threshold: 0 })
+            triggerObserverRef.current = observer
+            try { observer.observe(triggerEl) } catch { /* no-op */ }
+        }, 100)
+        return () => {
+            if (rebindTimeoutRef.current != null) {
+                try { window.clearTimeout(rebindTimeoutRef.current) } catch { /* no-op */ }
+                rebindTimeoutRef.current = null
+            }
+        }
+    }, [lastRowId, triggerRowId, loadMore, bothEndsVisible])
 
     // Handler wired to Table row visibility
     const onRowVisibilityChange = useCallback((row: TokenRow, visible: boolean) => {
@@ -760,6 +796,7 @@ export default function TokensPane({
                 sortDir={sort.dir}
                 onRowVisibilityChange={onRowVisibilityChange}
                 onBothEndsVisible={(v) => { setBothEndsVisible(v) }}
+                onContainerRef={(el) => { scrollContainerRef.current = el }}
                 onScrollStart={() => {
                     // Enter scrolling: pause any in-flight slow re-subscription schedule and clear its queue
                     scrollingRef.current = true
@@ -809,7 +846,7 @@ export default function TokensPane({
                     if (!pair || !token) return undefined
                     const key = pair + '|' + token + '|' + toChainId(row.chain)
                     const ts = lastUpdatedRef.current.get(key)
-                    const tooltip = ts ? new Date(ts).toLocaleString() : 'No updates yet'
+                    const tooltip = ts ? formatAge(ts) : 'No updates yet'
                     if (scrollingRef.current) return { state: 'unsubscribed', tooltip }
                     if (visibleKeysRef.current.has(key)) return { state: 'fast', tooltip }
                     if (slowKeysRef.current.has(key)) return { state: 'slow', tooltip }
