@@ -19,11 +19,25 @@ import { getBaseSeed, mixSeeds } from '../src/seed.util.js'
 
 // Timing configuration is resolved at runtime (not module load) so tests can set TEST_FAST before attaching the WS server.
 function getTiming() {
+    // Timing model (see also sendTick below):
+    // - TICK_INTERVAL_MS sets the base cadence at which we evaluate whether to emit updates
+    //   for all active subscriptions (both normal/"fast" and "slow"). Fast subs evaluate
+    //   and emit on every tick; slow subs only emit every Nth tick (N = slowFactor).
+    // - MAX_STAGGER_MS controls how much we randomly delay the very first emission per
+    //   subscription key to avoid all rows updating at the same moment. We hash the key and
+    //   mod by MAX_STAGGER_MS to get a deterministic stagger in [0..MAX_STAGGER_MS]. After the
+    //   warm-up delay, all subsequent evaluations happen every TICK_INTERVAL_MS.
+    // - When TEST_FAST=1 (used by node tests/e2e), we tighten the loop: TICK_INTERVAL_MS=5ms
+    //   and MAX_STAGGER_MS=0 so tests run quickly and deterministically.
+    // - Additionally, the default slow subscription factor is minimized to 1 under TEST_FAST
+    //   so that slow subscriptions emit on every evaluation during tests.
     const FAST_TIMING = (process && process.env && process.env.TEST_FAST === '1')
     return {
         FAST_TIMING,
         TICK_INTERVAL_MS: FAST_TIMING ? 5 : 1000,
         MAX_STAGGER_MS: FAST_TIMING ? 0 : 1000,
+        // Control the base slow cadence; higher in dev, 1 in tests for responsiveness
+        DEFAULT_SLOW_FACTOR: FAST_TIMING ? 1 : 200,
     }
 }
 
@@ -78,9 +92,8 @@ export function attachWsServer(server) {
         const itemsByKey = new Map()
         const BASE_SEED = getBaseSeed()
                 // Resolve timing for this connection (reads env at runtime)
-                const { TICK_INTERVAL_MS, MAX_STAGGER_MS } = getTiming()
+                const { TICK_INTERVAL_MS, MAX_STAGGER_MS, DEFAULT_SLOW_FACTOR } = getTiming()
         // Default slow factor fallback; overridden per-key using dynamic ratio to total rows
-        const DEFAULT_SLOW_FACTOR = 200
         /** @type {Map<string, number>} */
         const slowFactorByKey = new Map()
 
@@ -128,6 +141,16 @@ export function attachWsServer(server) {
             const basePrice = Number(item.price)
 
             const sendTick = () => {
+                            // One global tick counter per pair stream. Every TICK_INTERVAL_MS we increment n and
+                            // decide what to emit per subscription type:
+                            //   - Normal/fast pair subscription: send a 'tick' on every increment (n=1,2,3,...).
+                            //   - Slow pair subscription: send a 'tick' only when n % slowFactor === 0.
+                            // The same pattern applies to pair-stats, but with its own indicator:
+                            //   - Fast stats: send on every other tick (n % 2 === 0) to emulate a different cadence
+                            //     from price ticks while still being derived from the same base tick.
+                            //   - Slow stats: send when n % slowFactorStats === 0.
+                            // In short: TICK_INTERVAL_MS defines the scheduler cadence; fast/slow modes gate off
+                            // that cadence using simple modulo checks so rates remain proportional and deterministic.
                 n++
                 const price = computePrice(basePrice, pairKey, n)
                 const amt = String(computeAmount(pairKey, n))
@@ -190,7 +213,14 @@ export function attachWsServer(server) {
             }
 
             // Stagger the first emission based on pairKey to avoid synchronized updates
-            const initialDelay = hash32(pairKey) % (MAX_STAGGER_MS + 1) // up to MAX_STAGGER_MS
+            // Warm-up and staggering:
+                        // - We delay the very first emission by a deterministic pseudo-random amount derived
+                        //   from the pairKey hash, capped by MAX_STAGGER_MS. This spreads the initial bursts
+                        //   so a page of 50 rows does not all fire at once when subscribing.
+                        // - After this delay, we schedule the recurring evaluator with setInterval at
+                        //   TICK_INTERVAL_MS; slow subscriptions still share the same interval but skip
+                        //   most evaluations via the modulo gates explained above.
+                        const initialDelay = hash32(pairKey) % (MAX_STAGGER_MS + 1) // up to MAX_STAGGER_MS
             const warm = setTimeout(() => {
                 warmupTimers.delete(pairKey)
                 sendTick()

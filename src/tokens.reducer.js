@@ -95,7 +95,15 @@ export function tokensReducer(state = initialState, action) {
       // Persist token0Address if present on any swap; this enables correct buy/sell classification
       const token0FromSwaps = Array.isArray(swaps) ? (swaps.find((s) => s && s.token0Address)?.token0Address || '') : ''
       const token0Address = token0FromSwaps || meta.token0Address || ''
-      const ctx = { totalSupply: meta.totalSupply || 0, token0Address, token1Address: token.tokenAddress }
+      // Determine effective totalSupply for mcap recomputation:
+      // Prefer meta.totalSupply from initial scanner payload; if missing/zero, derive from prior snapshot mcap/price.
+      let totalSupply = (typeof meta.totalSupply === 'number' ? meta.totalSupply : 0) || 0
+      if (!(Number.isFinite(totalSupply) && totalSupply > 0)) {
+        const prevPrice = Number(token.priceUsd) || 0
+        const prevMcap = Number(token.mcap) || 0
+        if (prevPrice > 0 && prevMcap > 0) totalSupply = prevMcap / prevPrice
+      }
+      const ctx = { totalSupply, token0Address, token1Address: token.tokenAddress }
       const updated = applyTickToToken(token, Array.isArray(swaps) ? swaps : [], ctx)
       try {
         if (updated && typeof updated.priceUsd === 'number') {

@@ -689,10 +689,10 @@ function App() {
                 {/* Row 2: Other filters */}
                 <div className="row">
                     <div className="group">
-                        <label>Limit (rows)</label>
+                        <label>Limit (rows, 0 = no limit)</label>
                         <input
                             type="number"
-                            min={1}
+                            min={0}
                             step={50}
                             value={state.filters.limit ?? 200}
                             onFocus={() => { try { emitFilterFocusStart() } catch { /* no-op */ } }}
@@ -700,7 +700,7 @@ function App() {
                                 blurVersionRef.current = (state as unknown as { version?: number }).version ?? 0
                                 pendingApplyAfterBlurRef.current = true
                             }}
-                            onChange={(e) => { d({ type: 'filters/set', payload: { limit: Math.max(1, Number(e.currentTarget.value || 0)) } } as FiltersAction); }}
+                            onChange={(e) => { d({ type: 'filters/set', payload: { limit: Math.max(0, Number(e.currentTarget.value || 0)) } } as FiltersAction); }}
                         />
                     </div>
                     <div className="group">

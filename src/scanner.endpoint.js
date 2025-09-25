@@ -200,8 +200,13 @@ export function generateScannerResponse(params = {}) {
   const seed = mixSeeds(baseSeed, paramSeed)
   const rnd = mulberry32(seed)
 
-  const chain = params.chain ?? 'ETH'
-  const chainId = chainNameToId(chain)
+  // Chain handling:
+  // - If params.chain is provided, we honor it (legacy behavior) so callers can request
+  //   a specific chain’s dataset.
+  // - If not provided, we deterministically assign a chain per row using a secondary
+  //   RNG derived from the seed and the symbol index to achieve a stable dispersion:
+  //   ETH 55%, SOL 20%, BASE 15%, BSC 10%.
+  const requestedChain = typeof params.chain === 'string' ? String(params.chain).toUpperCase() : undefined
   const routerMap = {
     ETH: ['0xRT_UNI', '0xRT_SUSHI'],
     BSC: ['0xRT_PCS', '0xRT_APE'],
@@ -211,6 +216,19 @@ export function generateScannerResponse(params = {}) {
 
   const items = []
   const now = Date.now()
+
+  // Secondary RNG seed for per-row chain assignment that does not perturb the main rnd()
+  const chainSalt = 0x43484149 // 'CHAI'
+  function pickChainByIndex(symbolIndex) {
+    // Derive a per-index seed mixed with the main seed to keep stability across pages/filters
+    const s = mixSeeds(seed, (chainSalt ^ (symbolIndex >>> 0)) >>> 0)
+    const r = mulberry32(s)()
+    // Weighted mapping: ETH 55%, SOL 20%, BASE 15%, BSC 10%
+    if (r < 0.55) return 'ETH'
+    if (r < 0.55 + 0.20) return 'SOL'
+    if (r < 0.55 + 0.20 + 0.15) return 'BASE'
+    return 'BSC'
+  }
 
   // Prepare a deterministic shuffled order of symbols and a per-page offset so that:
   // - Selection appears random yet is reproducible for the same params/seed
@@ -246,7 +264,11 @@ export function generateScannerResponse(params = {}) {
 
     const symbolIndex = indices[(offset + i) % indices.length]
     const token1Symbol = SYMBOLS[symbolIndex]
-    const token1Name = `${token1Symbol}-${chain}`
+
+    // Decide chain: honor explicit request if present, otherwise pick by index with weighted dispersion
+    const chosenChain = requestedChain && routerMap[requestedChain] ? requestedChain : pickChainByIndex(symbolIndex)
+    const chainId = chainNameToId(chosenChain)
+    const token1Name = `${token1Symbol}-${chosenChain}`
 
     // Maintain rnd() consumption parity with previous implementation to keep
     // downstream deterministic streams (tests depend on it)
@@ -307,14 +329,14 @@ export function generateScannerResponse(params = {}) {
       reserves0Usd: toFixedStr(rnd() * 10_000),
       reserves1: toFixedStr(rnd() * 10_000),
       reserves1Usd: toFixedStr(rnd() * 10_000),
-      routerAddress: pick(routerMap[chain] || routerMap.ETH, rnd),
+      routerAddress: pick(routerMap[chosenChain] || routerMap.ETH, rnd),
       sellFee: null,
       sells,
       sniperHoldings: toFixedStr(rnd() * 1000),
       snipers: Math.floor(rnd() * 200),
       telegramLink: null,
       token0Decimals,
-      token0Symbol: chain === 'SOL' ? 'WSOL' : 'WETH',
+      token0Symbol: (chosenChain === 'SOL') ? 'WSOL' : (chosenChain === 'BSC') ? 'WBNB' : 'WETH',
       token1Address,
       token1Decimals: String(token1Decimals),
       token1ImageUri: null,
