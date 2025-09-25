@@ -23,6 +23,7 @@ import {initialState, tokensReducer} from './tokens.reducer.js'
 import { buildScannerSubscription, buildScannerUnsubscription, buildPairSubscription, buildPairStatsSubscription, mapIncomingMessageToAction } from './ws.mapper.js'
 import {computePairPayloads} from './ws.subs.js'
 import ErrorBoundary from './components/ErrorBoundary'
+import NumberCell from './components/NumberCell'
 import TokensPane from './components/TokensPane'
 import { fetchScanner } from './scanner.client.js'
 
@@ -432,6 +433,17 @@ function App() {
 
     const wpegPrices = (state as unknown as { wpegPrices?: Record<string, number> }).wpegPrices
 
+    const CHAINS = ['ETH','SOL','BASE','BSC'] as const
+    const [trendingCounts, setTrendingCounts] = useState<Record<string, number>>({})
+    const [newCounts, setNewCounts] = useState<Record<string, number>>({})
+    const totalCounts = useMemo(() => {
+        const out: Record<string, number> = {}
+        for (const c of CHAINS) {
+            out[c] = (trendingCounts[c] ?? 0) + (newCounts[c] ?? 0)
+        }
+        return out
+    }, [trendingCounts, newCounts])
+
     // Live update rate tracker: 2s resolution over a 1-minute window (30 samples)
     const updatesCounterRef = useRef(0)
     const [rateSeries, setRateSeries] = useState<number[]>([])
@@ -473,26 +485,33 @@ function App() {
             </div>
             {/* Filters Bar */}
             <div className="filters">
+                {/* Row 1: Chains with dynamic counts across both tables */}
                 <div className="row">
                     <div className="group">
                         <label>Chains</label>
-                        {(['ETH','SOL','BASE','BSC'] as const).map((c) => {
-                            const checked = (state.filters.chains ?? ['ETH','SOL','BASE','BSC']).includes(c)
-                            return (
-                                <label key={c} className="chk">
-                                    <input
-                                        type="checkbox"
-                                        checked={checked}
-                                        onChange={(e) => {
-                                            const prev = new Set(state.filters.chains ?? ['ETH','SOL','BASE','BSC'])
-                                            if (e.currentTarget.checked) prev.add(c); else prev.delete(c)
-                                            d({ type: 'filters/set', payload: { chains: Array.from(prev) } } as FiltersAction)
-                                        }}
-                                    /> {c}
-                                </label>
-                            )
-                        })}
+                        <div className="chains-list">
+                            {(['ETH','SOL','BASE','BSC'] as const).map((c) => {
+                                const checked = (state.filters.chains ?? ['ETH','SOL','BASE','BSC']).includes(c)
+                                const count = totalCounts[c] ?? 0
+                                return (
+                                    <label key={c} className="chk">
+                                        <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            onChange={(e) => {
+                                                const prev = new Set(state.filters.chains ?? ['ETH','SOL','BASE','BSC'])
+                                                if (e.currentTarget.checked) prev.add(c); else prev.delete(c)
+                                                d({ type: 'filters/set', payload: { chains: Array.from(prev) } } as FiltersAction)
+                                            }}
+                                        /> {c} (<NumberCell value={count} />)
+                                    </label>
+                                )
+                            })}
+                        </div>
                     </div>
+                </div>
+                {/* Row 2: Other filters */}
+                <div className="row">
                     <div className="group">
                         <label>Limit (rows)</label>
                         <input
@@ -573,6 +592,11 @@ function App() {
                             dispatch={dispatch as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>}
                             defaultSort={initialSort ?? { key: 'tokenName', dir: 'asc' }}
                             clientFilters={state.filters as unknown as { chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number; excludeHoneypots?: boolean }}
+                            onChainCountsChange={(counts) => {
+                                const out: Record<string, number> = {}
+                                for (const c of CHAINS) out[c] = counts[c] ?? 0
+                                setTrendingCounts(out)
+                            }}
                         />
                 </ErrorBoundary>
                 <ErrorBoundary fallback={(
@@ -591,6 +615,11 @@ function App() {
                             dispatch={dispatch as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>}
                             defaultSort={initialSort ?? { key: 'age', dir: 'desc' }}
                             clientFilters={state.filters as unknown as { chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number; excludeHoneypots?: boolean }}
+                            onChainCountsChange={(counts) => {
+                                const out: Record<string, number> = {}
+                                for (const c of CHAINS) out[c] = counts[c] ?? 0
+                                setNewCounts(out)
+                            }}
                         />
                 </ErrorBoundary>
             </div>

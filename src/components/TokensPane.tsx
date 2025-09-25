@@ -43,6 +43,7 @@ export default function TokensPane({
                                         dispatch,
                                         defaultSort,
                                         clientFilters,
+                                        onChainCountsChange,
                                     }: {
     title: string
     filters: GetScannerResultParams
@@ -51,6 +52,7 @@ export default function TokensPane({
     dispatch: React.Dispatch<ScannerPairsAction | ScannerAppendAction>
     defaultSort: { key: SortKey; dir: Dir }
     clientFilters?: { chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number; excludeHoneypots?: boolean; limit?: number }
+    onChainCountsChange?: (counts: Record<string, number>) => void
 }) {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -307,6 +309,19 @@ export default function TokensPane({
             }
         } catch { /* no-op */ }
     }, [rows])
+
+    // Emit per-chain counts of currently rendered rows to parent (for combined counts)
+    useEffect(() => {
+        if (!onChainCountsChange) return
+        try {
+            const counts: Record<string, number> = {}
+            for (const r of rows) {
+                const c = r.chain
+                counts[c] = (counts[c] ?? 0) + 1
+            }
+            onChainCountsChange(counts)
+        } catch { /* no-op */ }
+    }, [rows, onChainCountsChange])
 
     // When the rendered rows change (due to limit/sort), unsubscribe keys that dropped out entirely
     useEffect(() => {

@@ -27,3 +27,5 @@ table.tokens { width: 100%; border-collapse: collapse; font-size: 14px; text-ali
 .filters label { font-size: 12px; color: #9ca3af; }
 .filters .chk { display: inline-flex; align-items: center; gap: 6px; margin-right: 8px; }
 .filters input[type="number"] { background: #111827; color: #e5e7eb; border: 1px solid #374151; border-radius: 4px; padding: 6px 8px; min-width: 120px; }
+
+.filters .chains-list { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
