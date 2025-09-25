@@ -27,6 +27,7 @@ import NumberCell from './components/NumberCell'
 import TokensPane from './components/TokensPane'
 import { emitFilterFocusStart, emitFilterApplyComplete } from './filter.bus.js'
 import { fetchScanner } from './scanner.client.js'
+import { getCount } from './visibility.bus.js'
 
 
 // Minimal row type for table consumption
@@ -43,6 +44,9 @@ interface TokenRow {
     tokenCreatedTimestamp: Date
     transactions: { buys: number; sells: number }
     liquidity: { current: number; changePc: number }
+    // Optional addresses used for WS correlation
+    tokenAddress?: string
+    pairAddress?: string
 }
 
 type SortKey = 'tokenName' | 'exchange' | 'priceUsd' | 'mcap' | 'volumeUsd' | 'age' | 'tx' | 'liquidity'
@@ -326,11 +330,43 @@ function App() {
                             try { console.log('WS: dispatching action', { type: (action as { type: string }).type }) } catch { /* no-op */ }
                             d(action)
 
-                            // Count update events for live rate (tick and pair-stats)
+                            // Count update events for live rate (tick and pair-stats) only for visible keys
                             try {
-                                if (event === 'tick' || event === 'pair-stats') {
-                                    // Each event counts as one update occurrence
-                                    updatesCounterRef.current += 1
+                                if (event === 'tick') {
+                                    const dd = data as { pair?: { pair?: string; token?: string; chain?: string } }
+                                    const p = (dd as { pair?: { pair?: string; token?: string; chain?: string } }).pair ?? {}
+                                    const pair = p.pair ?? ''
+                                    const token = p.token ?? ''
+                                    const chain = p.chain ?? ''
+                                    if (pair && token && chain) {
+                                        const key = pair + '|' + token + '|' + chain
+                                        if (getCount(key) > 0) {
+                                            updatesCounterRef.current += 1
+                                        }
+                                    }
+                                } else if (event === 'pair-stats') {
+                                    // Resolve key from current state as pair-stats may omit token/chain
+                                    const pairAddress = (data as { pair: { pairAddress: string } }).pair.pairAddress
+                                    if (pairAddress) {
+                                        const idLower = pairAddress.toLowerCase()
+                                        const byId = (state as unknown as { byId?: Record<string, TokenRow | undefined> }).byId ?? {}
+                                        const row = byId[idLower] ?? byId[pairAddress]
+                                        if (row?.tokenAddress) {
+                                            const chainName = row.chain
+                                            const toChainId = (c: string): string => {
+                                                const s = c.toUpperCase()
+                                                if (s === 'ETH') return '1'
+                                                if (s === 'BSC') return '56'
+                                                if (s === 'BASE') return '8453'
+                                                if (s === 'SOL') return '900'
+                                                return '1'
+                                            }
+                                            const key = pairAddress + '|' + row.tokenAddress + '|' + toChainId(chainName)
+                                            if (getCount(key) > 0) {
+                                                updatesCounterRef.current += 1
+                                            }
+                                        }
+                                    }
                                 }
                             } catch { /* no-op */ }
 
@@ -430,11 +466,12 @@ function App() {
                 }
             } catch { /* no-op */ }
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [trendingFilters, newFilters, d, buildScannerSubscriptionSafe, mapIncomingMessageToActionSafe, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, computePairPayloadsSafe, buildScannerUnsubscriptionSafe])
 
     const wpegPrices = (state as unknown as { wpegPrices?: Record<string, number> }).wpegPrices
 
-    const CHAINS = ['ETH','SOL','BASE','BSC'] as const
+    const CHAINS = useMemo(() => (['ETH','SOL','BASE','BSC'] as const), [])
     const [trendingCounts, setTrendingCounts] = useState<Record<string, number>>({})
     const [newCounts, setNewCounts] = useState<Record<string, number>>({})
     const totalCounts = useMemo(() => {
@@ -443,7 +480,7 @@ function App() {
             out[c] = (trendingCounts[c] ?? 0) + (newCounts[c] ?? 0)
         }
         return out
-    }, [trendingCounts, newCounts])
+    }, [trendingCounts, newCounts, CHAINS])
 
     // Live update rate tracker: 2s resolution over a 1-minute window (30 samples)
     const versionRef = useRef<number>((state as unknown as { version?: number }).version ?? 0)

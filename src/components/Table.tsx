@@ -58,6 +58,7 @@ export default function Table({
                                    onScrollStart,
                                    onScrollStop,
                                    getRowStatus,
+                                   onBothEndsVisible,
                                }: {
     title: string
     rows: TokenRow[]
@@ -70,6 +71,7 @@ export default function Table({
     onScrollStart?: () => void
     onScrollStop?: (visibleRows: TokenRow[]) => void
     getRowStatus?: (row: TokenRow) => { state: 'fast' | 'unsubscribed' | 'queued-slow' | 'slow'; tooltip?: string } | undefined
+    onBothEndsVisible?: (v: boolean) => void
 }) {
     // Dev-only: log a compact snapshot of the first row whenever rows change
     useEffect(() => {
@@ -211,6 +213,9 @@ export default function Table({
     const visibleElsRef = useRef<Set<Element>>(new Set())
     // Scroll container ref (overflow: auto)
     const containerRef = useRef<HTMLDivElement | null>(null)
+    // Header/Footer refs for viewport-span detection
+    const theadRef = useRef<HTMLTableSectionElement | null>(null)
+    const tfootRef = useRef<HTMLTableSectionElement | null>(null)
 
     useEffect(() => {
         const rootEl = containerRef.current
@@ -270,6 +275,67 @@ export default function Table({
         } catch { /* no-op */ }
         return () => { try { obs.disconnect() } catch { /* ignore disconnect errors */ } }
     }, [onRowVisibilityChange, onScrollStop])
+
+    // Determine when to disable infinite scroll based on viewport state
+    // Disable when:
+    //  - No data rows are currently in view, OR
+    //  - The first row at the top of the table AND the <tfoot> are both visible.
+    useEffect(() => {
+        if (!onBothEndsVisible) return
+        const root = containerRef.current
+        const head = theadRef.current
+        const foot = tfootRef.current
+        if (!root || !head || !foot) return
+        let footVis = false
+
+        const computeAndNotify = () => {
+            try {
+                // Is any row visible?
+                const anyRowVisible = visibleElsRef.current.size > 0
+                // Is the first row visible?
+                let firstRowVisible = false
+                if (rows.length > 0) {
+                    const first = rows[0]
+                    for (const [el, row] of rowMapRef.current.entries()) {
+                        if (row === first) {
+                            firstRowVisible = visibleElsRef.current.has(el)
+                            break
+                        }
+                    }
+                }
+                const disable = (!anyRowVisible) || (firstRowVisible && footVis)
+                onBothEndsVisible(disable)
+            } catch { /* no-op */ }
+        }
+
+        const cb: IntersectionObserverCallback = (entries) => {
+            for (const e of entries) {
+                if (e.target === foot) {
+                    footVis = e.isIntersecting || e.intersectionRatio > 0
+                }
+            }
+            computeAndNotify()
+        }
+        const obs = new IntersectionObserver(cb, { root, threshold: 0 })
+        try { obs.observe(foot) } catch { /* no-op */ }
+        // initial compute
+        try {
+            const contRect = root.getBoundingClientRect()
+            const f = foot.getBoundingClientRect()
+            footVis = f.bottom >= contRect.top && f.top <= contRect.bottom
+            computeAndNotify()
+        } catch { /* no-op */ }
+
+        // Also listen to scroll events to recompute row visibility driven condition
+        const onScroll = () => { computeAndNotify() }
+        window.addEventListener('scroll', onScroll, { passive: true })
+        root.addEventListener('scroll', onScroll, { passive: true })
+        return () => {
+            try { obs.disconnect() } catch { /* no-op */ }
+            window.removeEventListener('scroll', onScroll)
+            root.removeEventListener('scroll', onScroll)
+        }
+    }, [rows, onBothEndsVisible])
 
     // Scroll start/stop detection to coordinate subscriptions during scroll
     const isScrollingRef = useRef(false)
@@ -367,7 +433,7 @@ export default function Table({
                 {!loading && !error && rows.length === 0 && <div className="status">No data</div>}
                 <div ref={containerRef} className="table-wrap" style={{ width: '100%' }}>
                     <table className="tokens">
-                        <thead>
+                        <thead ref={theadRef}>
                         <tr>
                             <th onClick={() => { onSort('tokenName') }}
                                 aria-sort={sortKey === 'tokenName' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>Token
@@ -504,6 +570,13 @@ export default function Table({
                             )
                         })}
                         </tbody>
+                        <tfoot ref={tfootRef}>
+                        <tr>
+                            <td colSpan={10} className="muted" style={{ fontSize: 12, textAlign: 'right', padding: '6px 8px' }}>
+                                Rows (non-hidden): <strong>{rows.length}</strong>
+                            </td>
+                        </tr>
+                        </tfoot>
                     </table>
                 </div>
             </div>

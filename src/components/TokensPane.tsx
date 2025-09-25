@@ -66,6 +66,7 @@ export default function TokensPane({
     const [loadingMore, setLoadingMore] = useState(false)
     const [hasMore, setHasMore] = useState(true)
     const sentinelRef = useRef<HTMLDivElement | null>(null)
+    const [bothEndsVisible, setBothEndsVisible] = useState(false)
 
     const wsRef = useRef<WebSocket | null>(null)
     const payloadsRef = useRef<{ pair: string; token: string; chain: string }[]>([])
@@ -163,6 +164,16 @@ export default function TokensPane({
         setVisibleCount(50)
         setCurrentPage(1)
         setHasMore(true)
+        // If the client filters specify no chains selected, freeze the pane: clear rows and skip fetching.
+        const chainsProvidedEmpty = Array.isArray(clientFilters?.chains) && clientFilters.chains.length === 0
+        if (chainsProvidedEmpty) {
+            try {
+                dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: [] } })
+            } catch { /* no-op */ }
+            setLoading(false)
+            setHasMore(false)
+            return () => { /* frozen: nothing to cleanup */ }
+        }
         const run = async () => {
             setLoading(true)
             setError(null)
@@ -225,7 +236,7 @@ export default function TokensPane({
         }
         void run()
         return () => { cancelled = true }
-    }, [filters, dispatch, fetchScannerTyped, computePairPayloadsSafe, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, page, title])
+    }, [filters, clientFilters, dispatch, fetchScannerTyped, computePairPayloadsSafe, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, page, title])
 
     // Derive rows for this pane from global byId
     const rows = useMemo(() => {
@@ -240,9 +251,9 @@ export default function TokensPane({
         }
         // Apply client-side filters before sorting/truncation
         const cf = clientFilters ?? {}
-        // Treat an empty chains array as "no filtering" so defaults show data;
-        // only apply a chains filter when the array is non-empty.
-        const selectedChains = (Array.isArray(cf.chains) && cf.chains.length > 0) ? new Set(cf.chains) : null
+        // If chains is provided, respect it exactly. An empty array means "no chains selected",
+        // which should result in zero rows rendered (and thus a frozen pane).
+        const selectedChains = Array.isArray(cf.chains) ? new Set(cf.chains) : null
         const minVol = cf.minVolume ?? 0
         const minMcap = cf.minMcap ?? 0
         const maxAgeMs = (cf.maxAgeHours == null || Number.isNaN(cf.maxAgeHours)) ? null : Math.max(0, cf.maxAgeHours) * 3600_000
@@ -412,6 +423,9 @@ export default function TokensPane({
 
     // Imperative loadMore function (memoized)
     const loadMore = useCallback(async () => {
+        // If no rows are rendered, freeze load-more regardless of which filter caused it.
+        if (rowsRef.current.length === 0) return
+        if (bothEndsVisible) return
         if (loadingMore || !hasMore) return
         setLoadingMore(true)
         try {
@@ -448,11 +462,15 @@ export default function TokensPane({
         } finally {
             setLoadingMore(false)
         }
-    }, [loadingMore, hasMore, currentPage, fetchScannerTyped, filters, dispatch, page, title])
+    }, [loadingMore, hasMore, currentPage, fetchScannerTyped, filters, dispatch, page, title, bothEndsVisible])
 
     // Load more on intersection (infinite scroll)
     useEffect(() => {
         if (!sentinelRef.current) return
+        // If there are no rows (all filtered out), do not attach observer (prevents thrash/infinite requests).
+        if (rowsRef.current.length === 0) return
+        // Disable infinite scroll when both header and footer are visible
+        if (bothEndsVisible) return
         const el = sentinelRef.current
         const observer = new IntersectionObserver((entries) => {
             for (const entry of entries) {
@@ -463,7 +481,7 @@ export default function TokensPane({
         }, { root: null, rootMargin: '200px', threshold: 0 })
         observer.observe(el)
         return () => { observer.unobserve(el); observer.disconnect() }
-    }, [loadMore])
+    }, [loadMore, clientFilters, bothEndsVisible])
 
     // Handler wired to Table row visibility
     const onRowVisibilityChange = useCallback((row: TokenRow, visible: boolean) => {
@@ -709,7 +727,7 @@ export default function TokensPane({
         })
 
         return () => { offFocus(); offApply() }
-    }, [title])
+    }, [title, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, buildPairSlowSubscriptionSafe, buildPairStatsSlowSubscriptionSafe])
 
     // Ensure any stagger timers are cleaned up on unmount
     useEffect(() => {
@@ -737,6 +755,7 @@ export default function TokensPane({
                 sortKey={sort.key}
                 sortDir={sort.dir}
                 onRowVisibilityChange={onRowVisibilityChange}
+                onBothEndsVisible={(v) => { setBothEndsVisible(v) }}
                 onScrollStart={() => {
                     // Enter scrolling: pause any in-flight slow re-subscription schedule and clear its queue
                     scrollingRef.current = true
