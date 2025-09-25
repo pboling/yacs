@@ -96,6 +96,8 @@ export default function TokensPane({
     // - slowResubIntervalRef drives per-second batching; cleared on new scroll or unmount
     const slowResubQueueRef = useRef<string[]>([])
     const slowResubIntervalRef = useRef<number | null>(null)
+    // Start-delay timer for slow re-subscriptions after scroll stop (debounce rapid stop-starts)
+    const slowResubStartTimeoutRef = useRef<number | null>(null)
 
     // Allow App to share a single WebSocket but also support direct sends if present on window.
     useEffect(() => {
@@ -451,6 +453,10 @@ export default function TokensPane({
                 try { window.clearInterval(slowResubIntervalRef.current) } catch { /* no-op */ }
                 slowResubIntervalRef.current = null
             }
+            if (slowResubStartTimeoutRef.current != null) {
+                try { window.clearTimeout(slowResubStartTimeoutRef.current) } catch { /* no-op */ }
+                slowResubStartTimeoutRef.current = null
+            }
             slowResubQueueRef.current = []
         }
     }, [])
@@ -570,6 +576,10 @@ export default function TokensPane({
                             try { window.clearInterval(slowResubIntervalRef.current) } catch { /* no-op */ }
                             slowResubIntervalRef.current = null
                         }
+                        if (slowResubStartTimeoutRef.current != null) {
+                            try { window.clearTimeout(slowResubStartTimeoutRef.current) } catch { /* no-op */ }
+                            slowResubStartTimeoutRef.current = null
+                        }
                         slowResubQueueRef.current = [...slowKeys]
 
                         const tick = () => {
@@ -595,9 +605,12 @@ export default function TokensPane({
                             }
                         }
 
-                        // Kick off schedule: run a first batch immediately, then continue once per second.
-                        tick()
-                        slowResubIntervalRef.current = window.setInterval(tick, 1000)
+                        // Debounced start: wait 1000ms after scroll stop before beginning slow re-subscriptions.
+                        slowResubStartTimeoutRef.current = window.setTimeout(() => {
+                            // run first batch at t=+1s, then continue once per second
+                            tick()
+                            slowResubIntervalRef.current = window.setInterval(tick, 1000)
+                        }, 1000)
                     }
                     // Update tracking sets
                     visibleKeysRef.current = new Set(visKeys)
