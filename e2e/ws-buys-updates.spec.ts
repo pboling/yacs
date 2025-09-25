@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
+import type { Page } from '@playwright/test'
 
-async function getFirstRowCellText(page: import('@playwright/test').Page, table: 'Trending Tokens' | 'New Tokens', nth: number): Promise<string> {
+async function getFirstRowCellText(page: Page, table: 'Trending Tokens' | 'New Tokens', nth: number): Promise<string> {
     const heading = page.getByRole('heading', { name: table })
     await expect(heading).toBeVisible()
     const tableEl = heading.locator('..').locator('table.tokens')

@@ -11,7 +11,7 @@
   - WebSocket logic includes a simple multi-endpoint fallback (dev proxy, env override, public).
   - Sorting is performed client-side; server-side filters are configured per table.
 */
-import {useEffect, useMemo, useReducer} from 'react'
+import {useEffect, useMemo, useReducer, useRef, useState} from 'react'
 import './App.css'
 import {
     NEW_TOKENS_FILTERS,
@@ -300,6 +300,14 @@ function App() {
                             try { console.log('WS: dispatching action', { type: (action as { type: string }).type }) } catch { /* no-op */ }
                             d(action)
 
+                            // Count update events for live rate (tick and pair-stats)
+                            try {
+                                if (event === 'tick' || event === 'pair-stats') {
+                                    // Each event counts as one update occurrence
+                                    updatesCounterRef.current += 1
+                                }
+                            } catch { /* no-op */ }
+
                             // Helpful diagnostics: log compact payload details
                             if (event === 'pair-stats') {
                                 try {
@@ -459,9 +467,68 @@ function App() {
 
     const wpegPrices = (state as unknown as { wpegPrices?: Record<string, number> }).wpegPrices
 
+    // Live update rate tracker: 2s resolution over a 1-minute window (30 samples)
+    const updatesCounterRef = useRef(0)
+    const [rateSeries, setRateSeries] = useState<number[]>([])
+
+    // Compute 1-minute average (per-second) from the last up to 30 samples
+    const avgRate = useMemo(() => {
+        if (rateSeries.length === 0) return 0
+        const sum = rateSeries.reduce((a, b) => a + b, 0)
+        return sum / rateSeries.length
+    }, [rateSeries])
+
+    // Tiny inline Sparkline component
+    const Sparkline = ({ data, width = 120, height = 24 }: { data: number[]; width?: number; height?: number }) => {
+        const pad = 2
+        const w = width
+        const h = height
+        const n = data.length
+        const max = Math.max(1, ...data)
+        const min = 0
+        const xStep = n > 1 ? (w - pad * 2) / (n - 1) : 0
+        const points: string[] = []
+        for (let i = 0; i < n; i++) {
+            const x = pad + i * xStep
+            const y = pad + (h - pad * 2) * (1 - (data[i] - min) / (max - min))
+            points.push(`${x},${y}`)
+        }
+        const path = points.length > 0 ? 'M ' + points.join(' L ') : ''
+        return (
+            <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true" focusable="false">
+                <polyline points={`${pad},${h - pad} ${w - pad},${h - pad}`} stroke="#374151" strokeWidth="1" fill="none" />
+                {path && <path d={path} stroke="#10b981" strokeWidth="1.5" fill="none" />}
+            </svg>
+        )
+    }
+
+    // Sample every 2 seconds and convert count to per-second rate
+    useEffect(() => {
+        const id = setInterval(() => {
+            const count = updatesCounterRef.current
+            updatesCounterRef.current = 0
+            const perSec = count / 2
+            setRateSeries((prev) => {
+                const next = [...prev, perSec]
+                if (next.length > 30) next.splice(0, next.length - 30)
+                return next
+            })
+        }, 2000)
+        return () => { clearInterval(id) }
+    }, [])
+
     return (
         <div style={{padding: '16px 16px 16px 10px'}}>
-            <h1>Dexcelerate Scanner{import.meta.env.DEV ? ` (v${String((state as unknown as { version?: number }).version ?? 0)})` : ''}</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <h1 style={{ margin: 0 }}>Dexcelerate Scanner</h1>
+                <div className="muted" style={{ fontSize: 14 }} title="Average token updates per second over the last 1 minute">
+                    {avgRate.toFixed(2)} upd/s (1m avg)
+                </div>
+                <Sparkline data={rateSeries} />
+                {import.meta.env.DEV && (
+                    <span className="muted" style={{ fontSize: 12 }}>(v{String((state as unknown as { version?: number }).version ?? 0)})</span>
+                )}
+            </div>
             <p className="muted">Demo chainIdToName: {demoMap.chainName}</p>
             {/* Filters Bar */}
             <div className="filters">

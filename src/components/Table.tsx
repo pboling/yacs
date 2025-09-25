@@ -1,7 +1,7 @@
 import NumberCell from './NumberCell'
 import AuditIcons from './AuditIcons'
 import { useEffect, useMemo, useState, useRef } from 'react'
-import { Globe, MessageCircle, Send, ExternalLink } from 'lucide-react'
+import { Globe, MessageCircle, Send, ExternalLink, Eye, PauseCircle, Timer, Snail } from 'lucide-react'
 
 // Local minimal types to avoid circular deps with App
 interface TokenRow {
@@ -49,6 +49,7 @@ export default function Table({
                                    onRowVisibilityChange,
                                    onScrollStart,
                                    onScrollStop,
+                                   getRowStatus,
                                }: {
     title: string
     rows: TokenRow[]
@@ -60,6 +61,7 @@ export default function Table({
     onRowVisibilityChange?: (row: TokenRow, visible: boolean) => void
     onScrollStart?: () => void
     onScrollStop?: (visibleRows: TokenRow[]) => void
+    getRowStatus?: (row: TokenRow) => { state: 'fast' | 'unsubscribed' | 'queued-slow' | 'slow'; tooltip?: string } | undefined
 }) {
     // Dev-only: log a compact snapshot of the first row whenever rows change
     useEffect(() => {
@@ -199,8 +201,11 @@ export default function Table({
     const observerRef = useRef<IntersectionObserver | null>(null)
     const rowMapRef = useRef<Map<Element, TokenRow>>(new Map())
     const visibleElsRef = useRef<Set<Element>>(new Set())
+    // Scroll container ref (overflow: auto)
+    const containerRef = useRef<HTMLDivElement | null>(null)
 
     useEffect(() => {
+        const rootEl = containerRef.current
         const cb: IntersectionObserverCallback = (entries) => {
             for (const e of entries) {
                 const row = rowMapRef.current.get(e.target)
@@ -211,17 +216,60 @@ export default function Table({
                 if (onRowVisibilityChange) onRowVisibilityChange(row, visible)
             }
         }
-        const obs = new IntersectionObserver(cb, { root: null, rootMargin: '0px', threshold: 0 })
+        const obs = new IntersectionObserver(cb, { root: rootEl ?? null, rootMargin: '100px 0px', threshold: 0 })
         observerRef.current = obs
         // Observe any rows already registered
         for (const el of rowMapRef.current.keys()) {
             try { obs.observe(el) } catch { /* ignore observe errors */ }
         }
+        // Proactively compute currently visible rows once to seed visibility and fast subscriptions
+        try {
+            const vis: { el: Element; row: TokenRow }[] = []
+            const contRect = rootEl?.getBoundingClientRect()
+            if (contRect) {
+                const ordered: { el: Element; row: TokenRow }[] = []
+                for (const [el, row] of rowMapRef.current.entries()) {
+                    ordered.push({ el, row })
+                    const r = (el).getBoundingClientRect()
+                    const intersects = r.bottom >= contRect.top && r.top <= contRect.bottom
+                    if (intersects) {
+                        visibleElsRef.current.add(el)
+                        vis.push({ el, row })
+                    } else {
+                        visibleElsRef.current.delete(el)
+                    }
+                }
+                // Expand by +/-3 around the edges of the visible block to account for estimation errors
+                const expandedRows: TokenRow[] = (() => {
+                    if (vis.length === 0) return []
+                    const indices = new Set<number>()
+                    const firstIdx = ordered.findIndex(o => o.el === vis[0].el)
+                    const lastIdx = ordered.findLastIndex ? ordered.findLastIndex(o => o.el === vis[vis.length - 1].el) : (() => {
+                        let idx = -1
+                        for (let i = ordered.length - 1; i >= 0; i--) {
+                            if (ordered[i].el === vis[vis.length - 1].el) { idx = i; break }
+                        }
+                        return idx
+                    })()
+                    const start = Math.max(0, Math.min(firstIdx, lastIdx) - 3)
+                    const end = Math.min(ordered.length - 1, Math.max(firstIdx, lastIdx) + 3)
+                    for (let i = start; i <= end; i++) indices.add(i)
+                    return Array.from(indices).sort((a, b) => a - b).map(i => ordered[i].row)
+                })()
+                // Notify visibility changes for actually intersecting ones
+                for (const { row } of vis) {
+                    try { onRowVisibilityChange?.(row, true) } catch { /* no-op */ }
+                }
+                // Fire a synthetic scroll stop with expanded rows
+                if (onScrollStop) {
+                    try { onScrollStop(expandedRows) } catch { /* no-op */ }
+                }
+            }
+        } catch { /* no-op */ }
         return () => { try { obs.disconnect() } catch { /* ignore disconnect errors */ } }
-    }, [onRowVisibilityChange])
+    }, [onRowVisibilityChange, onScrollStop])
 
     // Scroll start/stop detection to coordinate subscriptions during scroll
-    const containerRef = useRef<HTMLDivElement | null>(null)
     const isScrollingRef = useRef(false)
     const stopTimerRef = useRef<number | null>(null)
 
@@ -241,12 +289,20 @@ export default function Table({
                 isScrollingRef.current = false
                 try {
                     if (onScrollStop) {
-                        const vis: TokenRow[] = []
-                        for (const el of visibleElsRef.current) {
-                            const r = rowMapRef.current.get(el)
-                            if (r) vis.push(r)
+                        // Build ordered list of rows and expand visibility by +/-3 indices around edges
+                        const ordered: { el: Element; row: TokenRow }[] = []
+                        for (const [el, row] of rowMapRef.current.entries()) ordered.push({ el, row })
+                        const visibleIdxs: number[] = []
+                        for (let i = 0; i < ordered.length; i++) {
+                            if (visibleElsRef.current.has(ordered[i].el)) visibleIdxs.push(i)
                         }
-                        onScrollStop(vis)
+                        const expanded: TokenRow[] = []
+                        if (visibleIdxs.length > 0) {
+                            const start = Math.max(0, Math.min(...visibleIdxs) - 3)
+                            const end = Math.min(ordered.length - 1, Math.max(...visibleIdxs) + 3)
+                            for (let i = start; i <= end; i++) expanded.push(ordered[i].row)
+                        }
+                        onScrollStop(expanded)
                     }
                 } catch { /* no-op */ }
             }, 200)
@@ -344,10 +400,37 @@ export default function Table({
                             const suffix = title === 'Trending Tokens' ? 'TREND' : title === 'New Tokens' ? 'NEW' : title.replace(/\s+/g, '-').toUpperCase()
                             const composedId = `${t.id}::${suffix}`
                             return (
-                                <tr key={composedId} ref={(el) => { registerRow(el, t) }}>
+                                <tr key={composedId} data-row-id={composedId} ref={(el) => { registerRow(el, t) }}>
                                     <td>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                            <div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                {(() => {
+                                                    const s = getRowStatus?.(t)
+                                                    if (!s) return null
+                                                    const size = 14
+                                                    const color = s.state === 'fast' ? '#16a34a' : s.state === 'slow' ? '#6b7280' : s.state === 'queued-slow' ? '#f59e0b' : '#9ca3af'
+                                                    const title = s.tooltip ?? ''
+                                                    if (s.state === 'fast') return (
+                                                        <span title={title} aria-label="Subscribed (fast)" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                                            <Eye size={size} color={color} />
+                                                        </span>
+                                                    )
+                                                    if (s.state === 'slow') return (
+                                                        <span title={title} aria-label="Subscribed (slow)" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                                            <Snail size={size} color={color} />
+                                                        </span>
+                                                    )
+                                                    if (s.state === 'queued-slow') return (
+                                                        <span title={title} aria-label="Queued for slow subscription" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                                            <Timer size={size} color={color} />
+                                                        </span>
+                                                    )
+                                                    return (
+                                                        <span title={title} aria-label="Unsubscribed during scroll" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                                            <PauseCircle size={size} color={color} />
+                                                        </span>
+                                                    )
+                                                })()}
                                                 <strong>{t.tokenName}</strong> <span>({t.tokenSymbol})</span>
                                             </div>
                                             <div className="muted" style={{ fontSize: 12 }}>{t.chain}</div>

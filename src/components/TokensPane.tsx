@@ -66,6 +66,9 @@ export default function TokensPane({
     const payloadsRef = useRef<{ pair: string; token: string; chain: string }[]>([])
     const rowsRef = useRef<TokenRow[]>([])
     const scrollingRef = useRef<boolean>(false)
+    // Track last update timestamps per key and previous value snapshots
+    const lastUpdatedRef = useRef<Map<string, number>>(new Map())
+    const prevSnapRef = useRef<Map<string, { price: number; mcap: number; vol: number; buys: number; sells: number; liq: number }>>(new Map())
 
     // Normalize chain to the server's expected id format for subscriptions
     const toChainId = (c: string | number | undefined): string => {
@@ -283,6 +286,22 @@ export default function TokensPane({
     // Keep a ref of latest rows for late WS attach logic
     useEffect(() => {
         rowsRef.current = rows
+        // Update last-updated timestamps by diffing significant fields per key
+        try {
+            const prev = prevSnapRef.current
+            for (const row of rows) {
+                const pair = row.pairAddress
+                const token = row.tokenAddress
+                if (!pair || !token) continue
+                const key = pair + '|' + token + '|' + toChainId(row.chain)
+                const snap = { price: row.priceUsd, mcap: row.mcap, vol: row.volumeUsd, buys: row.transactions.buys, sells: row.transactions.sells, liq: row.liquidity.current }
+                const old = prev.get(key)
+                if (!old || old.price !== snap.price || old.mcap !== snap.mcap || old.vol !== snap.vol || old.buys !== snap.buys || old.sells !== snap.sells || old.liq !== snap.liq) {
+                    lastUpdatedRef.current.set(key, Date.now())
+                    prev.set(key, snap)
+                }
+            }
+        } catch { /* no-op */ }
     }, [rows])
 
     // Log rows derivation once per version to avoid duplicate logs under React StrictMode
@@ -517,6 +536,20 @@ export default function TokensPane({
                     }
                     visibleKeysRef.current.clear()
                     slowKeysRef.current.clear()
+                }}
+                getRowStatus={(row) => {
+                    const pair = row.pairAddress
+                    const token = row.tokenAddress
+                    if (!pair || !token) return undefined
+                    const key = pair + '|' + token + '|' + toChainId(row.chain)
+                    const ts = lastUpdatedRef.current.get(key)
+                    const tooltip = ts ? new Date(ts).toLocaleString() : 'No updates yet'
+                    if (scrollingRef.current) return { state: 'unsubscribed', tooltip }
+                    if (visibleKeysRef.current.has(key)) return { state: 'fast', tooltip }
+                    if (slowKeysRef.current.has(key)) return { state: 'slow', tooltip }
+                    if (slowResubQueueRef.current.includes(key)) return { state: 'queued-slow', tooltip }
+                    // Default: consider as slow if nothing else is known
+                    return { state: 'slow', tooltip }
                 }}
                 onScrollStop={(visibleRows: TokenRow[]) => {
                     const ws = wsRef.current
