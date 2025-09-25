@@ -1,5 +1,7 @@
 /* Global dark theme */
-html, body { background: #0f1115; color: #e5e7eb; }
+html, body, #root { background: #0f1115; color: #e5e7eb; }
+
+body { margin: 0; }
 
 #root {
   margin: 0;
