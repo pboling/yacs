@@ -72,9 +72,9 @@ export function generateScannerResponse(params = {}) {
   const chain = params.chain ?? 'ETH'
   const chainId = chainNameToId(chain)
   const routerMap = {
-    ETH: ['0xROUTER_UNI', '0xROUTER_SUSHI'],
-    BSC: ['0xROUTER_PCS', '0xROUTER_APE'],
-    BASE: ['0xROUTER_BASE'],
+    ETH: ['0xRT_UNI', '0xRT_SUSHI'],
+    BSC: ['0xRT_PCS', '0xRT_APE'],
+    BASE: ['0xRT_BASE'],
     SOL: ['Raydium', 'Orca'],
   }
 

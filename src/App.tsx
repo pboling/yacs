@@ -595,8 +595,16 @@ function App() {
                             onChainCountsChange={(counts) => {
                                 const out: Record<string, number> = {}
                                 for (const c of CHAINS) out[c] = counts[c] ?? 0
-                                setTrendingCounts(out)
+                                // Avoid setState if unchanged to prevent unnecessary rerenders
+                                setTrendingCounts((prev) => {
+                                    let same = true
+                                    for (const k of CHAINS) {
+                                        if ((prev[k] ?? 0) !== (out[k] ?? 0)) { same = false; break }
+                                    }
+                                    return same ? prev : out
+                                })
                             }}
+                            syncSortToUrl
                         />
                 </ErrorBoundary>
                 <ErrorBoundary fallback={(
@@ -618,7 +626,14 @@ function App() {
                             onChainCountsChange={(counts) => {
                                 const out: Record<string, number> = {}
                                 for (const c of CHAINS) out[c] = counts[c] ?? 0
-                                setNewCounts(out)
+                                // Avoid setState if unchanged to prevent unnecessary rerenders
+                                setNewCounts((prev) => {
+                                    let same = true
+                                    for (const k of CHAINS) {
+                                        if ((prev[k] ?? 0) !== (out[k] ?? 0)) { same = false; break }
+                                    }
+                                    return same ? prev : out
+                                })
                             }}
                         />
                 </ErrorBoundary>

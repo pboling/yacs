@@ -44,6 +44,7 @@ export default function TokensPane({
                                         defaultSort,
                                         clientFilters,
                                         onChainCountsChange,
+                                        syncSortToUrl = false,
                                     }: {
     title: string
     filters: GetScannerResultParams
@@ -53,6 +54,7 @@ export default function TokensPane({
     defaultSort: { key: SortKey; dir: Dir }
     clientFilters?: { chains?: string[]; minVolume?: number; maxAgeHours?: number | null; minMcap?: number; excludeHoneypots?: boolean; limit?: number }
     onChainCountsChange?: (counts: Record<string, number>) => void
+    syncSortToUrl?: boolean
 }) {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -387,17 +389,23 @@ export default function TokensPane({
 
     // Sync sort changes to URL query params (?sort=...&dir=...)
     useEffect(() => {
+        if (!syncSortToUrl) return
         try {
             const sp = new URLSearchParams(window.location.search)
             // Write client sort keys directly; server accepts both aliases per README
             sp.set('sort', sort.key)
             sp.set('dir', sort.dir)
-            const next = `${window.location.pathname}?${sp.toString()}`
-            window.history.replaceState(null, '', next)
+            const nextSearch = `?${sp.toString()}`
+            const cur = window.location.pathname + window.location.search
+            const next = window.location.pathname + nextSearch
+            // Avoid redundant history updates which can cause dev-server page flashes
+            if (next !== cur) {
+                window.history.replaceState(null, '', next)
+            }
         } catch {
             // ignore URL errors
         }
-    }, [sort])
+    }, [sort, syncSortToUrl])
 
     // Viewport-gated subscriptions are handled via onRowVisibilityChange below.
 
