@@ -117,7 +117,7 @@ function loadSymbols() {
     const url = new URL('./config/symbols.yaml', import.meta.url)
     const text = fs.readFileSync(url, 'utf-8')
     const lines = text.split(/\r?\n/)
-    const symbols = []
+    const items = []
     for (const raw of lines) {
       const line = raw.trim()
       if (!line || line.startsWith('#')) continue
@@ -128,11 +128,36 @@ function loadSymbols() {
         if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
           v = v.slice(1, -1)
         }
-        if (v) symbols.push(v)
+        if (v) items.push(v)
       }
     }
-    if (symbols.length >= 2000) {
-      CACHED_SYMBOLS = symbols
+
+    // Decide how to interpret the YAML items:
+    // 1) If items are already full symbols with numeric suffix (e.g., apple0001) and we have enough, use as-is.
+    const allAlpha = items.every(w => /^[A-Za-z]+$/.test(w))
+    const allFive = allAlpha && items.every(w => w.length === 5)
+    const allFiveWithSuffix = items.every(w => /^[A-Za-z]{5}\d{4}$/.test(w))
+
+    if (allFiveWithSuffix && items.length >= 2000) {
+      CACHED_SYMBOLS = items
+      return CACHED_SYMBOLS
+    }
+
+    // 2) If the list is purely 5-letter words, expand them with a 4-digit suffix to reach >= 2500.
+    if (allFive && items.length > 0) {
+      const expanded = []
+      const target = Math.max(2000, 2500)
+      for (let i = 1; i <= target; i++) {
+        const word = items[(i - 1) % items.length]
+        expanded.push(`${word}${String(i).padStart(4, '0')}`)
+      }
+      CACHED_SYMBOLS = expanded
+      return CACHED_SYMBOLS
+    }
+
+    // 3) Otherwise (mixed lengths or not strictly 5-letter words), use the list as-is.
+    if (items.length > 0) {
+      CACHED_SYMBOLS = items
       return CACHED_SYMBOLS
     }
   } catch (e) {
@@ -186,6 +211,22 @@ export function generateScannerResponse(params = {}) {
 
   const items = []
   const now = Date.now()
+
+  // Prepare a deterministic shuffled order of symbols and a per-page offset so that:
+  // - Selection appears random yet is reproducible for the same params/seed
+  // - Symbols are not repeated until the full list has been traversed; then it resets
+  const SYMBOLS = loadSymbols()
+  const shuffleSeed = mixSeeds(seed, 0x53484F46) // arbitrary salt ('SHOF') for symbol order
+  const rndSym = mulberry32(shuffleSeed)
+  const indices = Array.from({ length: SYMBOLS.length }, (_, i) => i)
+  for (let j = indices.length - 1; j > 0; j--) {
+    const k = Math.floor(rndSym() * (j + 1))
+    const tmp = indices[j]
+    indices[j] = indices[k]
+    indices[k] = tmp
+  }
+  const offset = ((page - 1) * size) % indices.length
+
   for (let i = 0; i < size; i++) {
     const createdAgoMs = Math.floor(rnd() * 7 * 24 * 3600 * 1000) // up to 7 days
     const ageIso = new Date(now - createdAgoMs).toISOString()
@@ -203,9 +244,13 @@ export function generateScannerResponse(params = {}) {
     const token0Decimals = 18
     const token1Supply = Math.floor(1_000_000 + rnd() * 1_000_000_000)
 
-    const SYMBOLS = loadSymbols()
-    const token1Symbol = SYMBOLS[Math.floor(rnd() * SYMBOLS.length)]
+    const symbolIndex = indices[(offset + i) % indices.length]
+    const token1Symbol = SYMBOLS[symbolIndex]
     const token1Name = `${token1Symbol}-${chain}`
+
+    // Maintain rnd() consumption parity with previous implementation to keep
+    // downstream deterministic streams (tests depend on it)
+    void rnd()
 
     const pairAddress = mkAddress('PAIR', rnd)
     const token1Address = mkAddress('TKN', rnd)

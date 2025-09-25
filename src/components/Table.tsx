@@ -46,6 +46,14 @@ function formatAge(ts: Date) {
     return String(days) + 'd'
 }
 
+function ellipsed(input: string, length = 5) {
+    if (typeof input !== 'string') return ''
+    if (length <= 0) return ''
+    if (input.length <= length) return input
+    // Use a single Unicode ellipsis character for compact display
+    return input.slice(0, Math.max(1, length - 1)) + '…'
+}
+
 export default function Table({
                                    title,
                                    rows,
@@ -499,9 +507,8 @@ export default function Table({
                                                         </span>
                                                     )
                                                 })()}
-                                                <strong>{t.tokenName}</strong> <span>({t.tokenSymbol})</span>
+                                                <strong title={`${t.tokenName}/${t.tokenSymbol}/${t.chain}`}>{`${ellipsed(t.tokenName + '/' + t.tokenSymbol, 6)}/${t.chain}`}</strong>
                                             </div>
-                                            <div className="muted" style={{ fontSize: 12 }}>{t.chain}</div>
                                             {(() => {
                                                 const { linkWebsite, linkTwitter, linkTelegram, linkDiscord } = t.audit ?? {}
                                                 const hasAnyLink = [linkWebsite, linkTwitter, linkTelegram, linkDiscord].some(Boolean)

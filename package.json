@@ -15,7 +15,8 @@
     "test": "node --test",
     "test:e2e": "TEST_FAST=1 playwright test",
     "test:e2e:ui": "TEST_FAST=1 playwright test --ui",
-    "test:all": "npm run lint && node --test && npm run test:e2e"
+    "test:all": "npm run lint && node --test && npm run test:e2e",
+    "generate-symbols": "node scripts/generate-symbols-from-scowl.mjs"
   },
   "dependencies": {
     "react": "^19.1.1",
