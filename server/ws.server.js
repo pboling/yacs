@@ -64,7 +64,10 @@ export function attachWsServer(server) {
         const BASE_SEED = getBaseSeed()
                 // Resolve timing for this connection (reads env at runtime)
                 const { TICK_INTERVAL_MS, MAX_STAGGER_MS } = getTiming()
-        const SLOW_FACTOR = 25
+        // Default slow factor fallback; overridden per-key using dynamic ratio to total rows
+        const DEFAULT_SLOW_FACTOR = 50
+        /** @type {Map<string, number>} */
+        const slowFactorByKey = new Map()
 
         function hash32(str) {
             let h = 2166136261 >>> 0
@@ -96,6 +99,13 @@ export function attachWsServer(server) {
             const rnd = mulberry32(seed)
             return Number((rnd() * 10).toFixed(3)) || 0.001
         }
+        function computeSlowFactor() {
+            const total = itemsByKey.size || 1
+            // Variable rate grows with table size so non-visible rows update less frequently as dataset grows
+            // Example mapping: 0-200 rows → 50; 400 → 100; 800 → 200, etc.
+            return Math.max(DEFAULT_SLOW_FACTOR, Math.ceil(total / 4))
+        }
+        
         function startStreamFor(item) {
             const pairKey = item.pairAddress + '|' + item.token1Address + '|' + String(item.chainId)
             if (tickTimers.has(pairKey) || warmupTimers.has(pairKey)) return
@@ -118,7 +128,8 @@ export function attachWsServer(server) {
                 const isFast = subs.pairsFast.has(key)
                 const isSlow = subs.pairsSlow.has(key)
                 if (isFast || isSlow) {
-                    const shouldSendTick = isFast || (isSlow && (n % SLOW_FACTOR === 0))
+                    const slowFactor = slowFactorByKey.get(key) ?? DEFAULT_SLOW_FACTOR
+                    const shouldSendTick = isFast || (isSlow && (n % slowFactor === 0))
                     if (shouldSendTick) {
                         const tick = {
                             event: 'tick',
@@ -135,7 +146,8 @@ export function attachWsServer(server) {
                     const isStatsFast = subs.statsFast.has(key)
                     const isStatsSlow = subs.statsSlow.has(key)
                     if (isStatsFast || isStatsSlow) {
-                        const shouldSendStats = isStatsFast ? (n % 2 === 0) : (n % SLOW_FACTOR === 0)
+                        const slowFactorStats = slowFactorByKey.get(key) ?? DEFAULT_SLOW_FACTOR
+                        const shouldSendStats = isStatsFast ? (n % 2 === 0) : (n % slowFactorStats === 0)
                         if (shouldSendStats) {
                             const ver = ((hash32(pairKey) + n) & 1) === 0
                             const hp = ((hash32(pairKey) ^ n) & 3) === 0
@@ -241,6 +253,7 @@ export function attachWsServer(server) {
                 const key = p?.pair + '|' + p?.token + '|' + p?.chain
                 subs.pairsFast.add(key)
                 subs.pairsSlow.delete(key)
+                slowFactorByKey.delete(key)
                 let item = itemsByKey.get(key)
                 if (!item) {
                     // Be tolerant to chain format mismatches (e.g., 'ETH' vs '1'): try to resolve by pair+token only
@@ -286,6 +299,7 @@ export function attachWsServer(server) {
                 const key = p?.pair + '|' + p?.token + '|' + p?.chain
                 subs.pairsSlow.add(key)
                 subs.pairsFast.delete(key)
+                slowFactorByKey.set(key, computeSlowFactor())
                 let item = itemsByKey.get(key)
                 if (!item && p && p.pair && p.token) {
                     const toId = (c) => {
@@ -309,11 +323,13 @@ export function attachWsServer(server) {
                 const key = p?.pair + '|' + p?.token + '|' + p?.chain
                 subs.pairsFast.delete(key)
                 subs.pairsSlow.delete(key)
+                slowFactorByKey.delete(key)
             } else if (ev === 'subscribe-pair-stats') {
                 const p = msg.data
                 const key = p?.pair + '|' + p?.token + '|' + p?.chain
                 subs.statsFast.add(key)
                 subs.statsSlow.delete(key)
+                slowFactorByKey.delete(key)
                 // If only stats subscription arrives first, also start stream so that stats get emitted too
                 let item = itemsByKey.get(key)
                 if (!item) {
@@ -355,6 +371,7 @@ export function attachWsServer(server) {
                 const key = p?.pair + '|' + p?.token + '|' + p?.chain
                 subs.statsSlow.add(key)
                 subs.statsFast.delete(key)
+                slowFactorByKey.set(key, computeSlowFactor())
                 // If only stats-slow arrives first, also start stream
                 let item = itemsByKey.get(key)
                 if (!item && p && p.pair && p.token) {
@@ -379,6 +396,7 @@ export function attachWsServer(server) {
                 const key = p?.pair + '|' + p?.token + '|' + p?.chain
                 subs.statsFast.delete(key)
                 subs.statsSlow.delete(key)
+                slowFactorByKey.delete(key)
             }
         })
 
@@ -391,6 +409,7 @@ export function attachWsServer(server) {
             warmupTimers.clear()
             for (const t of tickTimers.values()) clearInterval(t)
             tickTimers.clear()
+            slowFactorByKey.clear()
         })
     })
 
