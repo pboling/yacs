@@ -47,6 +47,8 @@ export default function Table({
                                    sortKey,
                                    sortDir,
                                    onRowVisibilityChange,
+                                   onScrollStart,
+                                   onScrollStop,
                                }: {
     title: string
     rows: TokenRow[]
@@ -56,6 +58,8 @@ export default function Table({
     sortKey: SortKey
     sortDir: 'asc' | 'desc'
     onRowVisibilityChange?: (row: TokenRow, visible: boolean) => void
+    onScrollStart?: () => void
+    onScrollStop?: (visibleRows: TokenRow[]) => void
 }) {
     // Dev-only: log a compact snapshot of the first row whenever rows change
     useEffect(() => {
@@ -194,15 +198,17 @@ export default function Table({
     // IntersectionObserver for row visibility
     const observerRef = useRef<IntersectionObserver | null>(null)
     const rowMapRef = useRef<Map<Element, TokenRow>>(new Map())
+    const visibleElsRef = useRef<Set<Element>>(new Set())
 
     useEffect(() => {
-        if (!onRowVisibilityChange) return
         const cb: IntersectionObserverCallback = (entries) => {
             for (const e of entries) {
                 const row = rowMapRef.current.get(e.target)
                 if (!row) continue
                 const visible = e.isIntersecting || e.intersectionRatio > 0
-                onRowVisibilityChange(row, visible)
+                if (visible) visibleElsRef.current.add(e.target)
+                else visibleElsRef.current.delete(e.target)
+                if (onRowVisibilityChange) onRowVisibilityChange(row, visible)
             }
         }
         const obs = new IntersectionObserver(cb, { root: null, rootMargin: '0px', threshold: 0 })
@@ -213,6 +219,52 @@ export default function Table({
         }
         return () => { try { obs.disconnect() } catch { /* ignore disconnect errors */ } }
     }, [onRowVisibilityChange])
+
+    // Scroll start/stop detection to coordinate subscriptions during scroll
+    const containerRef = useRef<HTMLDivElement | null>(null)
+    const isScrollingRef = useRef(false)
+    const stopTimerRef = useRef<number | null>(null)
+
+    useEffect(() => {
+        const handleScrollOrWheel = () => {
+            // start
+            if (!isScrollingRef.current) {
+                isScrollingRef.current = true
+                try { onScrollStart?.() } catch { /* no-op */ }
+            }
+            // debounce stop
+            if (stopTimerRef.current != null) {
+                window.clearTimeout(stopTimerRef.current)
+                stopTimerRef.current = null
+            }
+            stopTimerRef.current = window.setTimeout(() => {
+                isScrollingRef.current = false
+                try {
+                    if (onScrollStop) {
+                        const vis: TokenRow[] = []
+                        for (const el of visibleElsRef.current) {
+                            const r = rowMapRef.current.get(el)
+                            if (r) vis.push(r)
+                        }
+                        onScrollStop(vis)
+                    }
+                } catch { /* no-op */ }
+            }, 200)
+        }
+        const win = window
+        const cont = containerRef.current
+        win.addEventListener('scroll', handleScrollOrWheel, { passive: true })
+        win.addEventListener('wheel', handleScrollOrWheel, { passive: true })
+        cont?.addEventListener('scroll', handleScrollOrWheel, { passive: true })
+        cont?.addEventListener('wheel', handleScrollOrWheel, { passive: true })
+        return () => {
+            win.removeEventListener('scroll', handleScrollOrWheel)
+            win.removeEventListener('wheel', handleScrollOrWheel)
+            cont?.removeEventListener('scroll', handleScrollOrWheel)
+            cont?.removeEventListener('wheel', handleScrollOrWheel)
+            if (stopTimerRef.current != null) window.clearTimeout(stopTimerRef.current)
+        }
+    }, [onScrollStart, onScrollStop])
 
     function registerRow(el: HTMLTableRowElement | null, row: TokenRow) {
         const obs = observerRef.current
@@ -255,7 +307,7 @@ export default function Table({
                 {loading && <div className="status">Loading…</div>}
                 {error && <div className="status error">{error}</div>}
                 {!loading && !error && rows.length === 0 && <div className="status">No data</div>}
-                <div className="table-wrap" style={{ width: '100%' }}>
+                <div ref={containerRef} className="table-wrap" style={{ width: '100%' }}>
                     <table className="tokens">
                         <thead>
                         <tr>

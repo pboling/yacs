@@ -70,7 +70,7 @@ Note on CORS: The dev proxy avoids the need for a CORS extension during developm
 
 ## Requirements
 
-Runtime behavior (dev and prod): On page load, the app performs an initial GET /scanner to fetch the initial dataset for both tables, and it also opens a WebSocket connection and subscribes to updates (scanner-filter and per-pair/per-pair-stats). This is true in all environments. In dev, REST may come from a local mock while WebSocket updates flow from the public API via the /ws proxy.
+Runtime behavior (dev and prod): On page load, the app performs an initial GET /scanner to fetch the initial dataset for both tables, and it also opens a WebSocket connection and subscribes to updates (scanner-filter and per-pair/per-pair-stats). This is true in all environments.
 
 ### 1. Component Structure
 

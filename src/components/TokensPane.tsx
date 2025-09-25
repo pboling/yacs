@@ -64,6 +64,7 @@ export default function TokensPane({
     const wsRef = useRef<WebSocket | null>(null)
     const payloadsRef = useRef<{ pair: string; token: string; chain: string }[]>([])
     const rowsRef = useRef<TokenRow[]>([])
+    const scrollingRef = useRef<boolean>(false)
 
     // Normalize chain to the server's expected id format for subscriptions
     const toChainId = (c: string | number | undefined): string => {
@@ -86,8 +87,9 @@ export default function TokensPane({
     const buildPairStatsSlowSubscriptionSafe = buildPairStatsSlowSubscription as unknown as (p: { pair: string; token: string; chain: string }) => { event: 'subscribe-pair-stats-slow'; data: { pair: string; token: string; chain: string } }
     const computePairPayloadsSafe = computePairPayloads as unknown as (items: ScannerResult[] | unknown[]) => { pair: string; token: string; chain: string }[]
 
-    // Track currently visible subscription keys (pair|token|chain)
+    // Track currently visible and slow subscription keys (pair|token|chain)
     const visibleKeysRef = useRef<Set<string>>(new Set())
+    const slowKeysRef = useRef<Set<string>>(new Set())
 
     // Allow App to share a single WebSocket but also support direct sends if present on window.
     useEffect(() => {
@@ -366,16 +368,20 @@ export default function TokensPane({
 
     // Handler wired to Table row visibility
     const onRowVisibilityChange = useCallback((row: TokenRow, visible: boolean) => {
+        if (scrollingRef.current) return
         const pair = row.pairAddress
         const token = row.tokenAddress
         if (!pair || !token) return
         const chain = toChainId(row.chain)
         const key = pair + '|' + token + '|' + chain
-        const set = visibleKeysRef.current
+        const fastSet = visibleKeysRef.current
+        const slowSet = slowKeysRef.current
         const ws = wsRef.current
         if (visible) {
-            if (!set.has(key)) {
-                set.add(key)
+            // promote to fast
+            slowSet.delete(key)
+            if (!fastSet.has(key)) {
+                fastSet.add(key)
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     try {
                         ws.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
@@ -386,16 +392,15 @@ export default function TokensPane({
                 }
             }
         } else {
-            if (set.has(key)) {
-                set.delete(key)
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    try {
-                        // Switch to slow subscriptions instead of fully unsubscribing so off-viewport rows keep updating more slowly
-                        ws.send(JSON.stringify(buildPairSlowSubscriptionSafe({ pair, token, chain })))
-                        ws.send(JSON.stringify(buildPairStatsSlowSubscriptionSafe({ pair, token, chain })))
-                    } catch (err) {
-                        console.error(`[TokensPane:${title}] slow-subscribe failed for`, key, err)
-                    }
+            if (fastSet.has(key)) fastSet.delete(key)
+            if (!slowSet.has(key)) slowSet.add(key)
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                try {
+                    // Switch to slow subscriptions instead of fully unsubscribing so off-viewport rows keep updating more slowly
+                    ws.send(JSON.stringify(buildPairSlowSubscriptionSafe({ pair, token, chain })))
+                    ws.send(JSON.stringify(buildPairStatsSlowSubscriptionSafe({ pair, token, chain })))
+                } catch (err) {
+                    console.error(`[TokensPane:${title}] slow-subscribe failed for`, key, err)
                 }
             }
         }
@@ -433,6 +438,76 @@ export default function TokensPane({
                 sortKey={sort.key}
                 sortDir={sort.dir}
                 onRowVisibilityChange={onRowVisibilityChange}
+                onScrollStart={() => {
+                    scrollingRef.current = true
+                    const ws = wsRef.current
+                    const allKeys = new Set<string>([...visibleKeysRef.current, ...slowKeysRef.current])
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        for (const key of allKeys) {
+                            const [pair, token, chain] = key.split('|')
+                            try {
+                                ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
+                                ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+                            } catch (err) {
+                                console.error(`[TokensPane:${title}] bulk-unsubscribe failed for`, key, String(err))
+                            }
+                        }
+                    }
+                    visibleKeysRef.current.clear()
+                    slowKeysRef.current.clear()
+                }}
+                onScrollStop={(visibleRows: TokenRow[]) => {
+                    const ws = wsRef.current
+                    scrollingRef.current = false
+                    // Compute visible keys
+                    const visKeys: string[] = []
+                    for (const row of visibleRows) {
+                        const pair = row.pairAddress
+                        const token = row.tokenAddress
+                        if (!pair || !token) continue
+                        const chain = toChainId(row.chain)
+                        const key = pair + '|' + token + '|' + chain
+                        visKeys.push(key)
+                    }
+                    const visSet = new Set(visKeys)
+                    const allRenderedKeys: string[] = []
+                    for (const row of rowsRef.current) {
+                        const pair = row.pairAddress
+                        const token = row.tokenAddress
+                        if (!pair || !token) continue
+                        const chain = toChainId(row.chain)
+                        allRenderedKeys.push(pair + '|' + token + '|' + chain)
+                    }
+                    const slowKeys: string[] = []
+                    for (const key of allRenderedKeys) {
+                        if (!visSet.has(key)) slowKeys.push(key)
+                    }
+
+                    // Fast subscribe visible, slow subscribe others
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        for (const key of visKeys) {
+                            const [pair, token, chain] = key.split('|')
+                            try {
+                                ws.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
+                                ws.send(JSON.stringify(buildPairStatsSubscriptionSafe({ pair, token, chain })))
+                            } catch (err) {
+                                console.error(`[TokensPane:${title}] resubscribe fast failed for`, key, String(err))
+                            }
+                        }
+                        for (const key of slowKeys) {
+                            const [pair, token, chain] = key.split('|')
+                            try {
+                                ws.send(JSON.stringify(buildPairSlowSubscriptionSafe({ pair, token, chain })))
+                                ws.send(JSON.stringify(buildPairStatsSlowSubscriptionSafe({ pair, token, chain })))
+                            } catch (err) {
+                                console.error(`[TokensPane:${title}] resubscribe slow failed for`, key, String(err))
+                            }
+                        }
+                    }
+                    // Update tracking sets
+                    visibleKeysRef.current = new Set(visKeys)
+                    slowKeysRef.current = new Set(slowKeys)
+                }}
             />
             <div ref={sentinelRef} style={{ height: 1 }} />
             {loadingMore && <div className="status">Loading more…</div>}
