@@ -53,8 +53,8 @@ export function attachWsServer(server) {
     wss.on('connection', (ws) => {
         // Avoid unhandled error events keeping the process alive in tests
         try { ws.on('error', () => {}) } catch { /* no-op */ }
-        /** @type {{ pairs: Set<string>, stats: Set<string> }} */
-        const subs = { pairs: new Set(), stats: new Set() }
+        /** @type {{ pairsFast: Set<string>, pairsSlow: Set<string>, statsFast: Set<string>, statsSlow: Set<string> }} */
+        const subs = { pairsFast: new Set(), pairsSlow: new Set(), statsFast: new Set(), statsSlow: new Set() }
         /** @type {Map<string, NodeJS.Timeout>} */
         const tickTimers = new Map()
         /** @type {Map<string, NodeJS.Timeout>} */
@@ -64,6 +64,7 @@ export function attachWsServer(server) {
         const BASE_SEED = getBaseSeed()
                 // Resolve timing for this connection (reads env at runtime)
                 const { TICK_INTERVAL_MS, MAX_STAGGER_MS } = getTiming()
+        const SLOW_FACTOR = 25
 
         function hash32(str) {
             let h = 2166136261 >>> 0
@@ -113,34 +114,46 @@ export function attachWsServer(server) {
                         ? 'So11111111111111111111111111111111111111112'
                         : '0xWETH'
                 const isBuyTick = (n % 2) === 1 // odd ticks → buys (token0 in), even ticks → sells (token1 in)
-                const tick = {
-                    event: 'tick',
-                    data: {
-                        pair: { pair: item.pairAddress, token: item.token1Address, chain: String(item.chainId) },
-                        swaps: [
-                            { isOutlier: true, priceToken1Usd: String(Math.max(0.000001, basePrice * 0.5)), tokenInAddress: item.token1Address, amountToken1: '1', token0Address },
-                            { isOutlier: false, priceToken1Usd: String(price), tokenInAddress: isBuyTick ? token0Address : item.token1Address, amountToken1: amt, token0Address },
-                        ],
-                    },
-                }
-                safeSend(ws, tick)
-                // Emit pair-stats derived from seed + tick more frequently so tests don't time out
-                if (n % 2 === 0) {
-                    const ver = ((hash32(pairKey) + n) & 1) === 0
-                    const hp = ((hash32(pairKey) ^ n) & 3) === 0
-                    const stats = {
-                        event: 'pair-stats',
-                        data: {
-                            pair: {
-                                pairAddress: item.pairAddress,
-                                token1IsHoneypot: hp,
-                                isVerified: ver,
-                                mintAuthorityRenounced: true,
-                                freezeAuthorityRenounced: true,
+                const key = item.pairAddress + '|' + item.token1Address + '|' + String(item.chainId)
+                const isFast = subs.pairsFast.has(key)
+                const isSlow = subs.pairsSlow.has(key)
+                if (isFast || isSlow) {
+                    const shouldSendTick = isFast || (isSlow && (n % SLOW_FACTOR === 0))
+                    if (shouldSendTick) {
+                        const tick = {
+                            event: 'tick',
+                            data: {
+                                pair: { pair: item.pairAddress, token: item.token1Address, chain: String(item.chainId) },
+                                swaps: [
+                                    { isOutlier: true, priceToken1Usd: String(Math.max(0.000001, basePrice * 0.5)), tokenInAddress: item.token1Address, amountToken1: '1', token0Address },
+                                    { isOutlier: false, priceToken1Usd: String(price), tokenInAddress: isBuyTick ? token0Address : item.token1Address, amountToken1: amt, token0Address },
+                                ],
                             },
-                        },
+                        }
+                        safeSend(ws, tick)
                     }
-                    safeSend(ws, stats)
+                    const isStatsFast = subs.statsFast.has(key)
+                    const isStatsSlow = subs.statsSlow.has(key)
+                    if (isStatsFast || isStatsSlow) {
+                        const shouldSendStats = isStatsFast ? (n % 2 === 0) : (n % SLOW_FACTOR === 0)
+                        if (shouldSendStats) {
+                            const ver = ((hash32(pairKey) + n) & 1) === 0
+                            const hp = ((hash32(pairKey) ^ n) & 3) === 0
+                            const stats = {
+                                event: 'pair-stats',
+                                data: {
+                                    pair: {
+                                        pairAddress: item.pairAddress,
+                                        token1IsHoneypot: hp,
+                                        isVerified: ver,
+                                        mintAuthorityRenounced: true,
+                                        freezeAuthorityRenounced: true,
+                                    },
+                                },
+                            }
+                            safeSend(ws, stats)
+                        }
+                    }
                 }
             }
 
@@ -189,8 +202,8 @@ export function attachWsServer(server) {
                     const item = res.scannerPairs[i]
                     if (!item) continue
                     const pairKey = item.pairAddress + '|' + item.token1Address + '|' + String(item.chainId)
-                    subs.pairs.add(pairKey)
-                    subs.stats.add(pairKey)
+                    subs.pairsFast.add(pairKey)
+                    subs.statsFast.add(pairKey)
                     startStreamFor(item)
                 }
 
@@ -216,8 +229,8 @@ export function attachWsServer(server) {
                         // Emit append event
                         safeSend(ws, { event: 'scanner-append', data: { page, scannerPairs: [newItem] } })
                         // Auto-subscribe streams for the new item so it starts updating in UI
-                        subs.pairs.add(pairKey2)
-                        subs.stats.add(pairKey2)
+                        subs.pairsFast.add(pairKey2)
+                        subs.statsFast.add(pairKey2)
                         startStreamFor(newItem)
                     }, appendIntervalMs)
                     try { (interval).unref && (interval).unref() } catch { /* no-op */ }
@@ -226,7 +239,8 @@ export function attachWsServer(server) {
             } else if (ev === 'subscribe-pair') {
                 const p = msg.data
                 const key = p?.pair + '|' + p?.token + '|' + p?.chain
-                subs.pairs.add(key)
+                subs.pairsFast.add(key)
+                subs.pairsSlow.delete(key)
                 let item = itemsByKey.get(key)
                 if (!item) {
                     // Be tolerant to chain format mismatches (e.g., 'ETH' vs '1'): try to resolve by pair+token only
@@ -267,10 +281,39 @@ export function attachWsServer(server) {
                     itemsByKey.set(stubKey, item)
                 }
                 if (item) startStreamFor(item)
+            } else if (ev === 'subscribe-pair-slow') {
+                const p = msg.data
+                const key = p?.pair + '|' + p?.token + '|' + p?.chain
+                subs.pairsSlow.add(key)
+                subs.pairsFast.delete(key)
+                let item = itemsByKey.get(key)
+                if (!item && p && p.pair && p.token) {
+                    const toId = (c) => {
+                        const n = Number(c)
+                        if (Number.isFinite(n)) return n
+                        const s = String(c || '').toUpperCase()
+                        if (s === 'ETH') return 1
+                        if (s === 'BSC') return 56
+                        if (s === 'BASE') return 8453
+                        if (s === 'SOL') return 900
+                        return 1
+                    }
+                    const chainId = toId(p.chain)
+                    item = { pairAddress: String(p.pair), token1Address: String(p.token), chainId, price: '1.0' }
+                    const stubKey = item.pairAddress + '|' + item.token1Address + '|' + String(item.chainId)
+                    itemsByKey.set(stubKey, item)
+                }
+                if (item) startStreamFor(item)
+            } else if (ev === 'unsubscribe-pair') {
+                const p = msg.data
+                const key = p?.pair + '|' + p?.token + '|' + p?.chain
+                subs.pairsFast.delete(key)
+                subs.pairsSlow.delete(key)
             } else if (ev === 'subscribe-pair-stats') {
                 const p = msg.data
                 const key = p?.pair + '|' + p?.token + '|' + p?.chain
-                subs.stats.add(key)
+                subs.statsFast.add(key)
+                subs.statsSlow.delete(key)
                 // If only stats subscription arrives first, also start stream so that stats get emitted too
                 let item = itemsByKey.get(key)
                 if (!item) {
@@ -307,12 +350,43 @@ export function attachWsServer(server) {
                     itemsByKey.set(stubKey, item)
                 }
                 if (item) startStreamFor(item)
+            } else if (ev === 'subscribe-pair-stats-slow') {
+                const p = msg.data
+                const key = p?.pair + '|' + p?.token + '|' + p?.chain
+                subs.statsSlow.add(key)
+                subs.statsFast.delete(key)
+                // If only stats-slow arrives first, also start stream
+                let item = itemsByKey.get(key)
+                if (!item && p && p.pair && p.token) {
+                    const toId = (c) => {
+                        const n = Number(c)
+                        if (Number.isFinite(n)) return n
+                        const s = String(c || '').toUpperCase()
+                        if (s === 'ETH') return 1
+                        if (s === 'BSC') return 56
+                        if (s === 'BASE') return 8453
+                        if (s === 'SOL') return 900
+                        return 1
+                    }
+                    const chainId = toId(p.chain)
+                    item = { pairAddress: String(p.pair), token1Address: String(p.token), chainId, price: '1.0' }
+                    const stubKey = item.pairAddress + '|' + item.token1Address + '|' + String(item.chainId)
+                    itemsByKey.set(stubKey, item)
+                }
+                if (item) startStreamFor(item)
+            } else if (ev === 'unsubscribe-pair-stats') {
+                const p = msg.data
+                const key = p?.pair + '|' + p?.token + '|' + p?.chain
+                subs.statsFast.delete(key)
+                subs.statsSlow.delete(key)
             }
         })
 
         ws.on('close', () => {
-            subs.pairs.clear()
-            subs.stats.clear()
+            subs.pairsFast.clear()
+            subs.pairsSlow.clear()
+            subs.statsFast.clear()
+            subs.statsSlow.clear()
             for (const t of warmupTimers.values()) clearTimeout(t)
             warmupTimers.clear()
             for (const t of tickTimers.values()) clearInterval(t)

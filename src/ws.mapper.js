@@ -29,12 +29,18 @@ export function buildScannerUnsubscription(params) {
 export function buildPairSubscription({ pair, token, chain }) {
   return { event: 'subscribe-pair', data: { pair, token, chain } }
 }
+export function buildPairSlowSubscription({ pair, token, chain }) {
+  return { event: 'subscribe-pair-slow', data: { pair, token, chain } }
+}
 export function buildPairUnsubscription({ pair, token, chain }) {
   return { event: 'unsubscribe-pair', data: { pair, token, chain } }
 }
 
 export function buildPairStatsSubscription({ pair, token, chain }) {
   return { event: 'subscribe-pair-stats', data: { pair, token, chain } }
+}
+export function buildPairStatsSlowSubscription({ pair, token, chain }) {
+  return { event: 'subscribe-pair-stats-slow', data: { pair, token, chain } }
 }
 export function buildPairStatsUnsubscription({ pair, token, chain }) {
   return { event: 'unsubscribe-pair-stats', data: { pair, token, chain } }

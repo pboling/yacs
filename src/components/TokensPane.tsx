@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Table from './Table'
 import { fetchScanner } from '../scanner.client.js'
-import { buildPairStatsSubscription, buildPairSubscription, buildPairUnsubscription, buildPairStatsUnsubscription } from '../ws.mapper.js'
+import { buildPairStatsSubscription, buildPairSubscription, buildPairUnsubscription, buildPairStatsUnsubscription, buildPairSlowSubscription, buildPairStatsSlowSubscription } from '../ws.mapper.js'
 import { computePairPayloads } from '../ws.subs.js'
 import type { GetScannerResultParams, ScannerResult } from '../test-task-types'
 
@@ -81,7 +81,9 @@ export default function TokensPane({
     // Fetch function as typed alias to keep TS happy with JS module
     const fetchScannerTyped = fetchScanner as unknown as (p: GetScannerResultParams) => Promise<{ raw: { page?: number | null; scannerPairs?: ScannerResult[] | null } }>
     const buildPairSubscriptionSafe = buildPairSubscription as unknown as (p: { pair: string; token: string; chain: string }) => { event: 'subscribe-pair'; data: { pair: string; token: string; chain: string } }
+    const buildPairSlowSubscriptionSafe = buildPairSlowSubscription as unknown as (p: { pair: string; token: string; chain: string }) => { event: 'subscribe-pair-slow'; data: { pair: string; token: string; chain: string } }
     const buildPairStatsSubscriptionSafe = buildPairStatsSubscription as unknown as (p: { pair: string; token: string; chain: string }) => { event: 'subscribe-pair-stats'; data: { pair: string; token: string; chain: string } }
+    const buildPairStatsSlowSubscriptionSafe = buildPairStatsSlowSubscription as unknown as (p: { pair: string; token: string; chain: string }) => { event: 'subscribe-pair-stats-slow'; data: { pair: string; token: string; chain: string } }
     const computePairPayloadsSafe = computePairPayloads as unknown as (items: ScannerResult[] | unknown[]) => { pair: string; token: string; chain: string }[]
 
     // Track currently visible subscription keys (pair|token|chain)
@@ -388,15 +390,16 @@ export default function TokensPane({
                 set.delete(key)
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     try {
-                        ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
-                        ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+                        // Switch to slow subscriptions instead of fully unsubscribing so off-viewport rows keep updating more slowly
+                        ws.send(JSON.stringify(buildPairSlowSubscriptionSafe({ pair, token, chain })))
+                        ws.send(JSON.stringify(buildPairStatsSlowSubscriptionSafe({ pair, token, chain })))
                     } catch (err) {
-                        console.error(`[TokensPane:${title}] unsubscribe failed for`, key, err)
+                        console.error(`[TokensPane:${title}] slow-subscribe failed for`, key, err)
                     }
                 }
             }
         }
-    }, [title, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe])
+    }, [title, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, buildPairSlowSubscriptionSafe, buildPairStatsSlowSubscriptionSafe])
 
     // Unsubscribe all visible on unmount (outside dev optional)
     useEffect(() => {
