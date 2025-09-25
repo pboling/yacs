@@ -29,6 +29,58 @@ import { emitFilterFocusStart, emitFilterApplyComplete } from './filter.bus.js'
 import { fetchScanner } from './scanner.client.js'
 import { getCount } from './visibility.bus.js'
 
+// Theme allow-list and cookie helpers
+const THEME_ALLOW = ['cherry-sour', 'rocket-lake'] as const
+export type ThemeName = typeof THEME_ALLOW[number]
+function readThemeCookie(): ThemeName {
+    try {
+        const m = /(?:^|; )theme=([^;]+)/.exec(document.cookie)
+        const v = m?.[1] ? decodeURIComponent(m[1]) : 'cherry-sour'
+        return (THEME_ALLOW as readonly string[]).includes(v) ? (v as ThemeName) : 'cherry-sour'
+    } catch { return 'cherry-sour' }
+}
+function writeThemeCookie(v: ThemeName) {
+    try {
+        document.cookie = 'theme=' + encodeURIComponent(v) + '; path=/; max-age=' + String(60 * 60 * 24 * 365)
+    } catch { /* no-op */ }
+}
+
+function TopBar({ title, avgRate, rateSeries, version, theme, onThemeChange }: {
+    title: string
+    avgRate: number
+    rateSeries: number[]
+    version: number
+    theme: ThemeName
+    onThemeChange: (v: ThemeName) => void
+}) {
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <h1 style={{ margin: 0 }}>{title}</h1>
+                <div className="muted" style={{ fontSize: 14 }} title="Average token updates per second over the last 1 minute">
+                    {avgRate.toFixed(2)} upd/s (1m avg)
+                </div>
+                <Sparkline data={rateSeries} />
+                {import.meta.env.DEV && (
+                    <span className="muted" style={{ fontSize: 12 }}>(v{String(version)})</span>
+                )}
+            </div>
+            <label className="muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                Theme
+                <select
+                    aria-label="Select theme"
+                    value={theme}
+                    onChange={(e) => { const v = (e.currentTarget.value as ThemeName); onThemeChange((THEME_ALLOW as readonly string[]).includes(v) ? v : 'cherry-sour') }}
+                    style={{ background: '#111827', color: '#e5e7eb', border: '1px solid #374151', borderRadius: 4, padding: '6px 8px' }}
+                >
+                    <option value="cherry-sour">Cherry Sour (Red and Green)</option>
+                    <option value="rocket-lake">Rocket Lake (Orange and Blue)</option>
+                </select>
+            </label>
+        </div>
+    )
+}
+
 
 // Minimal row type for table consumption
 interface TokenRow {
@@ -131,6 +183,13 @@ export function Sparkline({ data, width = 120, height = 24 }: { data: number[]; 
 }
 
 function App() {
+    // App theme state (allow-list + cookie persistence)
+    const [theme, setTheme] = useState<ThemeName>(() => readThemeCookie())
+    useEffect(() => {
+        const t = (THEME_ALLOW as readonly string[]).includes(theme) ? theme : 'cherry-sour'
+        try { document.documentElement.setAttribute('data-theme', t) } catch { /* no-op */ }
+        writeThemeCookie(t)
+    }, [theme])
     // Derive initial sort from URL (?sort=...&dir=...)
     const initialSort = useMemo(() => {
         try {
@@ -581,22 +640,20 @@ function App() {
                 <div style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', background: '#0b0f14', color: '#e5e7eb', zIndex: 1000 }}>
                     <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
                     <div role="status" aria-live="polite" aria-busy="true" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                        <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(90deg,#10b981 0%, #ef4444 100%)', WebkitMask: 'radial-gradient(farthest-side, transparent 60%, black 61%)', mask: 'radial-gradient(farthest-side, transparent 60%, black 61%)', animation: 'spin 1s linear infinite' }} />
+                        <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(90deg,var(--spinner-start) 0%, var(--spinner-end) 100%)', WebkitMask: 'radial-gradient(farthest-side, transparent 60%, black 61%)', mask: 'radial-gradient(farthest-side, transparent 60%, black 61%)', animation: 'spin 1s linear infinite' }} />
                         <div className="muted" style={{ fontSize: 14 }}>Starting backend and loading data…</div>
                     </div>
                 </div>
             )}
         <div style={{padding: '16px 16px 16px 10px'}}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <h1 style={{ margin: 0 }}>Dexcelerate Scanner</h1>
-                <div className="muted" style={{ fontSize: 14 }} title="Average token updates per second over the last 1 minute">
-                    {avgRate.toFixed(2)} upd/s (1m avg)
-                </div>
-                <Sparkline data={rateSeries} />
-                {import.meta.env.DEV && (
-                    <span className="muted" style={{ fontSize: 12 }}>(v{String((state as unknown as { version?: number }).version ?? 0)})</span>
-                )}
-            </div>
+            <TopBar
+                title="Dexcelerate Scanner"
+                avgRate={avgRate}
+                rateSeries={rateSeries}
+                version={(state as unknown as { version?: number }).version ?? 0}
+                theme={theme}
+                onThemeChange={(v) => { setTheme(v) }}
+            />
             {/* Filters Bar */}
             <div className="filters">
                 {/* Row 1: Chains with dynamic counts across both tables */}

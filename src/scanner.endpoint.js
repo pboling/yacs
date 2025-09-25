@@ -107,6 +107,43 @@ function mkAddress(prefix, rnd) {
 }
 
 import { getBaseSeed, mixSeeds } from './seed.util.js'
+import fs from 'node:fs'
+
+// Lazy-load and cache symbols from YAML (no external YAML parser needed for simple list)
+let CACHED_SYMBOLS = null
+function loadSymbols() {
+  if (Array.isArray(CACHED_SYMBOLS) && CACHED_SYMBOLS.length > 0) return CACHED_SYMBOLS
+  try {
+    const url = new URL('./config/symbols.yaml', import.meta.url)
+    const text = fs.readFileSync(url, 'utf-8')
+    const lines = text.split(/\r?\n/)
+    const symbols = []
+    for (const raw of lines) {
+      const line = raw.trim()
+      if (!line || line.startsWith('#')) continue
+      // support "- VALUE" or plain JSON-style ["A","B"] if someone swaps format later
+      if (line.startsWith('- ')) {
+        let v = line.slice(2).trim()
+        // strip quotes if present
+        if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+          v = v.slice(1, -1)
+        }
+        if (v) symbols.push(v)
+      }
+    }
+    if (symbols.length >= 2000) {
+      CACHED_SYMBOLS = symbols
+      return CACHED_SYMBOLS
+    }
+  } catch (e) {
+    // fall through to fallback
+  }
+  // Fallback: generate deterministic synthetic symbols (guarantee >= 2000)
+  const fallback = []
+  for (let i = 1; i <= 2500; i++) fallback.push(`SYM${String(i).padStart(4, '0')}`)
+  CACHED_SYMBOLS = fallback
+  return CACHED_SYMBOLS
+}
 
 /**
  * Generate a deterministic ScannerApiResponse-like payload for GET /scanner.
@@ -166,7 +203,8 @@ export function generateScannerResponse(params = {}) {
     const token0Decimals = 18
     const token1Supply = Math.floor(1_000_000 + rnd() * 1_000_000_000)
 
-    const token1Symbol = ['MTK', 'COIN', 'DOGE', 'CAT', 'BIRD', 'X'][Math.floor(rnd() * 6)]
+    const SYMBOLS = loadSymbols()
+    const token1Symbol = SYMBOLS[Math.floor(rnd() * SYMBOLS.length)]
     const token1Name = `${token1Symbol}-${chain}`
 
     const pairAddress = mkAddress('PAIR', rnd)
