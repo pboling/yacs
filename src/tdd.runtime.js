@@ -52,6 +52,11 @@ export function mapScannerResultToToken(scanner) {
       freezable: !scanner.isFreezeAuthDisabled,
       honeypot: !!scanner.honeyPot,
       contractVerified: scanner.contractVerified,
+      // Social links (prefer new link* fields, fallback to legacy *Link)
+      ...(scanner.linkDiscord || scanner.discordLink ? { linkDiscord: scanner.linkDiscord || scanner.discordLink } : {}),
+      ...(scanner.linkTelegram || scanner.telegramLink ? { linkTelegram: scanner.linkTelegram || scanner.telegramLink } : {}),
+      ...(scanner.linkTwitter || scanner.twitterLink ? { linkTwitter: scanner.linkTwitter || scanner.twitterLink } : {}),
+      ...(scanner.linkWebsite || scanner.webLink ? { linkWebsite: scanner.linkWebsite || scanner.webLink } : {}),
     },
     security: {
       renounced: scanner.contractRenounced ?? undefined,

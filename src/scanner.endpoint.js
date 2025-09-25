@@ -176,6 +176,31 @@ export function generateScannerResponse(params = {}) {
       webLink: null,
     }
 
+    // Deterministic social links with ~80% chance per link, derived from seed + token + slow epoch
+    try {
+      const epochMs = 90 * 24 * 3600 * 1000 // 90 days to make updates very infrequent
+      const epoch = Math.floor(now / epochMs)
+      const socialSeed = mixSeeds(seed, hashParams({ k: String(pairAddress) + '|' + String(token1Symbol) + '|' + String(epoch) }))
+      const rndSoc = mulberry32(socialSeed)
+      const base = String(token1Symbol || 't').toLowerCase()
+      const suffix = String(pairAddress || '').slice(-4).toLowerCase()
+      const maybe = () => rndSoc() < 0.8
+      const pickTld = () => (rndSoc() < 0.5 ? 'io' : 'xyz')
+      const linkWebsite = maybe() ? `https://www.${base}-${suffix}.${pickTld()}` : null
+      const linkTwitter = maybe() ? `https://twitter.com/${base}${suffix}` : null
+      const linkTelegram = maybe() ? `https://t.me/${base}_${suffix}` : null
+      const linkDiscord = maybe() ? `https://discord.gg/${base}${suffix}` : null
+      // Attach both preferred link* fields and legacy *Link fields for consumers
+      item.linkWebsite = linkWebsite
+      item.linkTwitter = linkTwitter
+      item.linkTelegram = linkTelegram
+      item.linkDiscord = linkDiscord
+      if (linkWebsite) item.webLink = linkWebsite
+      if (linkTwitter) item.twitterLink = linkTwitter
+      if (linkTelegram) item.telegramLink = linkTelegram
+      if (linkDiscord) item.discordLink = linkDiscord
+    } catch { /* no-op */ }
+
     // zero-out some mcap fields to exercise priority order randomly
     const roll = rnd()
     if (roll < 0.25) item.currentMcap = '0'

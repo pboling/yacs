@@ -13,6 +13,10 @@ export default defineConfig(() => {
       changeOrigin: true,
       ws: true,
     },
+    '/scanner': {
+      target: 'http://localhost:3001',
+      changeOrigin: true,
+    },
   }
 
   return {

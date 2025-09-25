@@ -21,7 +21,9 @@ const isViteDev = (() => {
   }
 })()
 const viteApiBase = (() => { try { return (import.meta && import.meta.env && import.meta.env.VITE_API_BASE) || null } catch { return null } })()
-export const API_BASE = isViteDev ? (viteApiBase || 'http://localhost:3001') : (viteApiBase || 'https://api-rs.dexcelerate.com')
+// In dev, prefer relative base ('') so Vite proxy can handle /scanner when running the dev server.
+// Fall back to localhost:3001 only if explicitly provided via VITE_API_BASE.
+export const API_BASE = isViteDev ? (viteApiBase || '') : (viteApiBase || 'https://api-rs.dexcelerate.com')
 
 // Build URLSearchParams from GetScannerResultParams-like object
 /**
@@ -58,14 +60,42 @@ export async function fetchScanner(params, opts = {}) {
   const baseUrl = opts.baseUrl ?? API_BASE
   const fetchImpl = opts.fetchImpl ?? fetch
   const qp = buildScannerQuery(params)
-  const url = `${baseUrl}/scanner?${qp.toString()}`
-  const res = await fetchImpl(url, { headers: { 'accept': 'application/json' } })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    const err = new Error(`Scanner request failed ${res.status}: ${text}`)
-    err.status = res.status
-    throw err
+
+  // Helper to try a URL and parse JSON if ok
+  const tryFetch = async (fullUrl) => {
+    const res = await fetchImpl(fullUrl, { headers: { 'accept': 'application/json' } })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      const err = new Error(`Scanner request failed ${res.status}: ${text}`)
+      err.status = res.status
+      throw err
+    }
+    return res.json()
   }
-  const json = await res.json()
-  return { raw: json, tokens: mapScannerPage(json) }
+
+  // Attempt 1: configured base ('' in dev → relative '/scanner')
+  const url1 = `${baseUrl}/scanner?${qp.toString()}`
+  try {
+    const json = await tryFetch(url1)
+    return { raw: json, tokens: mapScannerPage(json) }
+  } catch (e) {
+    // If network error or connection refused in dev, fall back to generating locally
+    const isNetworkErr = (e && (e.name === 'TypeError' || e.code === 'ECONNREFUSED' || e.message?.includes('Failed to fetch')))
+    if (isNetworkErr) {
+      try {
+        const { generateScannerResponse } = await import('./scanner.endpoint.js')
+        const raw = generateScannerResponse(Object.fromEntries(qp.entries()))
+        return { raw, tokens: mapScannerPage(raw) }
+      } catch (_) {
+        // As a secondary attempt, if dev explicitly pointed to localhost and failed, try relative path
+        try {
+          const json = await tryFetch(`/scanner?${qp.toString()}`)
+          return { raw: json, tokens: mapScannerPage(json) }
+        } catch {
+          throw e
+        }
+      }
+    }
+    throw e
+  }
 }

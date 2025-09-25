@@ -1,6 +1,7 @@
 import NumberCell from './NumberCell'
 import AuditIcons from './AuditIcons'
 import { useEffect, useMemo, useState } from 'react'
+import { Twitter, Globe, MessageCircle, Send } from 'lucide-react'
 
 // Local minimal types to avoid circular deps with App
 interface TokenRow {
@@ -16,7 +17,7 @@ interface TokenRow {
     tokenCreatedTimestamp: Date
     transactions: { buys: number; sells: number }
     liquidity: { current: number; changePc: number }
-    audit?: { contractVerified?: boolean; freezable?: boolean; honeypot?: boolean }
+    audit?: { contractVerified?: boolean; freezable?: boolean; honeypot?: boolean; linkDiscord?: string; linkTelegram?: string; linkTwitter?: string; linkWebsite?: string }
     security?: { renounced?: boolean; locked?: boolean; burned?: boolean }
 }
 
@@ -251,10 +252,36 @@ export default function Table({
                             return (
                                 <tr key={composedId}>
                                     <td>
-                                        <div>
-                                            <strong>{t.tokenName}</strong> <span>({t.tokenSymbol})</span>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                            <div>
+                                                <strong>{t.tokenName}</strong> <span>({t.tokenSymbol})</span>
+                                            </div>
+                                            <div className="muted" style={{ fontSize: 12 }}>{t.chain}</div>
+                                            {(t.audit?.linkDiscord || t.audit?.linkTelegram || t.audit?.linkTwitter || t.audit?.linkWebsite) && (
+                                                <div className="muted" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                                                    {t.audit?.linkWebsite && (
+                                                        <a href={t.audit.linkWebsite} target="_blank" rel="noopener noreferrer" title="Website" aria-label="Website" style={{ color: 'inherit' }}>
+                                                            <Globe size={14} />
+                                                        </a>
+                                                    )}
+                                                    {t.audit?.linkTwitter && (
+                                                        <a href={t.audit.linkTwitter} target="_blank" rel="noopener noreferrer" title="Twitter" aria-label="Twitter" style={{ color: 'inherit' }}>
+                                                            <Twitter size={14} />
+                                                        </a>
+                                                    )}
+                                                    {t.audit?.linkTelegram && (
+                                                        <a href={t.audit.linkTelegram} target="_blank" rel="noopener noreferrer" title="Telegram" aria-label="Telegram" style={{ color: 'inherit' }}>
+                                                            <Send size={14} />
+                                                        </a>
+                                                    )}
+                                                    {t.audit?.linkDiscord && (
+                                                        <a href={t.audit.linkDiscord} target="_blank" rel="noopener noreferrer" title="Discord" aria-label="Discord" style={{ color: 'inherit' }}>
+                                                            <MessageCircle size={14} />
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
-                                        <div className="muted">{t.chain}</div>
                                     </td>
                                     <td>{t.exchange}</td>
                                     <td>
