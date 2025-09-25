@@ -28,7 +28,7 @@ function BoolIcon({ value, label, trueIcon, falseIcon }: { value: boolean | unde
 export default function AuditIcons({ flags }: { flags: AuditFlags }) {
     const size = 16
     return (
-        <div className="audit-icons" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+        <div className="audit-icons" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, auto)', columnGap: 8, rowGap: 4, alignItems: 'center' }}>
             <BoolIcon value={flags.verified} label="Verified" trueIcon={<ShieldCheck size={size} />} falseIcon={<XCircle size={size} />} />
             <BoolIcon value={flags.freezable} label="Freezable" trueIcon={<Snowflake size={size} />} falseIcon={<CheckCircle2 size={size} />} />
             <BoolIcon value={flags.renounced} label="Renounced" trueIcon={<CheckCircle2 size={size} />} falseIcon={<XCircle size={size} />} />
