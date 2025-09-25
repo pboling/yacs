@@ -4,6 +4,7 @@ import { fetchScanner } from '../scanner.client.js'
 import { buildPairStatsSubscription, buildPairSubscription, buildPairUnsubscription, buildPairStatsUnsubscription, buildPairSlowSubscription, buildPairStatsSlowSubscription } from '../ws.mapper.js'
 import { computePairPayloads } from '../ws.subs.js'
 import { markVisible, markHidden, getCount } from '../visibility.bus.js'
+import { onFilterFocusStart, onFilterApplyComplete } from '../filter.bus.js'
 import type { GetScannerResultParams, ScannerResult } from '../test-task-types'
 
 // Local minimal types mirroring the reducer output
@@ -535,6 +536,180 @@ export default function TokensPane({
             } catch { /* ignore unmount unsubscribe errors */ }
         }
     }, [])
+
+    // React to filter focus/apply events to control subscriptions around filtering interactions
+    useEffect(() => {
+        const ws = () => wsRef.current
+
+        function computeAllKeys(): { keys: string[]; mapIndexToKey: string[] } {
+            const mapIndexToKey: string[] = []
+            for (const row of rowsRef.current) {
+                const pair = row.pairAddress ?? ''
+                const token = row.tokenAddress ?? ''
+                if (!pair || !token) { mapIndexToKey.push(''); continue }
+                const chain = toChainId(row.chain)
+                mapIndexToKey.push(pair + '|' + token + '|' + chain)
+            }
+            const keys = mapIndexToKey.filter(Boolean)
+            return { keys, mapIndexToKey }
+        }
+
+        const offFocus = onFilterFocusStart(() => {
+            // Pause any scheduled resubscriptions and mark as scrolling-like freeze
+            scrollingRef.current = true
+            if (slowResubIntervalRef.current != null) {
+                try { window.clearInterval(slowResubIntervalRef.current) } catch { /* no-op */ }
+                slowResubIntervalRef.current = null
+            }
+            if (slowResubStartTimeoutRef.current != null) {
+                try { window.clearTimeout(slowResubStartTimeoutRef.current) } catch { /* no-op */ }
+                slowResubStartTimeoutRef.current = null
+            }
+
+            const w = ws()
+            // Determine keep window: current visible indices ±3
+            const { mapIndexToKey } = computeAllKeys()
+            const keepIndex = new Set<number>()
+            const visibleSet = new Set<string>(visibleKeysRef.current)
+            for (let i = 0; i < mapIndexToKey.length; i++) {
+                const key = mapIndexToKey[i]
+                if (!key) continue
+                if (visibleSet.has(key)) {
+                    for (let j = Math.max(0, i - 3); j <= Math.min(mapIndexToKey.length - 1, i + 3); j++) {
+                        keepIndex.add(j)
+                    }
+                }
+            }
+            const keepKeys = new Set<string>()
+            for (const i of keepIndex) {
+                const k = mapIndexToKey[i]
+                if (k) keepKeys.add(k)
+            }
+
+            // Build snapshots of current tracking
+            const fastNow = new Set<string>(visibleKeysRef.current)
+            const slowNow = new Set<string>(slowKeysRef.current)
+            // Retain queued keys only if within keep window
+            slowResubQueueRef.current = slowResubQueueRef.current.filter((k) => keepKeys.has(k))
+
+            // Unsubscribe any not in keep window
+            const wss = w && w.readyState === WebSocket.OPEN ? w : null
+            if (wss) {
+                // Fast ones
+                for (const key of Array.from(fastNow)) {
+                    if (keepKeys.has(key)) continue
+                    visibleKeysRef.current.delete(key)
+                    try {
+                        const { next } = markHidden(key)
+                        if (next === 0) {
+                            const [pair, token, chain] = key.split('|')
+                            wss.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
+                            wss.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+                        }
+                    } catch (err) {
+                        console.error(`[TokensPane:${title}] filter-focus fast unsubscribe failed`, key, String(err))
+                    }
+                }
+                // Slow ones
+                for (const key of Array.from(slowNow)) {
+                    if (keepKeys.has(key)) continue
+                    slowKeysRef.current.delete(key)
+                    try {
+                        if (getCount(key) === 0) {
+                            const [pair, token, chain] = key.split('|')
+                            wss.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
+                            wss.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+                        }
+                    } catch (err) {
+                        console.error(`[TokensPane:${title}] filter-focus slow unsubscribe failed`, key, String(err))
+                    }
+                }
+            }
+        })
+
+        const offApply = onFilterApplyComplete(() => {
+            // Resume subscriptions using existing stagger logic
+            const wss = ws()
+            scrollingRef.current = false
+            if (!wss || wss.readyState !== WebSocket.OPEN) return
+
+            // Compute visKeys from current visible set
+            const visKeys = Array.from(visibleKeysRef.current)
+            // Compute all rendered keys
+            const allRendered: string[] = []
+            for (const row of rowsRef.current) {
+                const pair = row.pairAddress ?? ''
+                const token = row.tokenAddress ?? ''
+                if (!pair || !token) continue
+                const chain = toChainId(row.chain)
+                allRendered.push(pair + '|' + token + '|' + chain)
+            }
+            const visSet = new Set(visKeys)
+            const slowKeys: string[] = []
+            for (const key of allRendered) {
+                if (!visSet.has(key) && getCount(key) === 0) slowKeys.push(key)
+            }
+
+            // Fast subs immediately
+            for (const key of visKeys) {
+                const [pair, token, chain] = key.split('|')
+                try {
+                    const { prev } = markVisible(key)
+                    if (prev === 0) {
+                        wss.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
+                        wss.send(JSON.stringify(buildPairStatsSubscriptionSafe({ pair, token, chain })))
+                    }
+                } catch (err) {
+                    console.error(`[TokensPane:${title}] filter-apply fast resub failed`, key, String(err))
+                }
+            }
+
+            // Queue slow with same schedule as onScrollStop
+            const totalAll = visKeys.length + slowKeys.length
+            const estimatedSlowFactor = Math.max(200, Math.ceil(totalAll / 4))
+            const batchPerSecond = Math.max(1, Math.ceil(totalAll / estimatedSlowFactor))
+
+            if (slowResubIntervalRef.current != null) {
+                try { window.clearInterval(slowResubIntervalRef.current) } catch { /* no-op */ }
+                slowResubIntervalRef.current = null
+            }
+            if (slowResubStartTimeoutRef.current != null) {
+                try { window.clearTimeout(slowResubStartTimeoutRef.current) } catch { /* no-op */ }
+                slowResubStartTimeoutRef.current = null
+            }
+            slowResubQueueRef.current = [...slowKeys]
+
+            const tick = () => {
+                const remaining = slowResubQueueRef.current.length
+                if (remaining <= 0) {
+                    if (slowResubIntervalRef.current != null) {
+                        try { window.clearInterval(slowResubIntervalRef.current) } catch { /* no-op */ }
+                        slowResubIntervalRef.current = null
+                    }
+                    return
+                }
+                const quota = Math.min(batchPerSecond, remaining)
+                for (let i = 0; i < quota; i++) {
+                    const key = slowResubQueueRef.current.shift()
+                    if (!key) break
+                    const [pair, token, chain] = key.split('|')
+                    try {
+                        wss.send(JSON.stringify(buildPairSlowSubscriptionSafe({ pair, token, chain })))
+                        wss.send(JSON.stringify(buildPairStatsSlowSubscriptionSafe({ pair, token, chain })))
+                    } catch (err) {
+                        console.error(`[TokensPane:${title}] filter-apply slow resub failed`, key, String(err))
+                    }
+                }
+            }
+            // Start after 1s debounce
+            slowResubStartTimeoutRef.current = window.setTimeout(() => {
+                tick()
+                slowResubIntervalRef.current = window.setInterval(tick, 1000)
+            }, 1000)
+        })
+
+        return () => { offFocus(); offApply() }
+    }, [title])
 
     // Ensure any stagger timers are cleaned up on unmount
     useEffect(() => {

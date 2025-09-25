@@ -25,6 +25,7 @@ import {computePairPayloads} from './ws.subs.js'
 import ErrorBoundary from './components/ErrorBoundary'
 import NumberCell from './components/NumberCell'
 import TokensPane from './components/TokensPane'
+import { emitFilterFocusStart, emitFilterApplyComplete } from './filter.bus.js'
 import { fetchScanner } from './scanner.client.js'
 
 
@@ -445,6 +446,9 @@ function App() {
     }, [trendingCounts, newCounts])
 
     // Live update rate tracker: 2s resolution over a 1-minute window (30 samples)
+    const versionRef = useRef<number>((state as unknown as { version?: number }).version ?? 0)
+    const blurVersionRef = useRef<number | null>(null)
+    const pendingApplyAfterBlurRef = useRef(false)
     const updatesCounterRef = useRef(0)
     const [rateSeries, setRateSeries] = useState<number[]>([])
 
@@ -455,6 +459,21 @@ function App() {
         return sum / rateSeries.length
     }, [rateSeries])
 
+
+    // Watch version for filter apply completion after blur
+    useEffect(() => {
+        const v = (state as unknown as { version?: number }).version ?? 0
+        if (versionRef.current !== v) {
+            versionRef.current = v
+            if (pendingApplyAfterBlurRef.current) {
+                if (blurVersionRef.current === null || v !== blurVersionRef.current) {
+                    pendingApplyAfterBlurRef.current = false
+                    blurVersionRef.current = null
+                    try { emitFilterApplyComplete() } catch { /* no-op */ }
+                }
+            }
+        }
+    }, [state])
 
     // Sample every 2 seconds and convert count to per-second rate
     useEffect(() => {
@@ -498,6 +517,11 @@ function App() {
                                         <input
                                             type="checkbox"
                                             checked={checked}
+                                            onFocus={() => { try { emitFilterFocusStart() } catch { /* no-op */ } }}
+                                            onBlur={() => {
+                                                blurVersionRef.current = (state as unknown as { version?: number }).version ?? 0
+                                                pendingApplyAfterBlurRef.current = true
+                                            }}
                                             onChange={(e) => {
                                                 const prev = new Set(state.filters.chains ?? ['ETH','SOL','BASE','BSC'])
                                                 if (e.currentTarget.checked) prev.add(c); else prev.delete(c)
@@ -519,6 +543,11 @@ function App() {
                             min={1}
                             step={50}
                             value={state.filters.limit ?? 200}
+                            onFocus={() => { try { emitFilterFocusStart() } catch { /* no-op */ } }}
+                            onBlur={() => {
+                                blurVersionRef.current = (state as unknown as { version?: number }).version ?? 0
+                                pendingApplyAfterBlurRef.current = true
+                            }}
                             onChange={(e) => { d({ type: 'filters/set', payload: { limit: Math.max(1, Number(e.currentTarget.value || 0)) } } as FiltersAction); }}
                         />
                     </div>
@@ -529,6 +558,11 @@ function App() {
                             min={0}
                             step={100}
                             value={state.filters.minVolume ?? 0}
+                            onFocus={() => { try { emitFilterFocusStart() } catch { /* no-op */ } }}
+                            onBlur={() => {
+                                blurVersionRef.current = (state as unknown as { version?: number }).version ?? 0
+                                pendingApplyAfterBlurRef.current = true
+                            }}
                             onChange={(e) => { d({ type: 'filters/set', payload: { minVolume: Number(e.currentTarget.value || 0) } } as FiltersAction); }}
                         />
                     </div>
@@ -540,6 +574,11 @@ function App() {
                             step={1}
                             value={state.filters.maxAgeHours ?? ''}
                             placeholder="any"
+                            onFocus={() => { try { emitFilterFocusStart() } catch { /* no-op */ } }}
+                            onBlur={() => {
+                                blurVersionRef.current = (state as unknown as { version?: number }).version ?? 0
+                                pendingApplyAfterBlurRef.current = true
+                            }}
                             onChange={(e) => {
                                 const v = e.currentTarget.value
                                 d({ type: 'filters/set', payload: { maxAgeHours: v === '' ? null : Math.max(0, Number(v)) } } as FiltersAction)
@@ -553,6 +592,11 @@ function App() {
                             min={0}
                             step={1000}
                             value={state.filters.minMcap ?? 0}
+                            onFocus={() => { try { emitFilterFocusStart() } catch { /* no-op */ } }}
+                            onBlur={() => {
+                                blurVersionRef.current = (state as unknown as { version?: number }).version ?? 0
+                                pendingApplyAfterBlurRef.current = true
+                            }}
                             onChange={(e) => { d({ type: 'filters/set', payload: { minMcap: Number(e.currentTarget.value || 0) } } as FiltersAction); }}
                         />
                     </div>
@@ -561,6 +605,11 @@ function App() {
                             <input
                                 type="checkbox"
                                 checked={!!state.filters.excludeHoneypots}
+                                onFocus={() => { try { emitFilterFocusStart() } catch { /* no-op */ } }}
+                                onBlur={() => {
+                                    blurVersionRef.current = (state as unknown as { version?: number }).version ?? 0
+                                    pendingApplyAfterBlurRef.current = true
+                                }}
                                 onChange={(e) => { d({ type: 'filters/set', payload: { excludeHoneypots: e.currentTarget.checked } } as FiltersAction); }}
                             /> Exclude honeypot
                         </label>
