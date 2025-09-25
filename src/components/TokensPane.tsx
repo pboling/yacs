@@ -128,8 +128,11 @@ export default function TokensPane({
                         console.log('[TokensPane:' + title + '] late attach subscribing visible keys:', keys.length)
                         for (const key of keys) {
                             const [pair, token, chain] = key.split('|')
-                            ws.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
-                            ws.send(JSON.stringify(buildPairStatsSubscriptionSafe({ pair, token, chain })))
+                            const { prev } = markVisible(key)
+                            if (prev === 0) {
+                                ws.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
+                                ws.send(JSON.stringify(buildPairStatsSubscriptionSafe({ pair, token, chain })))
+                            }
                         }
                     } catch (err) {
                         console.error(`[TokensPane:${title}] failed to send late subscriptions`, err)
@@ -489,7 +492,9 @@ export default function TokensPane({
                         for (const key of visibleNow) {
                             const [pair, token, chain] = key.split('|')
                             try {
-                                if (getCount(key) <= 1) {
+                                // Decrement this pane's visibility before deciding to unsubscribe
+                                const { next } = markHidden(key)
+                                if (next === 0) {
                                     ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
                                     ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
                                 }
@@ -537,7 +542,8 @@ export default function TokensPane({
                     }
                     const slowKeys: string[] = []
                     for (const key of allRenderedKeys) {
-                        if (!visSet.has(key)) slowKeys.push(key)
+                        // Only consider keys not visible in this pane AND not visible in any pane
+                        if (!visSet.has(key) && getCount(key) === 0) slowKeys.push(key)
                     }
 
                     // Resubscribe strategy after scroll stops:
@@ -555,8 +561,11 @@ export default function TokensPane({
                         for (const key of visKeys) {
                             const [pair, token, chain] = key.split('|')
                             try {
-                                ws.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
-                                ws.send(JSON.stringify(buildPairStatsSubscriptionSafe({ pair, token, chain })))
+                                const { prev } = markVisible(key)
+                                if (prev === 0) {
+                                    ws.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
+                                    ws.send(JSON.stringify(buildPairStatsSubscriptionSafe({ pair, token, chain })))
+                                }
                             } catch (err) {
                                 console.error(`[TokensPane:${title}] resubscribe fast failed for`, key, String(err))
                             }
