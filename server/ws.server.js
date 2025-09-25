@@ -65,7 +65,7 @@ export function attachWsServer(server) {
                 // Resolve timing for this connection (reads env at runtime)
                 const { TICK_INTERVAL_MS, MAX_STAGGER_MS } = getTiming()
         // Default slow factor fallback; overridden per-key using dynamic ratio to total rows
-        const DEFAULT_SLOW_FACTOR = 50
+        const DEFAULT_SLOW_FACTOR = 200
         /** @type {Map<string, number>} */
         const slowFactorByKey = new Map()
 
@@ -102,7 +102,7 @@ export function attachWsServer(server) {
         function computeSlowFactor() {
             const total = itemsByKey.size || 1
             // Variable rate grows with table size so non-visible rows update less frequently as dataset grows
-            // Example mapping: 0-200 rows → 50; 400 → 100; 800 → 200, etc.
+            // Example mapping: 0-800 rows → 200; 1600 → 400; 3200 → 800, etc.
             return Math.max(DEFAULT_SLOW_FACTOR, Math.ceil(total / 4))
         }
         

@@ -90,6 +90,11 @@ export default function TokensPane({
     // Track currently visible and slow subscription keys (pair|token|chain)
     const visibleKeysRef = useRef<Set<string>>(new Set())
     const slowKeysRef = useRef<Set<string>>(new Set())
+    // Scheduler state for staggered slow re-subscriptions after scroll stops
+    // - slowResubQueueRef holds keys to (re)subscribe at slow rate
+    // - slowResubIntervalRef drives per-second batching; cleared on new scroll or unmount
+    const slowResubQueueRef = useRef<string[]>([])
+    const slowResubIntervalRef = useRef<number | null>(null)
 
     // Allow App to share a single WebSocket but also support direct sends if present on window.
     useEffect(() => {
@@ -427,6 +432,17 @@ export default function TokensPane({
         }
     }, [])
 
+    // Ensure any stagger timers are cleaned up on unmount
+    useEffect(() => {
+        return () => {
+            if (slowResubIntervalRef.current != null) {
+                try { window.clearInterval(slowResubIntervalRef.current) } catch { /* no-op */ }
+                slowResubIntervalRef.current = null
+            }
+            slowResubQueueRef.current = []
+        }
+    }, [])
+
     return (
         <div>
             <Table
@@ -439,7 +455,14 @@ export default function TokensPane({
                 sortDir={sort.dir}
                 onRowVisibilityChange={onRowVisibilityChange}
                 onScrollStart={() => {
+                    // Enter scrolling: pause any in-flight slow re-subscription schedule and clear its queue
                     scrollingRef.current = true
+                    if (slowResubIntervalRef.current != null) {
+                        try { window.clearInterval(slowResubIntervalRef.current) } catch { /* no-op */ }
+                        slowResubIntervalRef.current = null
+                    }
+                    slowResubQueueRef.current = []
+
                     const ws = wsRef.current
                     const allKeys = new Set<string>([...visibleKeysRef.current, ...slowKeysRef.current])
                     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -483,8 +506,18 @@ export default function TokensPane({
                         if (!visSet.has(key)) slowKeys.push(key)
                     }
 
-                    // Fast subscribe visible, slow subscribe others
+                    // Resubscribe strategy after scroll stops:
+                    // 1) Immediately re-enable FAST subscriptions for visible rows so UI becomes live right away.
+                    // 2) For INVISIBLE rows, stagger re-subscription over time using the same effective throttle
+                    //    that the server applies to slow updates. The server assigns a per-key slowFactor approximately as:
+                    //       slowFactor = max(200, ceil(totalRows / 4))
+                    //    where totalRows is the number of known rows on the server. We approximate totalRows here with the
+                    //    total rendered rows in this pane (visible + invisible). The resulting portion of all rows that gets
+                    //    re-subscribed per second is 1 / slowFactor. For example, if slowFactor = 200, we re-subscribe ~0.5%
+                    //    of all rows per second. This avoids a thundering herd while ensuring off-viewport data comes back
+                    //    online smoothly.
                     if (ws && ws.readyState === WebSocket.OPEN) {
+                        // 1) Fast (visible) rows: immediate pair + stats subscriptions
                         for (const key of visKeys) {
                             const [pair, token, chain] = key.split('|')
                             try {
@@ -494,15 +527,49 @@ export default function TokensPane({
                                 console.error(`[TokensPane:${title}] resubscribe fast failed for`, key, String(err))
                             }
                         }
-                        for (const key of slowKeys) {
-                            const [pair, token, chain] = key.split('|')
-                            try {
-                                ws.send(JSON.stringify(buildPairSlowSubscriptionSafe({ pair, token, chain })))
-                                ws.send(JSON.stringify(buildPairStatsSlowSubscriptionSafe({ pair, token, chain })))
-                            } catch (err) {
-                                console.error(`[TokensPane:${title}] resubscribe slow failed for`, key, String(err))
+
+                        // 2) Invisible rows: stagger slow subscriptions using per-second batching derived from the same math
+                        //    the server uses for slow updates. UX impact:
+                        //    - Visible rows are snappy (instant updates).
+                        //    - Invisible rows trickle back in over time, preventing WS/CPU spikes on large tables.
+                        const totalAll = visKeys.length + slowKeys.length
+                        const estimatedSlowFactor = Math.max(200, Math.ceil(totalAll / 4))
+                        // Portion per second = 1 / slowFactor; translate to a batch count per tick (per ~1s).
+                        const batchPerSecond = Math.max(1, Math.ceil(totalAll / estimatedSlowFactor))
+
+                        // Prepare queue and clear any previous schedule
+                        if (slowResubIntervalRef.current != null) {
+                            try { window.clearInterval(slowResubIntervalRef.current) } catch { /* no-op */ }
+                            slowResubIntervalRef.current = null
+                        }
+                        slowResubQueueRef.current = [...slowKeys]
+
+                        const tick = () => {
+                            const remaining = slowResubQueueRef.current.length
+                            if (remaining <= 0) {
+                                if (slowResubIntervalRef.current != null) {
+                                    try { window.clearInterval(slowResubIntervalRef.current) } catch { /* no-op */ }
+                                    slowResubIntervalRef.current = null
+                                }
+                                return
+                            }
+                            const quota = Math.min(batchPerSecond, remaining)
+                            for (let i = 0; i < quota; i++) {
+                                const key = slowResubQueueRef.current.shift()
+                                if (!key) break
+                                const [pair, token, chain] = key.split('|')
+                                try {
+                                    ws.send(JSON.stringify(buildPairSlowSubscriptionSafe({ pair, token, chain })))
+                                    ws.send(JSON.stringify(buildPairStatsSlowSubscriptionSafe({ pair, token, chain })))
+                                } catch (err) {
+                                    console.error(`[TokensPane:${title}] resubscribe slow failed for`, key, String(err))
+                                }
                             }
                         }
+
+                        // Kick off schedule: run a first batch immediately, then continue once per second.
+                        tick()
+                        slowResubIntervalRef.current = window.setInterval(tick, 1000)
                     }
                     // Update tracking sets
                     visibleKeysRef.current = new Set(visKeys)
