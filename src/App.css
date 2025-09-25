@@ -19,18 +19,32 @@
   --spinner-end:   color-mix(in oklab, var(--accent-down) 85%, black);
 }
 
+/* Cherry Sour explicit (defaults) */
+[data-theme="cherry-sour"] {
+    /* Positive = Green, Negative = Red */
+    --accent-up: #10b981;
+    --accent-down: #ef4444;
+    --spinner-start: color-mix(in oklab, var(--accent-up) 85%, black);
+    --spinner-end:   color-mix(in oklab, var(--accent-down) 85%, black);
+}
+
 /* Rocket Lake theme (Orange/Blue, color-blind friendly) */
 [data-theme="rocket-lake"] {
-  --accent-up: #2563eb;   /* blue */
-  --accent-down: #f59e0b; /* orange */
+  --accent-up: #f59e0b; /* orange */
+  /* Make blue 25% lighter for dark background readability */
+  /* 25% toward white in perceptual oklab space */
+  --accent-down: color-mix(in oklab, #2563eb 75%, white);   /* lighter blue */
   --spinner-start: color-mix(in oklab, var(--accent-up) 85%, black);
   --spinner-end:   color-mix(in oklab, var(--accent-down) 85%, black);
 }
 
-/* Cherry Sour explicit (defaults) */
-[data-theme="cherry-sour"] {
-  --accent-up: #10b981;
-  --accent-down: #ef4444;
+/* Legendary theme (Yellow/Purple) */
+[data-theme="legendary"] {
+  /* Positive = Yellow, Negative = Purple */
+  --accent-up: #facc15;   /* yellow-400 */
+  /* Make blue 25% lighter for dark background readability */
+  /* 25% toward white in perceptual oklab space */
+  --accent-down: color-mix(in oklab, #8b5cf6 90%, white);   /* lighter violet-500 */
   --spinner-start: color-mix(in oklab, var(--accent-up) 85%, black);
   --spinner-end:   color-mix(in oklab, var(--accent-down) 85%, black);
 }

@@ -30,7 +30,7 @@ import { fetchScanner } from './scanner.client.js'
 import { getCount } from './visibility.bus.js'
 
 // Theme allow-list and cookie helpers
-const THEME_ALLOW = ['cherry-sour', 'rocket-lake'] as const
+const THEME_ALLOW = ['cherry-sour', 'rocket-lake', 'legendary'] as const
 export type ThemeName = typeof THEME_ALLOW[number]
 function readThemeCookie(): ThemeName {
     try {
@@ -75,6 +75,7 @@ function TopBar({ title, avgRate, rateSeries, version, theme, onThemeChange }: {
                 >
                     <option value="cherry-sour">Cherry Sour (Red and Green)</option>
                     <option value="rocket-lake">Rocket Lake (Orange and Blue)</option>
+                    <option value="legendary">Legendary (Yellow and Purple)</option>
                 </select>
             </label>
         </div>

@@ -19,7 +19,8 @@ function IconWrap({ children, title, color }: { children: React.ReactNode; title
 }
 
 function BoolIcon({ value, label, trueIcon, falseIcon }: { value: boolean | undefined; label: string; trueIcon: React.ReactNode; falseIcon: React.ReactNode }) {
-    const color = value == null ? '#8b949e' : value ? '#2ea043' : '#f85149'
+    // Use theme-driven colors: up/down from CSS variables, muted for unknown
+    const color = value == null ? 'var(--muted)' : value ? 'var(--accent-up)' : 'var(--accent-down)'
     const title = `${label}: ${value == null ? 'unknown' : value ? 'yes' : 'no'}`
     if (value == null) return <IconWrap title={title} color={color}><CircleHelp size={16} /></IconWrap>
     return <IconWrap title={title} color={color}>{value ? trueIcon : falseIcon}</IconWrap>

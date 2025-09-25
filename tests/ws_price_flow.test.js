@@ -74,12 +74,19 @@ test('WS tick events update reducer priceUsd and mcap deterministically', async 
         if (initAction) {
             state = tokensReducer(state, initAction)
         }
-        const first = pairsMsg.data.scannerPairs[0]
-        assert.ok(first)
+        // Choose a deterministic target by unique key rather than relying on array order
+        const sorted = [...pairsMsg.data.scannerPairs].sort((a, b) => {
+            const ka = String(a.pairAddress) + '|' + String(a.token1Address) + '|' + String(a.chainId)
+            const kb = String(b.pairAddress) + '|' + String(b.token1Address) + '|' + String(b.chainId)
+            return ka.localeCompare(kb)
+        })
+        const target = sorted[0]
+        assert.ok(target)
+        const targetKey = String(target.pairAddress) + '|' + String(target.token1Address) + '|' + String(target.chainId)
 
-        ws.send(JSON.stringify({ event: 'subscribe-pair', data: { pair: first.pairAddress, token: first.token1Address, chain: String(first.chainId) } }))
+        ws.send(JSON.stringify({ event: 'subscribe-pair', data: { pair: target.pairAddress, token: target.token1Address, chain: String(target.chainId) } }))
 
-        // Collect two ticks and reduce them into state
+        // Collect two ticks for the target only and reduce them into state
         let price1 = null
         let price2 = null
         let vol1 = null
@@ -95,6 +102,8 @@ test('WS tick events update reducer priceUsd and mcap deterministically', async 
                         state = tokensReducer(state, action)
                     }
                     if (msg.event === 'tick') {
+                        const key = String(msg.data?.pair?.pair) + '|' + String(msg.data?.pair?.token) + '|' + String(msg.data?.pair?.chain)
+                        if (key !== targetKey) return // Ignore ticks for other pairs (server bootstraps many)
                         const id = msg.data.pair.pair
                         const row = state.byId[id] || state.byId[id.toLowerCase()]
                         if (row && price1 == null) {
@@ -118,9 +127,9 @@ test('WS tick events update reducer priceUsd and mcap deterministically', async 
         assert.notEqual(price1, price2, 'expected deterministic drift between ticks')
 
         // Verify market cap recalculation matches README (totalSupply * newPrice)
-        const id = pairsMsg.data.scannerPairs[0].pairAddress
+        const id = target.pairAddress
         const row = state.byId[id] || state.byId[id.toLowerCase()]
-        const totalSupply = parseFloat(first.token1TotalSupplyFormatted)
+        const totalSupply = parseFloat(target.token1TotalSupplyFormatted)
         const expectedMcap = totalSupply * row.priceUsd
         const diff = Math.abs(row.mcap - expectedMcap)
         const denom = Math.max(1, Math.abs(expectedMcap))
