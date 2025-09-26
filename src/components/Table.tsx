@@ -7,7 +7,6 @@ import {
   Send,
   ExternalLink,
   Eye,
-  PauseCircle,
   ChartNoAxesCombined,
 } from 'lucide-react'
 import { BurnDetailsTooltip } from './BurnDetailsTooltip'
@@ -87,6 +86,7 @@ export default function Table({
   onBothEndsVisible,
   onContainerRef,
   onOpenRowDetails,
+  onToggleRowSubscription,
 }: {
   title: string
   rows: TokenRow[]
@@ -100,10 +100,11 @@ export default function Table({
   onScrollStop?: (visibleRows: TokenRow[]) => void
   getRowStatus?: (
     row: TokenRow,
-  ) => { state: 'subscribed' | 'unsubscribed'; tooltip?: string } | undefined
+  ) => { state: 'subscribed' | 'unsubscribed' | 'disabled'; tooltip?: string } | undefined
   onBothEndsVisible?: (v: boolean) => void
   onContainerRef?: (el: HTMLDivElement | null) => void
   onOpenRowDetails?: (row: TokenRow) => void
+  onToggleRowSubscription?: (row: TokenRow) => void
 }) {
   // Dev-only: log a compact snapshot of the first row whenever rows change
   useEffect(() => {
@@ -731,25 +732,27 @@ export default function Table({
                             const s = getRowStatus?.(t)
                             if (s) {
                               const size = 14
-                              const color = s.state === 'subscribed' ? '#16a34a' : '#9ca3af'
+                              const color =
+                                s.state === 'subscribed'
+                                  ? 'var(--accent-up)'
+                                  : s.state === 'disabled'
+                                  ? 'var(--accent-down)'
+                                  : undefined // neutral: inherit color
                               const title = s.tooltip ?? ''
-                              if (s.state === 'subscribed')
-                                return (
-                                  <span
-                                    title={title}
-                                    aria-label="Subscribed"
-                                    style={{ display: 'inline-flex', alignItems: 'center' }}
-                                  >
-                                    <Eye size={size} color={color} />
-                                  </span>
-                                )
+                              const label =
+                                s.state === 'subscribed'
+                                  ? 'Subscribed (click to disable)'
+                                  : s.state === 'disabled'
+                                  ? 'Disabled (click to re-enable)'
+                                  : 'Unsubscribed (click to disable)'
                               return (
                                 <span
-                                  title={title}
-                                  aria-label="Unsubscribed"
-                                  style={{ display: 'inline-flex', alignItems: 'center' }}
+                                  title={title || label}
+                                  aria-label={label}
+                                  onClick={() => onToggleRowSubscription?.(t)}
+                                  style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', color: color }}
                                 >
-                                  <PauseCircle size={size} color={color} />
+                                  <Eye size={size} color={color} />
                                 </span>
                               )
                             }

@@ -109,6 +109,37 @@ export default function TokensPane({
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const [bothEndsVisible, setBothEndsVisible] = useState(false)
 
+  // Disabled tokens (by token|chain), persisted to localStorage
+  const disabledTokensRef = useRef<Set<string>>(new Set())
+  const DISABLED_LS_KEY = 'dex.disabledTokens.v1'
+  // Load disabled set on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DISABLED_LS_KEY)
+      if (raw) {
+        const arr = JSON.parse(raw)
+        if (Array.isArray(arr)) disabledTokensRef.current = new Set(arr.map(String))
+      }
+    } catch {
+      /* no-op */
+    }
+  }, [])
+  const persistDisabled = useCallback(() => {
+    try {
+      const arr = Array.from(disabledTokensRef.current)
+      localStorage.setItem(DISABLED_LS_KEY, JSON.stringify(arr))
+    } catch {
+      /* no-op */
+    }
+  }, [])
+
+  const disabledKeyFor = (row: TokenRow): string | null => {
+    const token = row.tokenAddress
+    if (!token) return null
+    const chain = toChainId(row.chain)
+    return `${token.toLowerCase()}|${chain}`
+  }
+
   const wsRef = useRef<WebSocket | null>(null)
   const payloadsRef = useRef<{ pair: string; token: string; chain: string }[]>([])
   const rowsRef = useRef<TokenRow[]>([])
@@ -653,6 +684,21 @@ export default function TokensPane({
       if (!pair || !token) return
       const chain = toChainId(row.chain)
       const key = buildPairKey(pair, token, chain)
+      const disabledKey = disabledKeyFor(row)
+      // If this token is disabled, ensure it's not tracked as visible and unsubscribe if needed
+      if (disabledKey && disabledTokensRef.current.has(disabledKey)) {
+        if (visibleKeysRef.current.has(key)) {
+          visibleKeysRef.current.delete(key)
+          try {
+            const { next } = markHidden(key)
+            const ws = wsRef.current
+            if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
+              sendUnsubscribe(ws, { pair, token, chain })
+            }
+          } catch {}
+        }
+        return
+      }
       // If subscription lock is active and this key isn't allowed, stop tracking
       if (lockActiveRef.current && !lockAllowedRef.current.has(key)) {
         if (visibleKeysRef.current.delete(key)) {
@@ -784,11 +830,56 @@ export default function TokensPane({
           }
           visibleKeysRef.current.clear()
         }}
+        onToggleRowSubscription={(row: TokenRow) => {
+          const dKey = disabledKeyFor(row)
+          if (!dKey) return
+          const set = disabledTokensRef.current
+          const wasDisabled = set.has(dKey)
+          if (wasDisabled) {
+            // Re-enable
+            set.delete(dKey)
+            persistDisabled()
+            return
+          }
+          // Disable: add to set and unsubscribe any active subscriptions for this token
+          set.add(dKey)
+          persistDisabled()
+          try {
+            const ws = wsRef.current
+            const toRemove: string[] = []
+            for (const key of visibleKeysRef.current) {
+              const parts = key.split('|')
+              const token = parts[1]
+              const chain = parts[2]
+              if (`${token.toLowerCase()}|${chain}` === dKey) {
+                toRemove.push(key)
+              }
+            }
+            for (const key of toRemove) {
+              visibleKeysRef.current.delete(key)
+              const [pair, token, chain] = key.split('|')
+              const { next } = markHidden(key)
+              if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
+                try {
+                  sendUnsubscribe(ws, { pair, token, chain })
+                } catch {}
+              }
+            }
+          } catch {
+            /* no-op */
+          }
+        }}
         getRowStatus={(row: TokenRow) => {
           const pair = row.pairAddress ?? ''
           const token = row.tokenAddress ?? ''
           if (!pair || !token) return undefined
           const key = buildPairKey(pair, token, row.chain)
+          const dKey = disabledKeyFor(row)
+          if (dKey && disabledTokensRef.current.has(dKey)) {
+            const ts = lastUpdatedRef.current.get(key)
+            const tooltip = ts ? 'Disabled; last update ' + formatAge(ts) : 'Disabled by you'
+            return { state: 'disabled', tooltip }
+          }
           if (lockActiveRef.current && !lockAllowedRef.current.has(key)) {
             return { state: 'unsubscribed', tooltip: 'Temporarily unsubscribed (modal focus)' }
           }
@@ -811,6 +902,9 @@ export default function TokensPane({
             const key = buildPairKey(pair, token, chain)
             // Respect modal lock: only subscribe allowed keys when lock is active
             if (lockActiveRef.current && !lockAllowedRef.current.has(key)) continue
+            // Skip disabled tokens
+            const dKey = `${token.toLowerCase()}|${chain}`
+            if (disabledTokensRef.current.has(dKey)) continue
             nextVisible.push(key)
           }
           const nextSet = new Set(nextVisible)
