@@ -127,14 +127,14 @@ export default function DetailModal({
       if (stored && stored !== row.id) {
         const exists = allRows.some((r) => r.id === stored)
         if (exists) {
-          setCompareId(stored)
+          setCompareId((prev) => (prev !== stored ? stored : prev))
           return
         }
       }
     } catch {
       /* no-op */
     }
-    setCompareId(null)
+    setCompareId((prev) => (prev !== null ? null : prev))
   }, [open, row?.id, allRows])
 
   // Seed initial base snapshot so chart isn't empty while waiting for first WS update (id-based)
