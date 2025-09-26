@@ -503,7 +503,12 @@ export default function Table({
           flexWrap: 'wrap',
         }}
       >
-        <h2 style={{ margin: 0 }}>{title}</h2>
+        <h2 style={{ margin: 0 }}>
+          {title}
+          <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>
+            {rows.length} rows
+          </span>
+        </h2>
         <div className="export-controls" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <label className="muted" style={{ fontSize: 12 }}>
             Format
@@ -936,17 +941,6 @@ export default function Table({
                 )
               })}
             </tbody>
-            <tfoot ref={tfootRef}>
-              <tr>
-                <td
-                  colSpan={10}
-                  className="muted"
-                  style={{ fontSize: 12, textAlign: 'right', padding: '6px 8px' }}
-                >
-                  Rows (non-hidden): <strong>{rows.length}</strong>
-                </td>
-              </tr>
-            </tfoot>
           </table>
         </div>
       </div>
