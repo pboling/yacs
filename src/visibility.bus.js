@@ -65,6 +65,20 @@ export function getCount(key) {
   return Number(store.get(key) || 0)
 }
 
+/**
+ * Total number of active unique subscription keys currently visible (>0 viewers).
+ * Equivalent to the number of entries in the store.
+ * @returns {number}
+ */
+export function getTotalActive() {
+  const store = getStore()
+  try {
+    return typeof store.size === 'number' ? store.size : Array.from(store.keys()).length
+  } catch {
+    return 0
+  }
+}
+
 export function resetAll() {
   const store = getStore()
   store.clear()

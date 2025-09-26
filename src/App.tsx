@@ -35,7 +35,7 @@ import TokensPane from './components/TokensPane'
 import DetailModal from './components/DetailModal'
 import { emitFilterFocusStart, emitFilterApplyComplete } from './filter.bus.js'
 import { fetchScanner } from './scanner.client.js'
-import { getCount } from './visibility.bus.js'
+import { getCount, getTotalActive } from './visibility.bus.js'
 import { emitUpdate } from './updates.bus'
 import { engageSubscriptionLock, releaseSubscriptionLock } from './subscription.lock.bus.js'
 import { onSubscriptionLockChange, isSubscriptionLockActive } from './subscription.lock.bus.js'
@@ -77,7 +77,27 @@ function TopBar({
   onThemeChange: (v: ThemeName) => void
   lockActive: boolean
 }) {
-  // Subscription metrics removed; only lockActive badge remains
+  // Restore live subscription counter in the top bar
+  const [subCount, setSubCount] = useState<number>(0)
+  useEffect(() => {
+    let raf = 0
+    let timer: number | null = null
+    const tick = () => {
+      try {
+        setSubCount(getTotalActive())
+      } catch {}
+      timer = window.setTimeout(() => {
+        raf = window.requestAnimationFrame(tick)
+      }, 500)
+    }
+    tick()
+    return () => {
+      if (timer != null) {
+        try { window.clearTimeout(timer) } catch {}
+      }
+      try { window.cancelAnimationFrame(raf) } catch {}
+    }
+  }, [])
   return (
     <div
       style={{
@@ -108,28 +128,44 @@ function TopBar({
           </span>
         )}
       </div>
-      <label className="muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-        Theme
-        <select
-          aria-label="Select theme"
-          value={theme}
-          onChange={(e) => {
-            const v = e.currentTarget.value as ThemeName
-            onThemeChange((THEME_ALLOW as readonly string[]).includes(v) ? v : 'cherry-sour')
-          }}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span
+          className="muted"
+          title="Active subscriptions across all panes"
           style={{
-            background: '#111827',
-            color: '#e5e7eb',
-            border: '1px solid #374151',
-            borderRadius: 4,
-            padding: '6px 8px',
+            fontSize: 11,
+            padding: '2px 6px',
+            border: '1px solid #4b5563',
+            borderRadius: 12,
+            background: 'rgba(255,255,255,0.06)',
+            letterSpacing: 0.5,
           }}
         >
-          <option value="cherry-sour">Cherry Sour (Red and Green)</option>
-          <option value="rocket-lake">Rocket Lake (Orange and Blue)</option>
-          <option value="legendary">Legendary (Yellow and Purple)</option>
-        </select>
-      </label>
+          Subs: <strong style={{ marginLeft: 4 }}>{subCount}</strong>
+        </span>
+        <label className="muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          Theme
+          <select
+            aria-label="Select theme"
+            value={theme}
+            onChange={(e) => {
+              const v = e.currentTarget.value as ThemeName
+              onThemeChange((THEME_ALLOW as readonly string[]).includes(v) ? v : 'cherry-sour')
+            }}
+            style={{
+              background: '#111827',
+              color: '#e5e7eb',
+              border: '1px solid #374151',
+              borderRadius: 4,
+              padding: '6px 8px',
+            }}
+          >
+            <option value="cherry-sour">Cherry Sour (Red and Green)</option>
+            <option value="rocket-lake">Rocket Lake (Orange and Blue)</option>
+            <option value="legendary">Legendary (Yellow and Purple)</option>
+          </select>
+        </label>
+      </div>
     </div>
   )
 }
