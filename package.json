@@ -23,7 +23,8 @@
     "generate-symbols": "node scripts/generate-symbols-from-scowl.mjs",
     "format:prettier": "prettier . --write",
     "format:check": "prettier . --check",
-    "format": "pnpm run format:prettier && pnpm run lint:fix"
+    "format": "pnpm run format:prettier && pnpm run lint:fix",
+    "fixture:scanner": "node scripts/fetch-scanner-fixture.mjs"
   },
   "dependencies": {
     "concurrently": "^9.1.2",

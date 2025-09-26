@@ -941,6 +941,17 @@ export default function Table({
                 )
               })}
             </tbody>
+            <tfoot ref={tfootRef}>
+              <tr>
+                <td
+                  colSpan={10}
+                  className="muted"
+                  style={{ fontSize: 12, textAlign: 'right', padding: '6px 8px' }}
+                >
+                  Rows (non-hidden): <strong>{rows.length}</strong>
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>

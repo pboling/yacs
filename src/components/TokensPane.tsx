@@ -446,7 +446,7 @@ export default function TokensPane({
     }
   }, [rows, onChainCountsChange, page])
 
-  // When the rendered rows change (due to limit/sort), unsubscribe keys that dropped out entirely
+  // When the rendered rows change (due to limit/sort), just update tracking; do not force unsubscribe.
   useEffect(() => {
     try {
       const currentKeys = new Set<string>()
@@ -470,14 +470,11 @@ export default function TokensPane({
           try {
             // purge local tracking
             visibleKeysRef.current.delete(key)
-            // only unsubscribe if no pane has it visible
-            if (getCount(key) === 0) {
-              const [pair, token, chain] = key.split('|')
-              sendUnsubscribe(ws, { pair, token, chain })
-            }
+            // Let SubscriptionQueue enforce quotas for now-hidden rows
+            try { SubscriptionQueue.setVisible(key, false, ws) } catch {}
           } catch (err) {
             console.error(
-              `[TokensPane:${title}] unsubscribe on removal failed for`,
+              `[TokensPane:${title}] tracking update on removal failed for`,
               key,
               String(err),
             )
@@ -557,6 +554,23 @@ export default function TokensPane({
           : []
       // Deduplicate by pairAddress (case-insensitive)
       const dedupedList = dedupeByPairAddress(list as ScannerResult[])
+      // Merge new payloads into our cumulative payloadsRef and update SubscriptionQueue universe
+      try {
+        const newPayloads = computePairPayloadsSafe(dedupedList)
+        const all = [...(payloadsRef.current || []), ...newPayloads]
+        // Deduplicate by full key pair|token|chain
+        const seen = new Set<string>()
+        const merged: { pair: string; token: string; chain: string }[] = []
+        for (const p of all) {
+          const key = buildPairKey(p.pair, (p.token ?? '').toLowerCase(), p.chain)
+          if (seen.has(key)) continue
+          seen.add(key)
+          merged.push(p)
+        }
+        payloadsRef.current = merged
+        const keys = merged.map((p) => buildPairKey(p.pair, (p.token ?? '').toLowerCase(), p.chain))
+        SubscriptionQueue.updateUniverse(keys, wsRef.current ?? null)
+      } catch {}
       // Dispatch typed append
       dispatch({
         type: 'scanner/append',
@@ -713,11 +727,7 @@ export default function TokensPane({
           set.delete(key)
           const { next } = markHidden(key)
           try { SubscriptionQueue.setVisible(key, false, ws) } catch {}
-          if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
-            try {
-              sendUnsubscribe(ws, { pair, token, chain })
-            } catch {}
-          }
+          // Do not auto-unsubscribe on leaving viewport; let SubscriptionQueue manage inactive rows
         }
       }
     },
@@ -756,19 +766,17 @@ export default function TokensPane({
     rowsRef.current = rows
   }, [rows])
 
-  // Keep subscription queue universe in sync with currently loaded/filtered rows
+  // Keep subscription queue universe in sync with the full set of loaded payloads (not just visible rows)
   useEffect(() => {
     try {
+      const payloads = payloadsRef.current || []
       const keys: string[] = []
-      for (const row of rows) {
-        const pair = row.pairAddress ?? ''
-        const tokenAddr = (row.tokenAddress ?? '').toLowerCase()
-        if (!pair || !tokenAddr) continue
-        const id = toChainId(row.chain)
-        const idNum = Number(id)
-        const chainName = idNum === 1 ? 'ETH' : idNum === 56 ? 'BSC' : idNum === 8453 ? 'BASE' : idNum === 900 ? 'SOL' : id
-        keys.push(buildPairKey(pair, tokenAddr, id))
-        keys.push(buildPairKey(pair, tokenAddr, chainName))
+      for (const p of payloads) {
+        const pair = p.pair ?? ''
+        const tokenAddr = (p.token ?? '').toLowerCase()
+        const chain = p.chain ?? ''
+        if (!pair || !tokenAddr || !chain) continue
+        keys.push(buildPairKey(pair, tokenAddr, chain))
       }
       SubscriptionQueue.updateUniverse(keys, wsRef.current ?? null)
     } catch {}
@@ -841,15 +849,12 @@ export default function TokensPane({
           const visibleNow = new Set<string>(visibleKeysRef.current)
           if (ws && ws.readyState === WebSocket.OPEN) {
             for (const key of visibleNow) {
-              const [pair, token, chain] = key.split('|')
               try {
                 const { next } = markHidden(key)
                 try { SubscriptionQueue.setVisible(key, false, ws) } catch {}
-                if (next === 0) {
-                  sendUnsubscribe(ws, { pair, token, chain })
-                }
+                // Do not auto-unsubscribe during scroll; SubscriptionQueue manages inactive rotation
               } catch (err) {
-                console.error(`[TokensPane:${title}] bulk-unsubscribe failed for`, key, String(err))
+                console.error(`[TokensPane:${title}] bulk-visibility update failed for`, key, String(err))
               }
             }
           }
@@ -869,13 +874,9 @@ export default function TokensPane({
               const pair = row.pairAddress ?? ''
               const tokenAddr = (row.tokenAddress ?? '').toLowerCase()
               const id = toChainId(row.chain)
-              const idNum = Number(id)
-              const chainName = idNum === 1 ? 'ETH' : idNum === 56 ? 'BSC' : idNum === 8453 ? 'BASE' : idNum === 900 ? 'SOL' : id
               if (pair && tokenAddr) {
                 const keyNum = buildPairKey(pair, tokenAddr, id)
-                const keyName = buildPairKey(pair, tokenAddr, chainName)
                 try { SubscriptionQueue.setIgnored(keyNum, false, ws) } catch {}
-                try { SubscriptionQueue.setIgnored(keyName, false, ws) } catch {}
               }
             } catch {}
             return
@@ -910,13 +911,9 @@ export default function TokensPane({
               const pair = row.pairAddress ?? ''
               const tokenAddr = (row.tokenAddress ?? '').toLowerCase()
               const id = toChainId(row.chain)
-              const idNum = Number(id)
-              const chainName = idNum === 1 ? 'ETH' : idNum === 56 ? 'BSC' : idNum === 8453 ? 'BASE' : idNum === 900 ? 'SOL' : id
               if (pair && tokenAddr) {
                 const keyNum = buildPairKey(pair, tokenAddr, id)
-                const keyName = buildPairKey(pair, tokenAddr, chainName)
                 try { SubscriptionQueue.setIgnored(keyNum, true, ws) } catch {}
-                try { SubscriptionQueue.setIgnored(keyName, true, ws) } catch {}
               }
             } catch {}
           } catch {
@@ -965,19 +962,15 @@ export default function TokensPane({
           const prevSet = new Set<string>(visibleKeysRef.current)
 
           if (ws && ws.readyState === WebSocket.OPEN) {
-            // Unsubscribe keys no longer visible in this pane
+            // Update visibility for keys no longer visible in this pane (no direct unsubscribe)
             for (const key of prevSet) {
               if (nextSet.has(key)) continue
-              const [pair, token, chain] = key.split('|')
               try {
                 const { next } = markHidden(key)
                 try { SubscriptionQueue.setVisible(key, false, ws) } catch {}
-                if (next === 0) {
-                  sendUnsubscribe(ws, { pair, token, chain })
-                }
               } catch (err) {
                 console.error(
-                  `[TokensPane:${title}] unsubscribe on scrollStop failed for`,
+                  `[TokensPane:${title}] visibility update on scrollStop failed for`,
                   key,
                   String(err),
                 )
