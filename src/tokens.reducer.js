@@ -16,6 +16,8 @@
 // Pure tokens reducer to manage scanner pages, ticks, and pair-stats
 import { mapScannerResultToToken, applyTickToToken } from './tdd.runtime.js'
 
+import { debugLog as __debugLog__ } from './utils/debug.mjs'
+
 export const initialState = {
   byId: {}, // id -> TokenData
   meta: {}, // id -> { totalSupply: number, token0Address?: string }
@@ -40,7 +42,7 @@ export function tokensReducer(state = initialState, action) {
       if (!__REDUCER_SEEN__.has(action)) {
         __REDUCER_SEEN__.add(action)
         try {
-          console.log('REDUCER: scanner/pairs ingest', {
+          __debugLog__('REDUCER: scanner/pairs ingest', {
             page: action.payload?.page,
             count: Array.isArray(action.payload?.scannerPairs)
               ? action.payload.scannerPairs.length
@@ -155,7 +157,7 @@ export function tokensReducer(state = initialState, action) {
         if (updated && typeof updated.priceUsd === 'number') {
           if (!__REDUCER_SEEN__.has(action)) {
             __REDUCER_SEEN__.add(action)
-            console.log('REDUCER: pair/tick applied', {
+            __debugLog__('REDUCER: pair/tick applied', {
               id: idOrig,
               oldPrice: token.priceUsd,
               newPrice: updated.priceUsd,
@@ -219,7 +221,7 @@ export function tokensReducer(state = initialState, action) {
       if (!__REDUCER_SEEN__.has(action)) {
         __REDUCER_SEEN__.add(action)
         try {
-          console.log('REDUCER: pair/stats applied', {
+          __debugLog__('REDUCER: pair/stats applied', {
             id: idOrig,
             audit: { contractVerified: audit.contractVerified, honeypot: audit.honeypot },
             migrationPc,
