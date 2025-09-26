@@ -18,6 +18,7 @@ import { onFilterFocusStart, onFilterApplyComplete } from '../filter.bus.js'
 import { formatAge } from '../helpers/format'
 import type { GetScannerResultParams, ScannerResult } from '../test-task-types'
 import { toChainId } from '../utils/chain'
+import { dedupeByPairAddress } from '../utils/scanner'
 import {
   updatePaneVisibleCount,
   updatePaneRenderedCount,
@@ -161,19 +162,8 @@ export default function TokensPane({
     items: ScannerResult[] | unknown[],
   ) => { pair: string; token: string; chain: string }[]
 
-  // Deduplicate scannerPairs by pairAddress (case-insensitive)
-  function dedupeScannerPairs(list: unknown[]): unknown[] {
-    const seen = new Set<string>()
-    const out: unknown[] = []
-    for (const it of list as { pairAddress?: string }[]) {
-      const k = (it?.pairAddress ?? '').toLowerCase()
-      if (k && !seen.has(k)) {
-        seen.add(k)
-        out.push(it)
-      }
-    }
-    return out
-  }
+  // Deduplicate scannerPairs by pairAddress (case-insensitive) — centralized utility
+  // Use shared helper to keep behavior consistent across panes and loads
 
   // Track currently visible and slow subscription keys (pair|token|chain)
   const visibleKeysRef = useRef<Set<string>>(new Set())
@@ -310,7 +300,7 @@ export default function TokensPane({
           '[TokensPane:' + title + '] /scanner returned ' + String(list.length) + ' items',
         )
         // Deduplicate by pairAddress (case-insensitive) before computing payloads/dispatching
-        const dedupedList = dedupeScannerPairs(list as unknown[])
+        const dedupedList = dedupeByPairAddress(list as ScannerResult[])
         if (dedupedList.length !== (list as unknown[]).length) {
           console.log(
             '[TokensPane:' +
@@ -622,7 +612,7 @@ export default function TokensPane({
           ? (raw as { scannerPairs: unknown[] }).scannerPairs
           : []
       // Deduplicate by pairAddress (case-insensitive)
-      const dedupedList = dedupeScannerPairs(list as unknown[])
+      const dedupedList = dedupeByPairAddress(list as ScannerResult[])
       // Dispatch typed append
       dispatch({
         type: 'scanner/append',
