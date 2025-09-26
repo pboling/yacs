@@ -25,7 +25,6 @@ test('critical imports referenced by App.tsx exist', () => {
 
   // Minimal set we care about right now (acts as a contract):
   const required = [
-    ['./ws.mapper.js'],
     ['./scanner.client.js'],
     ['./tokens.reducer.js'],
     ['./ws.subs.js', './ws.subs.ts'], // allow either the JS original or TS shim

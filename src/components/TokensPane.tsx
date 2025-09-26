@@ -18,6 +18,13 @@ import {
   isSubscriptionLockActive,
   getSubscriptionLockAllowedKeys,
   onSubscriptionLockChange,
+  updatePaneVisibleCount,
+  updatePaneRenderedCount,
+  registerFastSubscription,
+  registerSlowSubscription,
+  deregisterFastSubscription,
+  deregisterSlowSubscription,
+  onSubscriptionEvictions,
 } from '../subscription.lock.bus.js'
 
 // Local minimal types mirroring the reducer output
@@ -498,10 +505,12 @@ export default function TokensPane({
         counts[c] = (counts[c] ?? 0) + 1
       }
       onChainCountsChange(counts)
+      // Update rendered count for subscription limits
+      updatePaneRenderedCount(page, rows.length)
     } catch {
       /* no-op */
     }
-  }, [rows, onChainCountsChange])
+  }, [rows, onChainCountsChange, page])
 
   // When the rendered rows change (due to limit/sort), unsubscribe keys that dropped out entirely
   useEffect(() => {
@@ -528,6 +537,8 @@ export default function TokensPane({
             // purge local tracking
             visibleKeysRef.current.delete(key)
             slowKeysRef.current.delete(key)
+            deregisterFastSubscription(key)
+            deregisterSlowSubscription(key)
             const idx = slowResubQueueRef.current.indexOf(key)
             if (idx >= 0) slowResubQueueRef.current.splice(idx, 1)
             // only unsubscribe if no pane has it visible (fast)
@@ -754,6 +765,8 @@ export default function TokensPane({
           }
         }
         slowKeysRef.current.delete(key)
+        deregisterFastSubscription(key)
+        deregisterSlowSubscription(key)
         return
       }
       const fastSet = visibleKeysRef.current
@@ -765,6 +778,7 @@ export default function TokensPane({
         if (!fastSet.has(key)) {
           const { prev } = markVisible(key)
           fastSet.add(key)
+          registerFastSubscription(key)
           // Only send a fast subscription when this pane is the first visible viewer
           if (prev === 0 && ws && ws.readyState === WebSocket.OPEN) {
             try {
@@ -781,14 +795,19 @@ export default function TokensPane({
         if (!slowSet.has(key)) slowSet.add(key)
         if (wasFast) {
           const { next } = markHidden(key)
+          deregisterFastSubscription(key)
           // Only downgrade to slow if no other pane is still viewing it
           if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
             try {
               ws.send(JSON.stringify(buildPairSlowSubscriptionSafe({ pair, token, chain })))
               ws.send(JSON.stringify(buildPairStatsSlowSubscriptionSafe({ pair, token, chain })))
+              registerSlowSubscription(key)
             } catch (err) {
               console.error(`[TokensPane:${title}] slow-subscribe failed for`, key, err)
             }
+          } else {
+            // Even if another pane viewing, track as slow (shared fast handled elsewhere)
+            registerSlowSubscription(key)
           }
         }
       }
@@ -1020,6 +1039,7 @@ export default function TokensPane({
           try {
             wss.send(JSON.stringify(buildPairSlowSubscriptionSafe({ pair, token, chain })))
             wss.send(JSON.stringify(buildPairStatsSlowSubscriptionSafe({ pair, token, chain })))
+            registerSlowSubscription(key)
           } catch (err) {
             console.error(`[TokensPane:${title}] filter-apply slow resub failed`, key, String(err))
           }
@@ -1115,6 +1135,8 @@ export default function TokensPane({
           try {
             visibleKeysRef.current.delete(key)
             slowKeysRef.current.delete(key)
+            deregisterFastSubscription(key)
+            deregisterSlowSubscription(key)
             const { next } = markHidden(key)
             if (next === 0) {
               const [pair, token, chain] = key.split('|')
@@ -1145,6 +1167,7 @@ export default function TokensPane({
             try {
               const { prev } = markVisible(key)
               visibleKeysRef.current.add(key)
+              registerFastSubscription(key)
               if (prev === 0) {
                 ws.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
                 ws.send(JSON.stringify(buildPairStatsSubscriptionSafe({ pair, token, chain })))
@@ -1168,6 +1191,48 @@ export default function TokensPane({
     buildPairUnsubscription,
     buildPairStatsUnsubscription,
   ])
+
+  useEffect(() => {
+    const offEvict = onSubscriptionEvictions((payload: { fast: string[]; slow: string[] }) => {
+      const { fast, slow } = payload
+      const ws = wsRef.current
+      if (!ws || ws.readyState !== WebSocket.OPEN) return
+      for (const key of fast) {
+        if (visibleKeysRef.current.has(key)) {
+          visibleKeysRef.current.delete(key)
+          deregisterFastSubscription(key)
+          try {
+            const { next } = markHidden(key)
+            if (next === 0) {
+              const [pair, token, chain] = key.split('|')
+              ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
+              ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+            }
+          } catch {
+            /* no-op */
+          }
+        }
+      }
+      for (const key of slow) {
+        if (slowKeysRef.current.has(key)) {
+          slowKeysRef.current.delete(key)
+          deregisterSlowSubscription(key)
+          try {
+            if (getCount(key) === 0) {
+              const [pair, token, chain] = key.split('|')
+              ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
+              ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+            }
+          } catch {
+            /* no-op */
+          }
+        }
+      }
+    })
+    return () => {
+      offEvict()
+    }
+  }, [title])
 
   return (
     <div>
@@ -1210,6 +1275,7 @@ export default function TokensPane({
               try {
                 // Decrement this pane's visibility before deciding to unsubscribe
                 const { next } = markHidden(key)
+                deregisterFastSubscription(key)
                 if (next === 0) {
                   ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
                   ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
@@ -1222,6 +1288,7 @@ export default function TokensPane({
             for (const key of slowNow) {
               const [pair, token, chain] = key.split('|')
               try {
+                deregisterSlowSubscription(key)
                 if (getCount(key) === 0) {
                   ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
                   ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
@@ -1258,6 +1325,8 @@ export default function TokensPane({
         onScrollStop={(visibleRows: TokenRow[]) => {
           const ws = wsRef.current
           scrollingRef.current = false
+          // Update pane visible count (actual viewport size)
+          updatePaneVisibleCount(page, visibleRows.length)
           // Compute visible keys
           const visKeys: string[] = []
           for (const row of visibleRows) {
@@ -1303,6 +1372,7 @@ export default function TokensPane({
                   ws.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
                   ws.send(JSON.stringify(buildPairStatsSubscriptionSafe({ pair, token, chain })))
                 }
+                registerFastSubscription(key)
               } catch (err) {
                 console.error(`[TokensPane:${title}] resubscribe fast failed for`, key, String(err))
               }
@@ -1359,6 +1429,7 @@ export default function TokensPane({
                   ws.send(
                     JSON.stringify(buildPairStatsSlowSubscriptionSafe({ pair, token, chain })),
                   )
+                  registerSlowSubscription(key)
                 } catch (err) {
                   console.error(
                     `[TokensPane:${title}] resubscribe slow failed for`,

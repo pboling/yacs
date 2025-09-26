@@ -40,6 +40,8 @@ import { getCount } from './visibility.bus.js'
 import { emitUpdate } from './updates.bus'
 import { engageSubscriptionLock, releaseSubscriptionLock } from './subscription.lock.bus.js'
 import { onSubscriptionLockChange, isSubscriptionLockActive } from './subscription.lock.bus.js'
+import { onSubscriptionMetricsChange, getSubscriptionMetrics } from './subscription.lock.bus.js'
+import SubscriptionDebugOverlay from './components/SubscriptionDebugOverlay'
 
 // Theme allow-list and cookie helpers
 const THEME_ALLOW = ['cherry-sour', 'rocket-lake', 'legendary'] as const
@@ -76,6 +78,19 @@ function TopBar({
   onThemeChange: (v: ThemeName) => void
   lockActive: boolean
 }) {
+  const [metrics, setMetrics] = useState(() => getSubscriptionMetrics())
+  useEffect(() => {
+    const off = onSubscriptionMetricsChange((m: any) => {
+      setMetrics(m)
+    })
+    return () => {
+      try {
+        off()
+      } catch {
+        /* no-op */
+      }
+    }
+  }, [])
   return (
     <div
       style={{
@@ -90,6 +105,21 @@ function TopBar({
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <h1 style={{ margin: 0 }}>{title}</h1>
         <UpdateRate version={import.meta.env.DEV ? version : undefined} />
+        {/* Subscription metrics: Fast/Slow counts vs limits */}
+        <span
+          style={{
+            fontSize: 11,
+            padding: '2px 6px',
+            border: '1px solid #374151',
+            borderRadius: 12,
+            background: 'rgba(255,255,255,0.06)',
+            letterSpacing: 0.5,
+          }}
+          title={`Fast ${metrics.counts?.fast ?? 0} / ${metrics.limits?.fast ?? 0} (normal cap ${metrics.limits?.normal ?? 0}) | Slow ${metrics.counts?.slow ?? 0} / ${metrics.limits?.slow ?? 0}`}
+        >
+          F {metrics.counts?.fast ?? 0}/{metrics.limits?.fast ?? 0} · S {metrics.counts?.slow ?? 0}/
+          {metrics.limits?.slow ?? 0}
+        </span>
         {lockActive && (
           <span
             style={{
@@ -989,6 +1019,14 @@ function App() {
     }
   }
 
+  const debugEnabled = useMemo(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('debug') === 'true'
+    } catch {
+      return false
+    }
+  }, [])
+
   return (
     <div style={{ position: 'relative' }}>
       {!appReady && (
@@ -1377,6 +1415,7 @@ function App() {
           </ErrorBoundary>
         </div>
       </div>
+      {debugEnabled && <SubscriptionDebugOverlay align="right" />}
     </div>
   )
 }

@@ -15,26 +15,26 @@ This repo is a React 19 + TypeScript 5 + Vite 7 (Rolldown) app. Below are the es
 
 - Prerequisites
   - Node.js >= 20 (validated with Node 23). ESM only (package.json has "type": "module").
-  - Any package manager works (npm/pnpm/yarn). Examples here use npm.
+  - pnpm (preferred). If using npm or yarn, adapt commands accordingly.
 
 - Install
-  - npm ci (preferred for reproducible installs) or npm install
+  - pnpm install (use --frozen-lockfile in CI)
 
 - Dev server
-  - Frontend: npm run dev → starts Vite dev server with React Fast Refresh on http://localhost:5173
-  - Backend: npm run server → starts the Express backend on http://localhost:3001 providing GET /scanner
+  - Frontend: pnpm run dev → starts Vite dev server with React Fast Refresh on http://localhost:5173
+  - Backend: pnpm run server → starts the Express backend on http://localhost:3001 providing GET /scanner
   - The frontend REST client in dev defaults to http://localhost:3001 unless VITE_API_BASE is set. Set VITE_API_BASE to override.
   - WebSocket is proxied in dev at /ws to wss://api-rs.dexcelerate.com/ws (vite.config.ts keeps only the WS proxy).
 
 - Production build
-  - npm run build → runs TypeScript project build (tsc -b) for type-checking only (noEmit), then Vite build.
+  - pnpm run build → runs TypeScript project build (tsc -b) for type-checking only (noEmit), then Vite build.
   - TypeScript uses project references via tsconfig.json (tsconfig.app.json for src, tsconfig.node.json for config files).
 
 - Preview production build
-  - npm run preview → serves the built dist/ folder.
+  - pnpm run preview → serves the built dist/ folder.
 
 - Linting
-  - npm run lint → ESLint (flat config) with type-aware rules and React rules. Targets **/\*.ts, **/\*.tsx; ignores dist/.
+  - pnpm run lint → ESLint (flat config) with type-aware rules and React rules. Targets **/\*.ts, **/\*.tsx; ignores dist/.
 
 - Testing (dependency-free)
   - Uses Node’s built-in test runner (node:test). Tests live under tests/ and some src/\*.test.js.
@@ -47,14 +47,14 @@ This repo is a React 19 + TypeScript 5 + Vite 7 (Rolldown) app. Below are the es
 This repo includes UI end-to-end tests using Playwright that validate live WebSocket updates and client WS setup.
 
 - One-time setup
-  - Install browsers: npx playwright install
+  - pnpm exec playwright install
 
 - Running tests
-  - All e2e tests: npm run test:e2e
-  - Interactive UI mode: npm run test:e2e:ui
+  - All e2e tests: pnpm run test:e2e
+  - Interactive UI mode: pnpm run test:e2e:ui
 
 - What the runner does
-  - The Playwright config (playwright.config.ts) auto-starts the dev stack via npm run dev:serve (backend + Vite dev server) and waits for http://localhost:5173.
+  - The Playwright config (playwright.config.ts) auto-starts the dev stack via pnpm run dev:serve (backend + Vite dev server) and waits for http://localhost:5173.
   - Tests live under e2e/ and include:
     - ws-setup.spec.ts → asserts the app establishes a WebSocket connection (waits for a page websocket and window.**APP_WS** to be OPEN).
     - ws-sells-updates.spec.ts → asserts that the first row in both tables updates within a timeout, indicating live data flow.
@@ -447,19 +447,19 @@ You will have to use a no-cors extension from the Chrome web store during develo
   - Switch to public API and enable proxies: set USE_PUBLIC_API=1 (or VITE_USE_PUBLIC_API=1)
 - Seed sources (first match wins): VITE_SEED, SEED, then the content of a .seed file in the project root; fallback to an internal default.
 - Examples:
-  - Default (mock on): npm run dev
-  - Use a specific seed: VITE_SEED=12345 npm run dev
-  - Use public API via proxy: USE_PUBLIC_API=1 npm run dev
-  - Disable mock without proxies (you provide /scanner): LOCAL_SCANNER=0 npm run dev
+  - Default (mock on): pnpm run dev
+  - Use a specific seed: VITE_SEED=12345 pnpm run dev
+  - Use public API via proxy: USE_PUBLIC_API=1 pnpm run dev
+  - Disable mock without proxies (you provide /scanner): LOCAL_SCANNER=0 pnpm run dev
 - The REST endpoint /scanner will return data derived from the seed and request params, so the same seed and params always produce the same dataset.
 - This allows you to test initial load without relying on the public API.
 
 ### Testing notes
 
 - Playwright E2E (browser WebSocket validation)
-  - Install browsers once: npx playwright install --with-deps (or rely on CI preinstall)
-  - Run servers + tests: npm run test:e2e (playwright.config.ts starts both Vite and the local backend via npm run dev:serve)
-  - UI mode: npm run test:e2e:ui
+  - Install browsers once: pnpm exec playwright install --with-deps (or rely on CI preinstall)
+  - Run servers + tests: pnpm run test:e2e (playwright.config.ts starts both Vite and the local backend via pnpm run dev:serve)
+  - UI mode: pnpm run test:e2e:ui
 - Minimal regression tests exist using Node's built-in test runner. Run all tests with: node --test
 - Deterministic mock generation is covered by tests/seed.test.js.
 - The Vite dev server proxies API and WebSocket calls to avoid CORS during development.
@@ -475,7 +475,7 @@ You will have to use a no-cors extension from the Chrome web store during develo
   - WS: new WebSocket('ws://localhost:5173/ws') → proxies to ws://localhost:3001/ws
 - There are no automatic REST fallbacks in development. If the backend is not running, requests will fail and errors will surface in the console/logs. This is intentional to validate primary functionality.
 - Start both servers together during development/testing with:
-  - npm run dev:serve (starts the Express backend and the Vite dev server)
+  - pnpm run dev:serve (starts the Express backend and the Vite dev server)
 
 Notes:
 
@@ -495,17 +495,66 @@ Boot/loading behavior
 - The app shows a full-screen loading overlay during startup. It dismisses when either the WebSocket is OPEN or both tables have initialized their pages (from REST/WS). This avoids a deadlock where the UI wouldn’t mount if the WS is slow/unavailable.
 - In test/automation contexts, the overlay can be bypassed via navigator.webdriver, ?e2e=1, or window.**BYPASS_BOOT** = true.
 
+## Subscription Limits & Debugging
+
+The app enforces dynamic subscription limits to keep WebSocket traffic bounded:
+
+- Fast (normal) capacity = sum of viewport-visible row counts across panes + 6 buffer (3 above/3 below viewport). These are high-frequency pair + pair-stats subscriptions.
+- Fast (lock active) capacity = number of allowed keys (usually 1–2) when the Detail Modal engages the subscription lock.
+- Slow capacity = total rendered (filtered, non-hidden) rows across both panes. Slow subscriptions receive throttled updates.
+- Eviction policy = oldest subscriptions first (based on initial registration timestamp). Allowed keys under an active lock are never evicted.
+
+A global debug object is exposed as `window.SUB_LOCK_DEBUG` with helpers:
+
+```js
+window.SUB_LOCK_DEBUG.getSnapshot() // current metrics + tracked keys
+window.SUB_LOCK_DEBUG.recompute() // force recompute limits
+const off = window.SUB_LOCK_DEBUG.subscribe((snap) => console.log(snap))
+off() // unsubscribe
+```
+
+Enable a heads-up overlay with `?debug=true` in the URL. It displays:
+
+- Lock state
+- Fast / Slow counts vs limits (including normal cap)
+- Visible & rendered per-pane counts
+- First few tracked keys for quick inspection
+
+The Top Bar also surfaces a compact `F x/y · S a/b` badge (Fast and Slow counts vs limits) with a tooltip showing the normal cap.
+
+### Testing the Bus
+
+Unit tests were added in `tests/subscription.lock.bus.test.js` covering:
+
+- Fast eviction ordering (oldest first)
+- Slow eviction ordering
+- Lock engagement reducing fast limit to the allowed key set
+- Lock release restoring normal fast limit without resurrecting evicted keys
+- Edge case: engaging a lock with no existing fast subscriptions
+
+Helpers exposed for tests only:
+
+- `__resetForTests()` resets internal state between test cases.
+
+### Development Tips
+
+1. Open the app with `?debug=true` to verify that fast capacity = visible rows sum + 6.
+2. Scroll tables to change visible counts; watch fast limit adjust in real-time.
+3. Open the Detail Modal to trigger the subscription lock (fast badge shrinks). Selecting a compare token doubles allowed keys.
+4. Close the modal; fast limit re-expands.
+5. In DevTools console: `SUB_LOCK_DEBUG.getSnapshot()` for a full dump.
+
 ## Linting Profiles & Code Style
 
 This project uses **ESLint (flat config)** with two profiles and **Prettier** in compatibility mode.
 
 ### Profiles
 
-- Development: `npm run lint`
+- Development: `pnpm run lint`
   - Warnings allowed (style + exploratory TypeScript warnings)
   - Prettier issues appear as warnings (`prettier/prettier`)
   - Encourages iterative cleanup without blocking local dev
-- CI: `npm run lint:ci`
+- CI: `pnpm run lint:ci`
   - Loads `eslint.ci.config.js` which promotes selected high-signal rules to errors:
     - `@typescript-eslint/no-unused-vars`
     - `@typescript-eslint/no-unsafe-assignment`
@@ -525,27 +574,27 @@ Prettier is run separately for formatting but also integrated into ESLint via `e
 
 ### Scripts
 
-| Command                   | Purpose                                        |
-| ------------------------- | ---------------------------------------------- |
-| `npm run lint`            | Dev lint (warnings OK)                         |
-| `npm run lint:fix`        | Auto-fix (dev profile)                         |
-| `npm run lint:ci`         | CI gating lint (errors only, max warnings = 0) |
-| `npm run lint:ci:fix`     | Same as above but attempts fixes first         |
-| `npm run format:prettier` | Apply Prettier formatting to all source files  |
-| `npm run format:check`    | Verify formatting without writing              |
-| `npm run format`          | Run Prettier write, then ESLint --fix          |
+| Command                    | Purpose                                        |
+| -------------------------- | ---------------------------------------------- |
+| `pnpm run lint`            | Dev lint (warnings OK)                         |
+| `pnpm run lint:fix`        | Auto-fix (dev profile)                         |
+| `pnpm run lint:ci`         | CI gating lint (errors only, max warnings = 0) |
+| `pnpm run lint:ci:fix`     | Same as above but attempts fixes first         |
+| `pnpm run format:prettier` | Apply Prettier formatting to all source files  |
+| `pnpm run format:check`    | Verify formatting without writing              |
+| `pnpm run format`          | Run Prettier write, then ESLint --fix          |
 
 ### Recommended Workflow
 
 1. Make code changes
-2. Run `npm run format` (fast full-project formatting + lint fixes)
-3. Run `npm run lint` to inspect any residual warnings
-4. Before commit / pre-push hook: run `npm run lint:ci`
+2. Run `pnpm run format` (fast full-project formatting + lint fixes)
+3. Run `pnpm run lint` to inspect any residual warnings
+4. Before commit / pre-push hook: run `pnpm run lint:ci`
 
 ### Adding a Pre-Push Hook (Optional)
 
 ```
-npx husky add .husky/pre-push "npm run lint:ci && npm test"
+pnpm dlx husky add .husky/pre-push "pnpm run lint:ci && pnpm test"
 ```
 
 ### Promoting More Rules in CI
