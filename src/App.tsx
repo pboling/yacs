@@ -749,6 +749,24 @@ function App() {
     trending: false,
     newer: false,
   })
+  // Fallback readiness: if pages are initialized via REST (or WS), consider panes ready
+  // This avoids the app getting stuck on the boot overlay when the backend does not
+  // emit scanner-pairs over WebSocket, while REST has already populated the store.
+  useEffect(() => {
+    try {
+      const pages = (state as unknown as { pages?: Partial<Record<number, string[]>> }).pages ?? {}
+      const hasTrending = Array.isArray((pages as Record<number, string[] | undefined>)[TRENDING_PAGE])
+      const hasNew = Array.isArray((pages as Record<number, string[] | undefined>)[NEW_PAGE])
+      if (hasTrending || hasNew) {
+        setWsScannerReady((prev) => ({
+          trending: prev.trending || !!hasTrending,
+          newer: prev.newer || !!hasNew,
+        }))
+      }
+    } catch {
+      /* no-op */
+    }
+  }, [state.pages, TRENDING_PAGE, NEW_PAGE])
   // Allow E2E/automation to bypass the boot splash to avoid spinner-related flakiness
   const bypassBoot = useMemo(() => {
     try {
