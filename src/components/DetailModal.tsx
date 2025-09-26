@@ -7,6 +7,7 @@ import NumberCell from './NumberCell'
 import useCompareSubscription from '../hooks/useCompareSubscription'
 import { toChainId } from '../utils/chain'
 import { buildPairKey, buildTickKey } from '../utils/key_builder'
+import { computeFilteredCompareOptions } from '../utils/filteredCompareOptions.mjs'
 
 export interface DetailModalRow {
   id: string
@@ -221,18 +222,13 @@ export default function DetailModal({
     sells: '#b91c1c',
     liquidity: '#d97706',
   }
-  // Filter compare options
-  const filteredCompareOptions = (() => {
-    if (!open) return [] as DetailModalRow[]
-    const base = allRows.filter((r) => r.id !== row?.id)
-    if (!compareSearch) return base.slice(0, 100)
-    const q = compareSearch.toLowerCase()
-    return base
-      .filter(
-        (r) => r.tokenName.toLowerCase().includes(q) || r.tokenSymbol.toLowerCase().includes(q),
-      )
-      .slice(0, 100)
-  })()
+  // Filter compare options (extracted to pure util for testability)
+  const filteredCompareOptions = computeFilteredCompareOptions<DetailModalRow>({
+    open,
+    allRows,
+    currentRow: row ?? null,
+    compareSearch,
+  })
 
   // Debug updates panel: capture raw JSON updates for this row
   const [updatesLog, setUpdatesLog] = useState<{ id: number; text: string }[]>([])

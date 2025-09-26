@@ -1,4 +1,4 @@
-// src/utils/scanner.ts
+// src/utils/dedupeByPairAddress.ts
 import type { ScannerResult } from '../test-task-types'
 
 export function dedupeByPairAddress<T extends { pairAddress?: string }>(
