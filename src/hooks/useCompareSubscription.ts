@@ -44,6 +44,7 @@ export function useCompareSubscription({
   const wsRef = useRef<WebSocket | undefined>(undefined)
   const firstUpdateSeenRef = useRef(false)
   const lastLiveIdRef = useRef<string | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   // Load last live id from localStorage once
   useEffect(() => {
@@ -81,6 +82,7 @@ export function useCompareSubscription({
     // Cleanup helper
     const unsubscribe = () => {
       const ws = wsRef.current
+      if (abortRef.current) { try { abortRef.current.abort() } catch {} abortRef.current = null }
       if (subscribedIdRef.current && ws && ws.readyState === WebSocket.OPEN) {
         const prev = allRows.find(r => r.id === subscribedIdRef.current)
         if (prev?.pairAddress && prev.tokenAddress) {
@@ -120,9 +122,10 @@ export function useCompareSubscription({
         }
         unsubscribe()
         if (compareRow.pairAddress && compareRow.tokenAddress) {
-          // Send subscriptions for both chain name and numeric id (server may accept either)
+          abortRef.current = new AbortController()
           const variants = new Set<string>([String(compareRow.chain), toChainId(compareRow.chain)])
           for (const chainVariant of variants) {
+            if (abortRef.current.signal.aborted) break
             try { ws.send(JSON.stringify(buildPairSubscription({ pair: compareRow.pairAddress, token: compareRow.tokenAddress, chain: chainVariant }))) } catch {}
             try { ws.send(JSON.stringify(buildPairStatsSubscription({ pair: compareRow.pairAddress, token: compareRow.tokenAddress, chain: chainVariant }))) } catch {}
           }
@@ -162,11 +165,14 @@ export function useCompareSubscription({
   useEffect(() => {
     if (!open || !compareRow || !canLiveStream) return
     const chainId = toChainId(compareRow.chain)
-    const pairStatsKey = compareRow.pairAddress && compareRow.tokenAddress ? `${compareRow.pairAddress}|${compareRow.tokenAddress}|${chainId}` : null
-    const tickKey = compareRow.tokenAddress ? `${compareRow.tokenAddress}|${chainId}` : null
+    const chainName = String(compareRow.chain)
+    const pairStatsKeyNumeric = compareRow.pairAddress && compareRow.tokenAddress ? `${compareRow.pairAddress}|${compareRow.tokenAddress}|${chainId}` : null
+    const pairStatsKeyName = compareRow.pairAddress && compareRow.tokenAddress ? `${compareRow.pairAddress}|${compareRow.tokenAddress}|${chainName}` : null
+    const tickKeyNumeric = compareRow.tokenAddress ? `${compareRow.tokenAddress}|${chainId}` : null
+    const tickKeyName = compareRow.tokenAddress ? `${compareRow.tokenAddress}|${chainName}` : null
 
     const off = onUpdate((e) => {
-      if (e.key !== pairStatsKey && e.key !== tickKey) return
+      if (e.key !== pairStatsKeyNumeric && e.key !== pairStatsKeyName && e.key !== tickKeyNumeric && e.key !== tickKeyName) return
       const latest = getRowById(compareRow.id)
       if (latest) {
         applyCompareSnapshot(compareRow.id)
@@ -185,4 +191,3 @@ export function useCompareSubscription({
 }
 
 export default useCompareSubscription
-

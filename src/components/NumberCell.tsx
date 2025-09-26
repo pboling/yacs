@@ -73,15 +73,30 @@ export default function NumberCell({
         }
     }, [desiredClass, stableMs, noFade])
 
-    // Format number with scientific notation if whole-number part has more than 9 digits
+    // Format number with abbreviation logic (K/M/B/T) unless custom formatter provided
     let text: string
     if (Number.isFinite(num)) {
-        const absNum = Math.abs(num)
-        if (absNum >= 1_000_000_000) {
-            // Use scientific notation with 6 significant digits for readability
-            text = num.toExponential(6)
+        if (formatter) {
+            text = formatter(num)
         } else {
-            text = formatter ? formatter(num) : String(num)
+            const absNum = Math.abs(num)
+            const abbreviate = (n: number) => {
+                const fmt = (v: number) => {
+                    const s = v.toFixed(2)
+                    return s.replace(/\.0+$/, '').replace(/(\.[0-9]*?)0+$/, '$1')
+                }
+                if (absNum >= 1_000_000_000_000) return fmt(n / 1_000_000_000_000) + 'T'
+                if (absNum >= 1_000_000_000) return fmt(n / 1_000_000_000) + 'B'
+                if (absNum >= 1_000_000) return fmt(n / 1_000_000) + 'M'
+                if (absNum >= 1_000) return fmt(n / 1_000) + 'K'
+                return String(n)
+            }
+            // Price-style formatting: keep up to 8 decimals if < 1
+            if (absNum < 1 && absNum > 0) {
+                text = num.toFixed(8).replace(/0+$/,'').replace(/\.$/,'')
+            } else {
+                text = abbreviate(num)
+            }
         }
     } else {
         text = String(value)
