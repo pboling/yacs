@@ -127,17 +127,17 @@ export function mapIncomingMessageToAction(msg) {
   if (!msg || typeof msg !== 'object') return null
   switch (msg.event) {
     case 'scanner-pairs':
-      // full dataset replacement for a page
+      // full dataset replacement for a page (production uses data.pairs)
       return {
         type: 'scanner/pairs',
-        payload: { page: msg.data.page ?? 1, scannerPairs: msg.data.scannerPairs ?? [] },
+        payload: { page: msg.data.page ?? 1, scannerPairs: msg.data.pairs ?? [] },
       }
     case 'scanner-append':
       // incremental append of new items for a page — gated behind tiered-channel
       if (!isTieredChannelEnabled()) return null
       return {
         type: 'scanner/append',
-        payload: { page: msg.data.page ?? 1, scannerPairs: msg.data.scannerPairs ?? [] },
+        payload: { page: msg.data.page ?? 1, scannerPairs: msg.data.pairs ?? [] },
       }
     case 'tick': {
       // Canonical shape only: { data: { pair: { pair, token, chain }, swaps: [...] } }

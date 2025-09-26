@@ -136,7 +136,15 @@ export default function TokensPane({
   // Fetch function as typed alias to keep TS happy with JS module
   const fetchScannerTyped = fetchScanner as unknown as (
     p: GetScannerResultParams,
-  ) => Promise<{ raw: { page?: number | null; scannerPairs?: ScannerResult[] | null } }>
+  ) => Promise<{
+    raw: {
+      page?: number | null
+      scannerPairs?: ScannerResult[] | null
+      pairs?: ScannerResult[] | null
+      stats?: Record<string, unknown> | null
+      totalRows?: number | null
+    }
+  }>
   const buildPairSubscriptionSafe = buildPairSubscription as unknown as (p: {
     pair: string
     token: string
@@ -272,16 +280,13 @@ export default function TokensPane({
         const res = await fetchScannerTyped({ ...filters, page: 1 })
         if (cancelled) return
         const raw = res.raw as unknown
-        // Strict shape check: expect an object with scannerPairs: array
-        const scannerPairs =
-          raw &&
-          typeof raw === 'object' &&
-          Array.isArray((raw as { scannerPairs?: unknown[] }).scannerPairs)
-            ? (raw as { scannerPairs: unknown[] }).scannerPairs
+        // Production shape: { pairs: [...] }
+        const pairsArr =
+          raw && typeof raw === 'object' && Array.isArray((raw as { pairs?: unknown[] }).pairs)
+            ? (raw as { pairs: unknown[] }).pairs
             : null
-        if (!scannerPairs) {
-          const errMsg =
-            'Unexpected data shape from /scanner: missing or invalid scannerPairs array'
+        if (!pairsArr) {
+          const errMsg = 'Unexpected data shape from /scanner: missing or invalid pairs array'
           // Surface loudly in console and UI
           console.error(errMsg, raw)
           // Mark page as initialized with no rows so App overlay can clear
@@ -293,7 +298,7 @@ export default function TokensPane({
           if (!cancelled) setError(errMsg)
           return
         }
-        const list = scannerPairs
+        const list = pairsArr
         console.log(
           '[TokensPane:' + title + '] /scanner returned ' + String(list.length) + ' items',
         )
@@ -606,8 +611,8 @@ export default function TokensPane({
       const list =
         raw &&
         typeof raw === 'object' &&
-        Array.isArray((raw as { scannerPairs?: unknown[] }).scannerPairs)
-          ? (raw as { scannerPairs: unknown[] }).scannerPairs
+        Array.isArray((raw as { pairs?: unknown[] }).pairs)
+          ? (raw as { pairs: unknown[] }).pairs
           : []
       // Deduplicate by pairAddress (case-insensitive)
       const dedupedList = dedupeByPairAddress(list as ScannerResult[])

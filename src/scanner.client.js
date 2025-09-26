@@ -29,9 +29,7 @@ const viteApiBase = (() => {
 })()
 // In dev, prefer relative base ('') so Vite proxy can handle /scanner when running the dev server.
 // Fall back to localhost:3001 only if explicitly provided via VITE_API_BASE.
-export const API_BASE = isViteDev
-  ? viteApiBase || ''
-  : viteApiBase || 'https://api-rs.dexcelerate.com'
+export const API_BASE = viteApiBase || 'https://api-rs.dexcelerate.com'
 
 // Build URLSearchParams from GetScannerResultParams-like object
 /**
@@ -68,7 +66,7 @@ export function buildScannerQuery(params = {}) {
  * @returns {any[]} TokenData[]
  */
 export function mapScannerPage(apiResponse) {
-  const items = apiResponse?.scannerPairs ?? []
+  const items = (apiResponse && apiResponse.pairs) ?? []
   return items.map(mapScannerResultToToken)
 }
 

@@ -425,18 +425,11 @@ function App() {
       /* no-op */
     }
 
-    const proto = location.protocol === 'https:' ? 'wss://' : 'ws://'
-    // In dev, align WS with the local backend (port 3001) so it matches REST data
-    const devUrlPrimary = proto + location.host + '/ws' // via Vite proxy in dev
-    const devUrlSecondary = proto + location.hostname + ':3001/ws' // direct to backend
+    // Use product WS endpoint by default in all environments. Allow override via VITE_WS_URL for testing/mocks.
     const prodUrl = 'wss://api-rs.dexcelerate.com/ws'
-    // Allow override via env (useful for debugging)
     const envUrl: string | null =
       typeof import.meta.env.VITE_WS_URL === 'string' ? import.meta.env.VITE_WS_URL : null
-    // In dev, avoid falling back to production WS to prevent duplicate connections and race conditions
-    const urls: string[] = import.meta.env.DEV
-      ? ([envUrl, devUrlPrimary, devUrlSecondary].filter(Boolean) as string[])
-      : ([envUrl, prodUrl].filter(Boolean) as string[])
+    const urls: string[] = ([envUrl, prodUrl].filter(Boolean) as string[])
 
     const maxAttempts = import.meta.env.DEV ? 8 : 20
 
@@ -544,11 +537,11 @@ function App() {
               if (event === 'scanner-pairs') {
                 const pairs =
                   data && typeof data === 'object'
-                    ? (data as { scannerPairs?: unknown[] }).scannerPairs
+                    ? (data as { pairs?: unknown[] }).pairs
                     : undefined
                 if (!Array.isArray(pairs)) {
                   console.error(
-                    'WS: invalid scanner-pairs payload: missing scannerPairs array',
+                    'WS: invalid scanner-pairs payload: missing pairs array',
                     parsed,
                   )
                   return
