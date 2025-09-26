@@ -6,6 +6,7 @@ import ChartSection from './ChartSection'
 import NumberCell from './NumberCell'
 import useCompareSubscription from '../hooks/useCompareSubscription'
 import { toChainId } from '../utils/chain'
+import { buildPairKey, buildTickKey } from '../utils/key_builder'
 
 export interface DetailModalRow {
   id: string
@@ -177,17 +178,13 @@ export default function DetailModal({
     if (!open || !row) return
     // Allow both pair-stats and high-frequency tick keys for base + compare so their charts update
     const basePairKey =
-      row.pairAddress && row.tokenAddress
-        ? `${row.pairAddress}|${row.tokenAddress}|${toChainId(row.chain)}`
-        : null
-    const baseTick = row.tokenAddress ? `${row.tokenAddress}|${toChainId(row.chain)}` : null
+      row.pairAddress && row.tokenAddress ? buildPairKey(row.pairAddress, row.tokenAddress, row.chain) : null
+    const baseTick = row.tokenAddress ? buildTickKey(row.tokenAddress, row.chain) : null
     const cmpPairKey =
       compareRow?.pairAddress && compareRow?.tokenAddress
-        ? `${compareRow.pairAddress}|${compareRow.tokenAddress}|${toChainId(compareRow.chain)}`
+        ? buildPairKey(compareRow.pairAddress, compareRow.tokenAddress, compareRow.chain)
         : null
-    const cmpTick = compareRow?.tokenAddress
-      ? `${compareRow.tokenAddress}|${toChainId(compareRow.chain)}`
-      : null
+    const cmpTick = compareRow?.tokenAddress ? buildTickKey(compareRow.tokenAddress, compareRow.chain) : null
 
     const allowed: string[] = []
     if (basePairKey) allowed.push(basePairKey)
@@ -248,7 +245,7 @@ export default function DetailModal({
     const chain = row?.chain
     if (!open || !pair || !token || !debugEnabled) return
     setUpdatesLog([])
-    const key = `${pair}|${token}|${toChainId(chain)}`
+    const key = buildPairKey(pair, token, chain)
     const off = onUpdate((e) => {
       try {
         if (e.key !== key) return
@@ -377,16 +374,14 @@ export default function DetailModal({
 
   // Build derived subscription keys
   const basePairStatsKey =
-    row?.pairAddress && row?.tokenAddress
-      ? `${row.pairAddress}|${row.tokenAddress}|${toChainId(row.chain)}`
-      : null
-  const baseTickKey = row?.tokenAddress ? `${row.tokenAddress}|${toChainId(row.chain)}` : null
+    row?.pairAddress && row?.tokenAddress ? buildPairKey(row.pairAddress, row.tokenAddress, row.chain) : null
+  const baseTickKey = row?.tokenAddress ? buildTickKey(row.tokenAddress, row.chain) : null
   const comparePairStatsKey =
     compareRow?.pairAddress && compareRow?.tokenAddress
-      ? `${compareRow.pairAddress}|${compareRow.tokenAddress}|${toChainId(compareRow.chain)}`
+      ? buildPairKey(compareRow.pairAddress, compareRow.tokenAddress, compareRow.chain)
       : null
   const compareTickKey = compareRow?.tokenAddress
-    ? `${compareRow.tokenAddress}|${toChainId(compareRow.chain)}`
+    ? buildTickKey(compareRow.tokenAddress, compareRow.chain)
     : null
 
   // Generic series helpers

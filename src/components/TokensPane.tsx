@@ -4,8 +4,6 @@ import { fetchScanner } from '../scanner.client.js'
 import {
   buildPairStatsSubscription,
   buildPairSubscription,
-  buildPairUnsubscription,
-  buildPairStatsUnsubscription,
   buildPairSlowSubscription,
   buildPairStatsSlowSubscription,
   sendSubscribe,
@@ -18,7 +16,8 @@ import { onFilterFocusStart, onFilterApplyComplete } from '../filter.bus.js'
 import { formatAge } from '../helpers/format'
 import type { GetScannerResultParams, ScannerResult } from '../test-task-types'
 import { toChainId } from '../utils/chain'
-import { dedupeByPairAddress } from '../utils/scanner'
+import { buildPairKey } from '../utils/key_builder'
+import { dedupeByPairAddress } from '../utils/dedupeByPairAddress'
 import {
   updatePaneVisibleCount,
   updatePaneRenderedCount,
@@ -503,7 +502,7 @@ export default function TokensPane({
         const pair = row.pairAddress
         const token = row.tokenAddress
         if (!pair || !token) continue
-        const key = pair + '|' + token + '|' + toChainId(row.chain)
+        const key = buildPairKey(pair, token, row.chain)
         currentKeys.add(key)
       }
       const prev = prevRenderedKeysRef.current
@@ -726,7 +725,7 @@ export default function TokensPane({
       const token = row.tokenAddress
       if (!pair || !token) return
       const chain = toChainId(row.chain)
-      const key = pair + '|' + token + '|' + chain
+      const key = buildPairKey(pair, token, chain)
       // If subscription lock is active and this key isn't allowed, force unsubscribe state
       if (lockActiveRef.current && !lockAllowedRef.current.has(key)) {
         // Ensure we are not tracking it
@@ -857,7 +856,7 @@ export default function TokensPane({
           continue
         }
         const chain = toChainId(row.chain)
-        mapIndexToKey.push(pair + '|' + token + '|' + chain)
+        mapIndexToKey.push(buildPairKey(pair, token, chain))
       }
       const keys = mapIndexToKey.filter(Boolean)
       return { keys, mapIndexToKey }
@@ -965,7 +964,7 @@ export default function TokensPane({
         const token = row.tokenAddress ?? ''
         if (!pair || !token) continue
         const chain = toChainId(row.chain)
-        allRendered.push(pair + '|' + token + '|' + chain)
+        allRendered.push(buildPairKey(pair, token, chain))
       }
       const visSet = new Set(visKeys)
       const slowKeys: string[] = []
@@ -1198,7 +1197,7 @@ export default function TokensPane({
           const pair = row.pairAddress ?? ''
           const token = row.tokenAddress ?? ''
           if (!pair || !token) return undefined
-          const key = pair + '|' + token + '|' + toChainId(row.chain)
+          const key = buildPairKey(pair, token, row.chain)
           if (lockActiveRef.current && !lockAllowedRef.current.has(key)) {
             return { state: 'unsubscribed', tooltip: 'Temporarily unsubscribed (modal focus)' }
           }
@@ -1223,7 +1222,7 @@ export default function TokensPane({
             const token = row.tokenAddress ?? ''
             if (!pair || !token) continue
             const chain = toChainId(row.chain)
-            const key = pair + '|' + token + '|' + chain
+            const key = buildPairKey(pair, token, chain)
             visKeys.push(key)
           }
           const visSet = new Set(visKeys)
@@ -1233,7 +1232,7 @@ export default function TokensPane({
             const token = row.tokenAddress ?? ''
             if (!pair || !token) continue
             const chain = toChainId(row.chain)
-            allRenderedKeys.push(pair + '|' + token + '|' + chain)
+            allRenderedKeys.push(buildPairKey(pair, token, chain))
           }
           const slowKeys: string[] = []
           for (const key of allRenderedKeys) {

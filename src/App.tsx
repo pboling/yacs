@@ -43,6 +43,7 @@ import { onSubscriptionLockChange, isSubscriptionLockActive } from './subscripti
 import { onSubscriptionMetricsChange, getSubscriptionMetrics } from './subscription.lock.bus.js'
 import SubscriptionDebugOverlay from './components/SubscriptionDebugOverlay'
 import { toChainId } from './utils/chain'
+import { buildPairKey, buildTickKey } from './utils/key_builder'
 
 // Theme allow-list and cookie helpers
 const THEME_ALLOW = ['cherry-sour', 'rocket-lake', 'legendary'] as const
@@ -619,7 +620,7 @@ function App() {
                   const token = p.token ?? ''
                   const chain = p.chain ?? ''
                   if (token && chain) {
-                    const key = token + '|' + chain
+                    const key = buildTickKey(token, chain)
                     // Emit per-key update for subscribers (modal, topbar, etc.)
                     try {
                       emitUpdate({ key, type: 'tick', data })
@@ -641,7 +642,7 @@ function App() {
                     const row = byId[idLower] ?? byId[pairAddress]
                     if (row?.tokenAddress) {
                       const chainName = row.chain
-                      const key = pairAddress + '|' + row.tokenAddress + '|' + toChainId(chainName)
+                      const key = buildPairKey(pairAddress, row.tokenAddress, chainName)
                       // Emit per-key update
                       try {
                         emitUpdate({ key, type: 'pair-stats', data })
@@ -983,7 +984,7 @@ function App() {
       const token = row.tokenAddress ?? ''
       if (pair && token) {
         const chain = toChainId(row.chain)
-        engageSubscriptionLock(pair + '|' + token + '|' + chain)
+        engageSubscriptionLock(buildPairKey(pair, token, chain))
       } else {
         engageSubscriptionLock()
       }
