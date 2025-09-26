@@ -373,15 +373,15 @@ export default function DetailModal({
 
   // Build derived subscription keys
   const basePairStatsKey =
-    row && row.pairAddress && row.tokenAddress
+    row?.pairAddress && row.tokenAddress
       ? buildPairKey(row.pairAddress, row.tokenAddress, row.chain)
       : null
-  const baseTickKey = row && row.tokenAddress ? buildTickKey(row.tokenAddress, row.chain) : null
+  const baseTickKey = row?.tokenAddress ? buildTickKey(row.tokenAddress, row.chain) : null
   const comparePairStatsKey =
-    compareRow && compareRow.pairAddress && compareRow.tokenAddress
+    compareRow?.pairAddress && compareRow.tokenAddress
       ? buildPairKey(compareRow.pairAddress, compareRow.tokenAddress, compareRow.chain)
       : null
-  const compareTickKey = compareRow && compareRow.tokenAddress
+  const compareTickKey = compareRow?.tokenAddress
     ? buildTickKey(compareRow.tokenAddress, compareRow.chain)
     : null
 
@@ -946,7 +946,7 @@ export default function DetailModal({
           )
         })()}
         {/* Debug panel at the bottom */}
-        {debugEnabled && row && row.pairAddress && row.tokenAddress && (
+        {debugEnabled && row?.pairAddress && row.tokenAddress && (
           <div style={{ marginTop: 12, borderTop: '1px solid #374151', paddingTop: 12 }}>
             <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
               Debug updates (raw JSON)

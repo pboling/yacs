@@ -83,13 +83,13 @@ export default function SubscriptionDebugOverlay({ align = 'left' }: { align?: '
       <div style={{ marginTop: 4 }}>
         <span style={{ color: '#9ca3af' }}>Panes visible:</span>{' '}
         {Object.entries(snap.visiblePaneCounts)
-          .map(([k, v]) => k + ':' + v)
+          .map(([k, v]) => `${k}:${v}`)
           .join(' ')}
       </div>
       <div>
         <span style={{ color: '#9ca3af' }}>Panes rendered:</span>{' '}
         {Object.entries(snap.renderedPaneCounts)
-          .map(([k, v]) => k + ':' + v)
+          .map(([k, v]) => `${k}:${v}`)
           .join(' ')}
       </div>
       <div style={{ marginTop: 4, color: '#6b7280' }}>

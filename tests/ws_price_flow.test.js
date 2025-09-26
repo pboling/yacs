@@ -108,8 +108,8 @@ test('WS tick events update reducer priceUsd and mcap deterministically', async 
       // Collect two ticks for the target only and reduce them into state
       let price1 = null
       let price2 = null
-      let vol1 = null
-      let vol2 = null
+      let _vol1 = null
+      let _vol2 = null
 
       await new Promise((resolve, reject) => {
         const to = setTimeout(() => reject(new Error('timeout waiting for ticks')), 8000)
@@ -132,10 +132,10 @@ test('WS tick events update reducer priceUsd and mcap deterministically', async 
               const row = state.byId[id] || state.byId[id.toLowerCase()]
               if (row && price1 == null) {
                 price1 = row.priceUsd
-                vol1 = row.volumeUsd
+                _vol1 = row.volumeUsd
               } else if (row && price1 != null && price2 == null) {
                 price2 = row.priceUsd
-                vol2 = row.volumeUsd
+                _vol2 = row.volumeUsd
                 clearTimeout(to)
                 ws.off('message', onMessage)
                 resolve(null)

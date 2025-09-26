@@ -4,7 +4,8 @@
 export function toChainId(input: string | number | undefined): string {
   if (input == null) return '1'
   if (typeof input === 'number') return Number.isFinite(input) ? String(input) : '1'
-  const s = String(input).toUpperCase().trim()
+  // At this point, TypeScript narrows input to string
+  const s = input.toUpperCase().trim()
   if (s === 'ETH') return '1'
   if (s === 'BSC') return '56'
   if (s === 'BASE') return '8453'
