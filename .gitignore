@@ -26,5 +26,7 @@ dist-ssr
 
 /test-results/*
 /test-results/.*
+/playwright-report/*
+/playwright-report/.*
 
 eslint-*.json
