@@ -53,6 +53,48 @@ export function buildPairStatsX5Subscription({ pair, token, chain }) {
   return { event: 'subscribe-pair-stats-x5', data: { pair, token, chain } }
 }
 
+// Thin send helpers to emit paired messages for a given pair/token/chain
+// Each function attempts both sends but isolates failures so one failing message
+// does not prevent the other from being delivered.
+export function sendSubscribe(ws, { pair, token, chain }) {
+  try {
+    ws && ws.readyState === 1 && ws.send(JSON.stringify(buildPairSubscription({ pair, token, chain })))
+  } catch (err) {
+    try { console.error('[ws.sendSubscribe] subscribe-pair failed', err) } catch {}
+  }
+  try {
+    ws && ws.readyState === 1 && ws.send(JSON.stringify(buildPairStatsSubscription({ pair, token, chain })))
+  } catch (err) {
+    try { console.error('[ws.sendSubscribe] subscribe-pair-stats failed', err) } catch {}
+  }
+}
+
+export function sendSubscribeSlow(ws, { pair, token, chain }) {
+  try {
+    ws && ws.readyState === 1 && ws.send(JSON.stringify(buildPairSlowSubscription({ pair, token, chain })))
+  } catch (err) {
+    try { console.error('[ws.sendSubscribeSlow] subscribe-pair-slow failed', err) } catch {}
+  }
+  try {
+    ws && ws.readyState === 1 && ws.send(JSON.stringify(buildPairStatsSlowSubscription({ pair, token, chain })))
+  } catch (err) {
+    try { console.error('[ws.sendSubscribeSlow] subscribe-pair-stats-slow failed', err) } catch {}
+  }
+}
+
+export function sendUnsubscribe(ws, { pair, token, chain }) {
+  try {
+    ws && ws.readyState === 1 && ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
+  } catch (err) {
+    try { console.error('[ws.sendUnsubscribe] unsubscribe-pair failed', err) } catch {}
+  }
+  try {
+    ws && ws.readyState === 1 && ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+  } catch (err) {
+    try { console.error('[ws.sendUnsubscribe] unsubscribe-pair-stats failed', err) } catch {}
+  }
+}
+
 // Map incoming WS message to reducer action (plain object), or null if not handled
 export function mapIncomingMessageToAction(msg) {
   if (!msg || typeof msg !== 'object') return null

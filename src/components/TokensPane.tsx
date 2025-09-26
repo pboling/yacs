@@ -8,6 +8,9 @@ import {
   buildPairStatsUnsubscription,
   buildPairSlowSubscription,
   buildPairStatsSlowSubscription,
+  sendSubscribe,
+  sendSubscribeSlow,
+  sendUnsubscribe,
 } from '../ws.mapper.js'
 import { computePairPayloads } from '../ws.subs.js'
 import { markVisible, markHidden, getCount } from '../visibility.bus.js'
@@ -158,6 +161,20 @@ export default function TokensPane({
     items: ScannerResult[] | unknown[],
   ) => { pair: string; token: string; chain: string }[]
 
+  // Deduplicate scannerPairs by pairAddress (case-insensitive)
+  function dedupeScannerPairs(list: unknown[]): unknown[] {
+    const seen = new Set<string>()
+    const out: unknown[] = []
+    for (const it of list as { pairAddress?: string }[]) {
+      const k = (it?.pairAddress ?? '').toLowerCase()
+      if (k && !seen.has(k)) {
+        seen.add(k)
+        out.push(it)
+      }
+    }
+    return out
+  }
+
   // Track currently visible and slow subscription keys (pair|token|chain)
   const visibleKeysRef = useRef<Set<string>>(new Set())
   const slowKeysRef = useRef<Set<string>>(new Set())
@@ -216,8 +233,7 @@ export default function TokensPane({
               // only send when this pane is the first visible viewer
               const { prev } = markVisible(key)
               if (prev === 0) {
-                ws.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
-                ws.send(JSON.stringify(buildPairStatsSubscriptionSafe({ pair, token, chain })))
+                sendSubscribe(ws, { pair, token, chain })
               }
             }
           } catch (err) {
@@ -294,22 +310,13 @@ export default function TokensPane({
           '[TokensPane:' + title + '] /scanner returned ' + String(list.length) + ' items',
         )
         // Deduplicate by pairAddress (case-insensitive) before computing payloads/dispatching
-        const seenPairsLower = new Set<string>()
-        const dedupedList: unknown[] = []
-        for (const it of list as ScannerResult[]) {
-          const addr = (it as unknown as { pairAddress?: string }).pairAddress
-          const k = (addr ?? '').toLowerCase()
-          if (k && !seenPairsLower.has(k)) {
-            seenPairsLower.add(k)
-            dedupedList.push(it)
-          }
-        }
-        if (dedupedList.length !== list.length) {
+        const dedupedList = dedupeScannerPairs(list as unknown[])
+        if (dedupedList.length !== (list as unknown[]).length) {
           console.log(
             '[TokensPane:' +
               title +
               '] deduped initial list: ' +
-              String(list.length - dedupedList.length) +
+              String((list as unknown[]).length - dedupedList.length) +
               ' duplicates removed',
           )
         }
@@ -455,8 +462,7 @@ export default function TokensPane({
       for (const key of drop) {
         try {
           const [pair, token, chain] = key.split('|')
-          ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
-          ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+          sendUnsubscribe(ws, { pair, token, chain })
           // Reflect locally by clearing from slow set and visible set
           visibleKeysRef.current.delete(key)
           slowKeysRef.current.delete(key)
@@ -531,8 +537,7 @@ export default function TokensPane({
             // only unsubscribe if no pane has it visible (fast)
             if (getCount(key) === 0) {
               const [pair, token, chain] = key.split('|')
-              ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
-              ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+              sendUnsubscribe(ws, { pair, token, chain })
             }
           } catch (err) {
             console.error(
@@ -617,16 +622,7 @@ export default function TokensPane({
           ? (raw as { scannerPairs: unknown[] }).scannerPairs
           : []
       // Deduplicate by pairAddress (case-insensitive)
-      const seenPairsLower = new Set<string>()
-      const dedupedList: unknown[] = []
-      for (const it of list as ScannerResult[]) {
-        const addr = (it as unknown as { pairAddress?: string }).pairAddress
-        const k = (addr ?? '').toLowerCase()
-        if (k && !seenPairsLower.has(k)) {
-          seenPairsLower.add(k)
-          dedupedList.push(it)
-        }
-      }
+      const dedupedList = dedupeScannerPairs(list as unknown[])
       // Dispatch typed append
       dispatch({
         type: 'scanner/append',
@@ -786,8 +782,7 @@ export default function TokensPane({
           // Only send a normal (viewport) subscription when first viewer
           if (prev === 0 && ws && ws.readyState === WebSocket.OPEN) {
             try {
-              ws.send(JSON.stringify(buildPairSubscription({ pair, token, chain })))
-              ws.send(JSON.stringify(buildPairStatsSubscription({ pair, token, chain })))
+              sendSubscribe(ws, { pair, token, chain })
             } catch (err) {
               console.error(`[TokensPane:${title}] subscribe failed for`, key, err)
             }
@@ -814,8 +809,7 @@ export default function TokensPane({
           // Only downgrade to slow if no other pane is still viewing it
           if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
             try {
-              ws.send(JSON.stringify(buildPairSlowSubscription({ pair, token, chain })))
-              ws.send(JSON.stringify(buildPairStatsSlowSubscription({ pair, token, chain })))
+              sendSubscribeSlow(ws, { pair, token, chain })
             } catch (err) {
               console.error(`[TokensPane:${title}] slow-subscribe failed for`, key, err)
             }
@@ -848,8 +842,7 @@ export default function TokensPane({
             const { next } = markHidden(key)
             // Only unsubscribe if no other pane still requires the fast subscription
             if (next === 0) {
-              ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
-              ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+              sendUnsubscribe(ws, { pair, token, chain })
             }
           }
         }
@@ -937,8 +930,7 @@ export default function TokensPane({
             const { next } = markHidden(key)
             if (next === 0) {
               const [pair, token, chain] = key.split('|')
-              wss.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
-              wss.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+              sendUnsubscribe(wss, { pair, token, chain })
             }
           } catch (err) {
             console.error(
@@ -955,8 +947,7 @@ export default function TokensPane({
           try {
             if (getCount(key) === 0) {
               const [pair, token, chain] = key.split('|')
-              wss.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
-              wss.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+              sendUnsubscribe(wss, { pair, token, chain })
             }
           } catch (err) {
             console.error(
@@ -998,8 +989,7 @@ export default function TokensPane({
         try {
           const { prev } = markVisible(key)
           if (prev === 0) {
-            wss.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
-            wss.send(JSON.stringify(buildPairStatsSubscriptionSafe({ pair, token, chain })))
+            sendSubscribe(wss, { pair, token, chain })
           }
         } catch (err) {
           console.error(`[TokensPane:${title}] filter-apply fast resub failed`, key, String(err))
@@ -1048,8 +1038,7 @@ export default function TokensPane({
           if (!key) break
           const [pair, token, chain] = key.split('|')
           try {
-            wss.send(JSON.stringify(buildPairSlowSubscriptionSafe({ pair, token, chain })))
-            wss.send(JSON.stringify(buildPairStatsSlowSubscriptionSafe({ pair, token, chain })))
+            sendSubscribeSlow(wss, { pair, token, chain })
             registerSlowSubscription(key)
           } catch (err) {
             console.error(`[TokensPane:${title}] filter-apply slow resub failed`, key, String(err))
@@ -1189,8 +1178,7 @@ export default function TokensPane({
                 const { next } = markHidden(key)
                 deregisterFastSubscription(key)
                 if (next === 0) {
-                  ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
-                  ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+                  sendUnsubscribe(ws, { pair, token, chain })
                 }
               } catch (err) {
                 console.error(`[TokensPane:${title}] bulk-unsubscribe failed for`, key, String(err))
@@ -1202,8 +1190,7 @@ export default function TokensPane({
               try {
                 deregisterSlowSubscription(key)
                 if (getCount(key) === 0) {
-                  ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
-                  ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+                  sendUnsubscribe(ws, { pair, token, chain })
                 }
               } catch (err) {
                 console.error(
@@ -1281,8 +1268,7 @@ export default function TokensPane({
               try {
                 const { prev } = markVisible(key)
                 if (prev === 0) {
-                  ws.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
-                  ws.send(JSON.stringify(buildPairStatsSubscriptionSafe({ pair, token, chain })))
+                  sendSubscribe(ws, { pair, token, chain })
                 }
                 registerFastSubscription(key)
               } catch (err) {
@@ -1337,10 +1323,7 @@ export default function TokensPane({
                 if (!key) break
                 const [pair, token, chain] = key.split('|')
                 try {
-                  ws.send(JSON.stringify(buildPairSlowSubscriptionSafe({ pair, token, chain })))
-                  ws.send(
-                    JSON.stringify(buildPairStatsSlowSubscriptionSafe({ pair, token, chain })),
-                  )
+                  sendSubscribeSlow(ws, { pair, token, chain })
                   registerSlowSubscription(key)
                 } catch (err) {
                   console.error(
