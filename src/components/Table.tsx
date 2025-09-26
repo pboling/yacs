@@ -603,6 +603,7 @@ export default function Table({
                         : 'descending'
                       : 'none'
                   }
+                  style={{ width: 30, minWidth: 30, maxWidth: 30 }}
                 >
                   Exchange
                 </th>
@@ -855,22 +856,33 @@ export default function Table({
                         })()}
                       </div>
                     </td>
-                    <td>{t.exchange}</td>
+                    <td style={{ width: 60, minWidth: 60, maxWidth: 60 }}>
+                      <div
+                        title={t.exchange}
+                        style={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          width: '100%',
+                          maxWidth: '100%',
+                        }}
+                      >
+                        {t.exchange}
+                      </div>
+                    </td>
                     <td>
-                      <NumberCell value={t.priceUsd} prefix="$" formatter={(n) => n.toFixed(8)} />
+                      <NumberCell value={t.priceUsd} prefix="$" />
                     </td>
                     <td>
                       <NumberCell
                         value={t.mcap}
                         prefix="$"
-                        formatter={(n) => Math.round(n).toLocaleString()}
                       />
                     </td>
                     <td>
                       <NumberCell
                         value={t.volumeUsd}
                         prefix="$"
-                        formatter={(n) => Math.round(n).toLocaleString()}
                       />
                     </td>
                     <td>
@@ -894,7 +906,6 @@ export default function Table({
                       <NumberCell
                         value={t.liquidity.current}
                         prefix="$"
-                        formatter={(n) => Math.round(n).toLocaleString()}
                       />
                     </td>
                     <td>

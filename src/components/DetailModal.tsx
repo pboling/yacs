@@ -858,40 +858,21 @@ export default function DetailModal({
                         <div style={{ fontSize: 12 }}>
                           {(() => {
                             if (d.a == null || d.b == null) return '—'
-                            const isCurrency =
-                              d.k === 'price' || d.k === 'mcap' || d.k === 'liquidity'
+                            const isCurrency = d.k === 'price' || d.k === 'mcap' || d.k === 'liquidity'
                             const prefixSymbol = isCurrency ? '$' : ''
-                            const fmtBase = (n: number) =>
-                              d.k === 'price' ? n.toFixed(8) : Math.round(n).toLocaleString()
                             const delta = d.delta ?? 0
                             const pct = d.pct
                             const ratio = d.ratio
                             return (
                               <span>
                                 <span>
-                                  {prefixSymbol}
-                                  {fmtBase(d.a)} vs {prefixSymbol}
-                                  {fmtBase(d.b)} (
+                                  <NumberCell value={d.a} prefix={prefixSymbol} /> vs <NumberCell value={d.b} prefix={prefixSymbol} /> (
                                 </span>
-                                <NumberCell
-                                  value={delta}
-                                  noFade
-                                  formatter={(n) => {
-                                    const base =
-                                      d.k === 'price'
-                                        ? n.toFixed(8)
-                                        : Math.round(n).toLocaleString()
-                                    return (n >= 0 ? '+' : '') + base
-                                  }}
-                                />
+                                <NumberCell value={delta} noFade prefix={delta >= 0 ? '+' : ''} />
                                 {pct != null && (
                                   <>
                                     <span>, </span>
-                                    <NumberCell
-                                      value={pct}
-                                      noFade
-                                      formatter={(n) => (n >= 0 ? '+' : '') + n.toFixed(2) + '%'}
-                                    />
+                                    <NumberCell value={pct} noFade prefix={pct >= 0 ? '+' : ''} suffix="%" />
                                   </>
                                 )}
                                 {ratio != null && (

@@ -124,23 +124,18 @@ export const ChartSection: React.FC<ChartSectionProps> = ({
             <NumberCell
               value={latestVal('volume')}
               prefix={Number.isFinite(Number(latestVal('volume'))) ? '$' : ''}
-              formatter={(n) =>
-                Math.abs(n) >= 1e9 ? n.toExponential(2) : Math.round(n).toLocaleString()
-              }
             />
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span className="muted">Buys</span>
             <NumberCell
               value={latestVal('buys')}
-              formatter={(n) => Math.round(n).toLocaleString()}
             />
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span className="muted">Sells</span>
             <NumberCell
               value={latestVal('sells')}
-              formatter={(n) => Math.round(n).toLocaleString()}
             />
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -215,14 +210,8 @@ export const ChartSection: React.FC<ChartSectionProps> = ({
           const vals = history[k] ?? []
           const latest = vals.length > 0 ? vals[vals.length - 1] : '—'
           let prefix = ''
-          let formatter: ((n: number) => string) | undefined = undefined
-          if (k === 'price') {
+          if (k === 'price' || k === 'mcap' || k === 'liquidity') {
             prefix = '$'
-            formatter = (n) => (Math.abs(n) >= 1e9 ? n.toExponential(2) : n.toFixed(8))
-          } else if (k === 'mcap' || k === 'liquidity') {
-            prefix = '$'
-            formatter = (n) =>
-              Math.abs(n) >= 1e9 ? n.toExponential(2) : Math.round(n).toLocaleString()
           }
           return (
             <span
@@ -247,7 +236,7 @@ export const ChartSection: React.FC<ChartSectionProps> = ({
               <span>
                 {seriesLabels[k]} ({symbol})
               </span>
-              <NumberCell value={latest} prefix={prefix} formatter={formatter} />
+              <NumberCell value={latest} prefix={prefix} />
             </span>
           )
         })}
