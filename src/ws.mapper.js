@@ -58,40 +58,64 @@ export function buildPairStatsX5Subscription({ pair, token, chain }) {
 // does not prevent the other from being delivered.
 export function sendSubscribe(ws, { pair, token, chain }) {
   try {
-    ws && ws.readyState === 1 && ws.send(JSON.stringify(buildPairSubscription({ pair, token, chain })))
+    ws &&
+      ws.readyState === 1 &&
+      ws.send(JSON.stringify(buildPairSubscription({ pair, token, chain })))
   } catch (err) {
-    try { console.error('[ws.sendSubscribe] subscribe-pair failed', err) } catch {}
+    try {
+      console.error('[ws.sendSubscribe] subscribe-pair failed', err)
+    } catch {}
   }
   try {
-    ws && ws.readyState === 1 && ws.send(JSON.stringify(buildPairStatsSubscription({ pair, token, chain })))
+    ws &&
+      ws.readyState === 1 &&
+      ws.send(JSON.stringify(buildPairStatsSubscription({ pair, token, chain })))
   } catch (err) {
-    try { console.error('[ws.sendSubscribe] subscribe-pair-stats failed', err) } catch {}
+    try {
+      console.error('[ws.sendSubscribe] subscribe-pair-stats failed', err)
+    } catch {}
   }
 }
 
 export function sendSubscribeSlow(ws, { pair, token, chain }) {
   try {
-    ws && ws.readyState === 1 && ws.send(JSON.stringify(buildPairSlowSubscription({ pair, token, chain })))
+    ws &&
+      ws.readyState === 1 &&
+      ws.send(JSON.stringify(buildPairSlowSubscription({ pair, token, chain })))
   } catch (err) {
-    try { console.error('[ws.sendSubscribeSlow] subscribe-pair-slow failed', err) } catch {}
+    try {
+      console.error('[ws.sendSubscribeSlow] subscribe-pair-slow failed', err)
+    } catch {}
   }
   try {
-    ws && ws.readyState === 1 && ws.send(JSON.stringify(buildPairStatsSlowSubscription({ pair, token, chain })))
+    ws &&
+      ws.readyState === 1 &&
+      ws.send(JSON.stringify(buildPairStatsSlowSubscription({ pair, token, chain })))
   } catch (err) {
-    try { console.error('[ws.sendSubscribeSlow] subscribe-pair-stats-slow failed', err) } catch {}
+    try {
+      console.error('[ws.sendSubscribeSlow] subscribe-pair-stats-slow failed', err)
+    } catch {}
   }
 }
 
 export function sendUnsubscribe(ws, { pair, token, chain }) {
   try {
-    ws && ws.readyState === 1 && ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
+    ws &&
+      ws.readyState === 1 &&
+      ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
   } catch (err) {
-    try { console.error('[ws.sendUnsubscribe] unsubscribe-pair failed', err) } catch {}
+    try {
+      console.error('[ws.sendUnsubscribe] unsubscribe-pair failed', err)
+    } catch {}
   }
   try {
-    ws && ws.readyState === 1 && ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+    ws &&
+      ws.readyState === 1 &&
+      ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
   } catch (err) {
-    try { console.error('[ws.sendUnsubscribe] unsubscribe-pair-stats failed', err) } catch {}
+    try {
+      console.error('[ws.sendUnsubscribe] unsubscribe-pair-stats failed', err)
+    } catch {}
   }
 }
 

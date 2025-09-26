@@ -300,17 +300,17 @@ export default function TokensPane({
         )
         // Deduplicate by pairAddress (case-insensitive) before computing payloads/dispatching
         const dedupedList = dedupeByPairAddress(list as ScannerResult[])
-        if (dedupedList.length !== (list as unknown[]).length) {
+        if (dedupedList.length !== list.length) {
           console.log(
             '[TokensPane:' +
               title +
               '] deduped initial list: ' +
-              String((list as unknown[]).length - dedupedList.length) +
+              String(list.length - dedupedList.length) +
               ' duplicates removed',
           )
         }
         // Update local ids for this pane only
-        const payloads = computePairPayloadsSafe(dedupedList as ScannerResult[])
+        const payloads = computePairPayloadsSafe(dedupedList)
         payloadsRef.current = payloads
         // Deduplicate pair ids for this pane to avoid duplicate row keys (computePairPayloads emits chain variants)
         const seenPairs = new Set<string>()

@@ -25,6 +25,9 @@ export function computeFilteredCompareOptions({ open, allRows, currentRow, compa
   const topN = (arr) => (Array.isArray(arr) ? arr.slice(0, 100) : [])
   if (!compareSearch) return topN(base)
   const q = String(compareSearch).toLowerCase()
-  const safeIncludes = (s) => String(s || '').toLowerCase().includes(q)
+  const safeIncludes = (s) =>
+    String(s || '')
+      .toLowerCase()
+      .includes(q)
   return topN(base.filter((r) => safeIncludes(r?.tokenName) || safeIncludes(r?.tokenSymbol)))
 }
