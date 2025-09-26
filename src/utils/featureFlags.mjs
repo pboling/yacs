@@ -2,7 +2,7 @@
  * Feature flags utility (runtime-only, ESM JS for broad compatibility)
  *
  * Currently supported flags:
- * - tiered-channel: gates usage of non-standard WS channels (fast/slow/X5, append, wpeg-prices)
+ * - tiered-channel: gates usage of non-standard WS channels (X5, append, wpeg-prices)
  *   Default: OFF.
  *   Enable via either URL param ?tiered-channel=true or localStorage['tiered-channel']='true'.
  */

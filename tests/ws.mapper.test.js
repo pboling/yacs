@@ -52,9 +52,28 @@ test('mapIncomingMessageToAction maps known events and ignores unknown', () => {
   const a3 = mapIncomingMessageToAction(statsMsg)
   assert.equal(a3.type, 'pair/stats')
   const wpegMsg = { event: 'wpeg-prices', data: { prices: { ETH: '4183.1100', SOL: '210.5' } } }
-  const a4 = mapIncomingMessageToAction(wpegMsg)
-  assert.equal(a4.type, 'wpeg/prices')
-  assert.deepEqual(a4.payload.prices, { ETH: '4183.1100', SOL: '210.5' })
+  // By default in Node (no window), feature flag is OFF; event should be ignored
+  const gated = mapIncomingMessageToAction(wpegMsg)
+  assert.equal(gated, null)
+  // Enable flag by mocking window with tiered-channel=true
+  const prevWin = globalThis.window
+  // @ts-ignore
+  globalThis.window = {
+    location: { search: '?tiered-channel=true' },
+    localStorage: { getItem: () => 'true', setItem() {} },
+  }
+  try {
+    const a4 = mapIncomingMessageToAction(wpegMsg)
+    assert.equal(a4.type, 'wpeg/prices')
+    assert.deepEqual(a4.payload.prices, { ETH: '4183.1100', SOL: '210.5' })
+  } finally {
+    // @ts-ignore
+    delete globalThis.window
+    if (prevWin) {
+      // @ts-ignore
+      globalThis.window = prevWin
+    }
+  }
   const unknown = mapIncomingMessageToAction({ event: 'unknown', data: {} })
   assert.equal(unknown, null)
 })

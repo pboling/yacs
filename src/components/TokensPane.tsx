@@ -4,10 +4,7 @@ import { fetchScanner } from '../scanner.client.js'
 import {
   buildPairStatsSubscription,
   buildPairSubscription,
-  buildPairSlowSubscription,
-  buildPairStatsSlowSubscription,
   sendSubscribe,
-  sendSubscribeSlow,
   sendUnsubscribe,
 } from '../ws.mapper.js'
 import { computePairPayloads } from '../ws.subs.js'
@@ -18,15 +15,6 @@ import type { GetScannerResultParams, ScannerResult } from '../test-task-types'
 import { toChainId } from '../utils/chain'
 import { buildPairKey } from '../utils/key_builder'
 import { dedupeByPairAddress } from '../utils/dedupeByPairAddress'
-import {
-  updatePaneVisibleCount,
-  updatePaneRenderedCount,
-  registerFastSubscription,
-  deregisterFastSubscription,
-  registerSlowSubscription,
-  deregisterSlowSubscription,
-  onSubscriptionEvictions,
-} from '../subscription.lock.bus.js'
 import {
   onSubscriptionLockChange,
   isSubscriptionLockActive,
@@ -150,21 +138,11 @@ export default function TokensPane({
     token: string
     chain: string
   }) => { event: 'subscribe-pair'; data: { pair: string; token: string; chain: string } }
-  const buildPairSlowSubscriptionSafe = buildPairSlowSubscription as unknown as (p: {
-    pair: string
-    token: string
-    chain: string
-  }) => { event: 'subscribe-pair-slow'; data: { pair: string; token: string; chain: string } }
   const buildPairStatsSubscriptionSafe = buildPairStatsSubscription as unknown as (p: {
     pair: string
     token: string
     chain: string
   }) => { event: 'subscribe-pair-stats'; data: { pair: string; token: string; chain: string } }
-  const buildPairStatsSlowSubscriptionSafe = buildPairStatsSlowSubscription as unknown as (p: {
-    pair: string
-    token: string
-    chain: string
-  }) => { event: 'subscribe-pair-stats-slow'; data: { pair: string; token: string; chain: string } }
   const computePairPayloadsSafe = computePairPayloads as unknown as (
     items: ScannerResult[] | unknown[],
   ) => { pair: string; token: string; chain: string }[]
@@ -172,16 +150,8 @@ export default function TokensPane({
   // Deduplicate scannerPairs by pairAddress (case-insensitive) — centralized utility
   // Use shared helper to keep behavior consistent across panes and loads
 
-  // Track currently visible and slow subscription keys (pair|token|chain)
+  // Track currently visible subscription keys (pair|token|chain)
   const visibleKeysRef = useRef<Set<string>>(new Set())
-  const slowKeysRef = useRef<Set<string>>(new Set())
-  // Scheduler state for staggered slow re-subscriptions after scroll stops
-  // - slowResubQueueRef holds keys to (re)subscribe at slow rate
-  // - slowResubIntervalRef drives per-second batching; cleared on new scroll or unmount
-  const slowResubQueueRef = useRef<string[]>([])
-  const slowResubIntervalRef = useRef<number | null>(null)
-  // Start-delay timer for slow re-subscriptions after scroll stop (debounce rapid stop-starts)
-  const slowResubStartTimeoutRef = useRef<number | null>(null)
   // Subscription lock refs
   const lockActiveRef = useRef<boolean>(false)
   const lockAllowedRef = useRef<Set<string>>(new Set())
@@ -446,40 +416,6 @@ export default function TokensPane({
     paneIdRef.current = title
   }, [title])
 
-  // Track subscription evictions from central limiter and perform WS unsubs
-  useEffect(() => {
-    const off = onSubscriptionEvictions(({ fast, slow }: { fast: string[]; slow: string[] }) => {
-      const ws = wsRef.current
-      if (!ws || ws.readyState !== WebSocket.OPEN) return
-      const drop = [...fast, ...slow]
-      for (const key of drop) {
-        try {
-          const [pair, token, chain] = key.split('|')
-          sendUnsubscribe(ws, { pair, token, chain })
-          // Reflect locally by clearing from slow set and visible set
-          visibleKeysRef.current.delete(key)
-          slowKeysRef.current.delete(key)
-          deregisterFastSubscription(key)
-          deregisterSlowSubscription(key)
-          // Visibility counter decrement
-          try {
-            markHidden(key)
-          } catch {
-            /* no-op */
-          }
-        } catch {
-          /* no-op */
-        }
-      }
-    })
-    return () => {
-      try {
-        off()
-      } catch {
-        /* no-op */
-      }
-    }
-  }, [])
 
   // Emit per-chain counts of currently rendered rows to parent (for combined counts)
   useEffect(() => {
@@ -491,8 +427,6 @@ export default function TokensPane({
         counts[c] = (counts[c] ?? 0) + 1
       }
       onChainCountsChange(counts)
-      // Update rendered count for subscription limits
-      updatePaneRenderedCount(page, rows.length)
     } catch {
       /* no-op */
     }
@@ -522,12 +456,7 @@ export default function TokensPane({
           try {
             // purge local tracking
             visibleKeysRef.current.delete(key)
-            slowKeysRef.current.delete(key)
-            deregisterFastSubscription(key)
-            deregisterSlowSubscription(key)
-            const idx = slowResubQueueRef.current.indexOf(key)
-            if (idx >= 0) slowResubQueueRef.current.splice(idx, 1)
-            // only unsubscribe if no pane has it visible (fast)
+            // only unsubscribe if no pane has it visible
             if (getCount(key) === 0) {
               const [pair, token, chain] = key.split('|')
               sendUnsubscribe(ws, { pair, token, chain })
@@ -730,93 +659,40 @@ export default function TokensPane({
       if (!pair || !token) return
       const chain = toChainId(row.chain)
       const key = buildPairKey(pair, token, chain)
-      // If subscription lock is active and this key isn't allowed, force unsubscribe state
+      // If subscription lock is active and this key isn't allowed, stop tracking
       if (lockActiveRef.current && !lockAllowedRef.current.has(key)) {
-        // Ensure we are not tracking it
         if (visibleKeysRef.current.delete(key)) {
           try {
             markHidden(key)
-          } catch {
-            /* no-op */
-          }
-          try {
-            deregisterFastSubscription(key)
-          } catch {
-            /* no-op */
-          }
-        }
-        slowKeysRef.current.delete(key)
-        try {
-          deregisterSlowSubscription(key)
-        } catch {
-          /* no-op */
+          } catch {}
         }
         return
       }
-      const fastSet = visibleKeysRef.current
-      const slowSet = slowKeysRef.current
+      const set = visibleKeysRef.current
       const ws = wsRef.current
       if (visible) {
-        // promote to fast (only if this pane wasn't already tracking it)
-        slowSet.delete(key)
-        try {
-          deregisterSlowSubscription(key)
-        } catch {
-          /* no-op */
-        }
-        if (!fastSet.has(key)) {
+        if (!set.has(key)) {
           const { prev } = markVisible(key)
-          fastSet.add(key)
-          try {
-            registerFastSubscription(key)
-          } catch {
-            /* no-op */
-          }
-          // Only send a normal (viewport) subscription when first viewer
+          set.add(key)
           if (prev === 0 && ws && ws.readyState === WebSocket.OPEN) {
             try {
               sendSubscribe(ws, { pair, token, chain })
-            } catch (err) {
-              console.error(`[TokensPane:${title}] subscribe failed for`, key, err)
-            }
+            } catch {}
           }
         }
       } else {
-        const wasFast = fastSet.has(key)
-        if (wasFast) {
-          fastSet.delete(key)
-          try {
-            deregisterFastSubscription(key)
-          } catch {
-            /* no-op */
-          }
-        }
-        if (!slowSet.has(key)) slowSet.add(key)
-        try {
-          registerSlowSubscription(key)
-        } catch {
-          /* no-op */
-        }
-        if (wasFast) {
+        if (set.has(key)) {
+          set.delete(key)
           const { next } = markHidden(key)
-          // Only downgrade to slow if no other pane is still viewing it
           if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
             try {
-              sendSubscribeSlow(ws, { pair, token, chain })
-            } catch (err) {
-              console.error(`[TokensPane:${title}] slow-subscribe failed for`, key, err)
-            }
+              sendUnsubscribe(ws, { pair, token, chain })
+            } catch {}
           }
         }
       }
-      // Update central pane visible count
-      try {
-        updatePaneVisibleCount(paneIdRef.current, visibleKeysRef.current.size)
-      } catch {
-        /* no-op */
-      }
     },
-    [title], // Imported mapper functions are module-level singletons; excluding them avoids false positives
+    [title],
   )
 
   // Unsubscribe all visible on unmount (outside dev optional)
@@ -833,7 +709,7 @@ export default function TokensPane({
             const [pair, token, chain] = key.split('|')
             // On unmount, this pane is no longer a visible viewer for these keys
             const { next } = markHidden(key)
-            // Only unsubscribe if no other pane still requires the fast subscription
+            // Only unsubscribe if no other pane still requires the subscription
             if (next === 0) {
               sendUnsubscribe(ws, { pair, token, chain })
             }
@@ -846,257 +722,7 @@ export default function TokensPane({
     }
   }, [])
 
-  // React to filter focus/apply events to control subscriptions around filtering interactions
-  useEffect(() => {
-    const ws = () => wsRef.current
 
-    function computeAllKeys(): { keys: string[]; mapIndexToKey: string[] } {
-      const mapIndexToKey: string[] = []
-      for (const row of rowsRef.current) {
-        const pair = row.pairAddress ?? ''
-        const token = row.tokenAddress ?? ''
-        if (!pair || !token) {
-          mapIndexToKey.push('')
-          continue
-        }
-        const chain = toChainId(row.chain)
-        mapIndexToKey.push(buildPairKey(pair, token, chain))
-      }
-      const keys = mapIndexToKey.filter(Boolean)
-      return { keys, mapIndexToKey }
-    }
-
-    const offFocus = onFilterFocusStart(() => {
-      // Pause any scheduled resubscriptions and mark as scrolling-like freeze
-      scrollingRef.current = true
-      if (slowResubIntervalRef.current != null) {
-        try {
-          window.clearInterval(slowResubIntervalRef.current)
-        } catch {
-          /* no-op */
-        }
-        slowResubIntervalRef.current = null
-      }
-      if (slowResubStartTimeoutRef.current != null) {
-        try {
-          window.clearTimeout(slowResubStartTimeoutRef.current)
-        } catch {
-          /* no-op */
-        }
-        slowResubStartTimeoutRef.current = null
-      }
-
-      const w = ws()
-      // Determine keep window: current visible indices ±3
-      const { mapIndexToKey } = computeAllKeys()
-      const keepIndex = new Set<number>()
-      const visibleSet = new Set<string>(visibleKeysRef.current)
-      for (let i = 0; i < mapIndexToKey.length; i++) {
-        const key = mapIndexToKey[i]
-        if (!key) continue
-        if (visibleSet.has(key)) {
-          for (let j = Math.max(0, i - 3); j <= Math.min(mapIndexToKey.length - 1, i + 3); j++) {
-            keepIndex.add(j)
-          }
-        }
-      }
-      const keepKeys = new Set<string>()
-      for (const i of keepIndex) {
-        const k = mapIndexToKey[i]
-        if (k) keepKeys.add(k)
-      }
-
-      // Build snapshots of current tracking
-      const fastNow = new Set<string>(visibleKeysRef.current)
-      const slowNow = new Set<string>(slowKeysRef.current)
-      // Retain queued keys only if within keep window
-      slowResubQueueRef.current = slowResubQueueRef.current.filter((k) => keepKeys.has(k))
-
-      // Unsubscribe any not in keep window
-      const wss = w && w.readyState === WebSocket.OPEN ? w : null
-      if (wss) {
-        // Fast ones
-        for (const key of Array.from(fastNow)) {
-          if (keepKeys.has(key)) continue
-          visibleKeysRef.current.delete(key)
-          try {
-            const { next } = markHidden(key)
-            if (next === 0) {
-              const [pair, token, chain] = key.split('|')
-              sendUnsubscribe(wss, { pair, token, chain })
-            }
-          } catch (err) {
-            console.error(
-              `[TokensPane:${title}] filter-focus fast unsubscribe failed`,
-              key,
-              String(err),
-            )
-          }
-        }
-        // Slow ones
-        for (const key of Array.from(slowNow)) {
-          if (keepKeys.has(key)) continue
-          slowKeysRef.current.delete(key)
-          try {
-            if (getCount(key) === 0) {
-              const [pair, token, chain] = key.split('|')
-              sendUnsubscribe(wss, { pair, token, chain })
-            }
-          } catch (err) {
-            console.error(
-              `[TokensPane:${title}] filter-focus slow unsubscribe failed`,
-              key,
-              String(err),
-            )
-          }
-        }
-      }
-    })
-
-    const offApply = onFilterApplyComplete(() => {
-      // Resume subscriptions using existing stagger logic
-      const wss = ws()
-      scrollingRef.current = false
-      if (!wss || wss.readyState !== WebSocket.OPEN) return
-
-      // Compute visKeys from current visible set
-      const visKeys = Array.from(visibleKeysRef.current)
-      // Compute all rendered keys
-      const allRendered: string[] = []
-      for (const row of rowsRef.current) {
-        const pair = row.pairAddress ?? ''
-        const token = row.tokenAddress ?? ''
-        if (!pair || !token) continue
-        const chain = toChainId(row.chain)
-        allRendered.push(buildPairKey(pair, token, chain))
-      }
-      const visSet = new Set(visKeys)
-      const slowKeys: string[] = []
-      for (const key of allRendered) {
-        if (!visSet.has(key) && getCount(key) === 0) slowKeys.push(key)
-      }
-
-      // Fast subs immediately
-      for (const key of visKeys) {
-        const [pair, token, chain] = key.split('|')
-        try {
-          const { prev } = markVisible(key)
-          if (prev === 0) {
-            sendSubscribe(wss, { pair, token, chain })
-          }
-        } catch (err) {
-          console.error(`[TokensPane:${title}] filter-apply fast resub failed`, key, String(err))
-        }
-      }
-
-      // Queue slow with same schedule as onScrollStop
-      const totalAll = visKeys.length + slowKeys.length
-      const estimatedSlowFactor = Math.max(200, Math.ceil(totalAll / 4))
-      const batchPerSecond = Math.max(1, Math.ceil(totalAll / estimatedSlowFactor))
-
-      if (slowResubIntervalRef.current != null) {
-        try {
-          window.clearInterval(slowResubIntervalRef.current)
-        } catch {
-          /* no-op */
-        }
-        slowResubIntervalRef.current = null
-      }
-      if (slowResubStartTimeoutRef.current != null) {
-        try {
-          window.clearTimeout(slowResubStartTimeoutRef.current)
-        } catch {
-          /* no-op */
-        }
-        slowResubStartTimeoutRef.current = null
-      }
-      slowResubQueueRef.current = [...slowKeys]
-
-      const tick = () => {
-        const remaining = slowResubQueueRef.current.length
-        if (remaining <= 0) {
-          if (slowResubIntervalRef.current != null) {
-            try {
-              window.clearInterval(slowResubIntervalRef.current)
-            } catch {
-              /* no-op */
-            }
-            slowResubIntervalRef.current = null
-          }
-          return
-        }
-        const quota = Math.min(batchPerSecond, remaining)
-        for (let i = 0; i < quota; i++) {
-          const key = slowResubQueueRef.current.shift()
-          if (!key) break
-          const [pair, token, chain] = key.split('|')
-          try {
-            sendSubscribeSlow(wss, { pair, token, chain })
-            registerSlowSubscription(key)
-          } catch (err) {
-            console.error(`[TokensPane:${title}] filter-apply slow resub failed`, key, String(err))
-          }
-        }
-      }
-      // Start after 1s debounce
-      slowResubStartTimeoutRef.current = window.setTimeout(() => {
-        tick()
-        slowResubIntervalRef.current = window.setInterval(tick, 1000)
-      }, 1000)
-    })
-
-    return () => {
-      offFocus()
-      offApply()
-    }
-  }, [
-    title,
-    buildPairSubscriptionSafe,
-    buildPairStatsSubscriptionSafe,
-    buildPairSlowSubscriptionSafe,
-    buildPairStatsSlowSubscriptionSafe,
-  ])
-
-  // Ensure any stagger timers are cleaned up on unmount
-  useEffect(() => {
-    return () => {
-      if (slowResubIntervalRef.current != null) {
-        try {
-          window.clearInterval(slowResubIntervalRef.current)
-        } catch {
-          /* no-op */
-        }
-        slowResubIntervalRef.current = null
-      }
-      if (slowResubStartTimeoutRef.current != null) {
-        try {
-          window.clearTimeout(slowResubStartTimeoutRef.current)
-        } catch {
-          /* no-op */
-        }
-        slowResubStartTimeoutRef.current = null
-      }
-      slowResubQueueRef.current = []
-    }
-  }, [])
-
-  // Update visible count when sets change frequently (after scroll stop too)
-  // Do not depend on visibleKeysRef.current – it's a mutable ref and not a valid dependency
-  useEffect(() => {
-    const updateCounts = () => {
-      try {
-        updatePaneVisibleCount(paneIdRef.current, visibleKeysRef.current.size)
-      } catch {
-        /* no-op */
-      }
-    }
-    updateCounts()
-    // Debounced: if visible set changes frequently, re-set count after 300ms
-    const id = setInterval(updateCounts, 300)
-    return () => {
-      clearInterval(id)
-    }
-  }, [])
 
   // Keep rowsRef in sync with derived rows for visibility handlers
   useEffect(() => {
@@ -1147,29 +773,15 @@ export default function TokensPane({
         }}
         onOpenRowDetails={onOpenRowDetails}
         onScrollStart={() => {
-          // Enter scrolling: pause any in-flight slow re-subscription schedule and clear its queue
+          // Enter scrolling; temporarily consider rows unsubscribed until scroll stops
           scrollingRef.current = true
-          if (slowResubIntervalRef.current != null) {
-            try {
-              window.clearInterval(slowResubIntervalRef.current)
-            } catch {
-              /* no-op */
-            }
-            slowResubIntervalRef.current = null
-          }
-          slowResubQueueRef.current = []
-
           const ws = wsRef.current
           const visibleNow = new Set<string>(visibleKeysRef.current)
-          const slowNow = new Set<string>(slowKeysRef.current)
           if (ws && ws.readyState === WebSocket.OPEN) {
-            // Unsubscribe fast keys only if this pane is the sole visible viewer
             for (const key of visibleNow) {
               const [pair, token, chain] = key.split('|')
               try {
-                // Decrement this pane's visibility before deciding to unsubscribe
                 const { next } = markHidden(key)
-                deregisterFastSubscription(key)
                 if (next === 0) {
                   sendUnsubscribe(ws, { pair, token, chain })
                 }
@@ -1177,25 +789,8 @@ export default function TokensPane({
                 console.error(`[TokensPane:${title}] bulk-unsubscribe failed for`, key, String(err))
               }
             }
-            // Unsubscribe slow keys only if no pane currently views them
-            for (const key of slowNow) {
-              const [pair, token, chain] = key.split('|')
-              try {
-                deregisterSlowSubscription(key)
-                if (getCount(key) === 0) {
-                  sendUnsubscribe(ws, { pair, token, chain })
-                }
-              } catch (err) {
-                console.error(
-                  `[TokensPane:${title}] bulk-unsubscribe slow failed for`,
-                  key,
-                  String(err),
-                )
-              }
-            }
           }
           visibleKeysRef.current.clear()
-          slowKeysRef.current.clear()
         }}
         getRowStatus={(row: TokenRow) => {
           const pair = row.pairAddress ?? ''
@@ -1208,136 +803,56 @@ export default function TokensPane({
           const ts = lastUpdatedRef.current.get(key)
           const tooltip = ts ? 'Data Age: ' + formatAge(ts) : 'No updates yet'
           if (scrollingRef.current) return { state: 'unsubscribed', tooltip }
-          if (visibleKeysRef.current.has(key)) return { state: 'fast', tooltip }
-          if (slowKeysRef.current.has(key)) return { state: 'slow', tooltip }
-          if (slowResubQueueRef.current.includes(key)) return { state: 'queued-slow', tooltip }
-          // Default: consider as slow if nothing else is known
-          return { state: 'slow', tooltip }
+          if (visibleKeysRef.current.has(key)) return { state: 'subscribed', tooltip }
+          return { state: 'unsubscribed', tooltip }
         }}
         onScrollStop={(visibleRows: TokenRow[]) => {
           const ws = wsRef.current
           scrollingRef.current = false
-          // Update pane visible count (actual viewport size)
-          updatePaneVisibleCount(page, visibleRows.length)
-          // Compute visible keys
-          const visKeys: string[] = []
+          // Compute keys that should be visible (subscribed)
+          const nextVisible: string[] = []
           for (const row of visibleRows) {
             const pair = row.pairAddress ?? ''
             const token = row.tokenAddress ?? ''
             if (!pair || !token) continue
             const chain = toChainId(row.chain)
             const key = buildPairKey(pair, token, chain)
-            visKeys.push(key)
+            // Respect modal lock: only subscribe allowed keys when lock is active
+            if (lockActiveRef.current && !lockAllowedRef.current.has(key)) continue
+            nextVisible.push(key)
           }
-          const visSet = new Set(visKeys)
-          const allRenderedKeys: string[] = []
-          for (const row of rowsRef.current) {
-            const pair = row.pairAddress ?? ''
-            const token = row.tokenAddress ?? ''
-            if (!pair || !token) continue
-            const chain = toChainId(row.chain)
-            allRenderedKeys.push(buildPairKey(pair, token, chain))
-          }
-          const slowKeys: string[] = []
-          for (const key of allRenderedKeys) {
-            // Only consider keys not visible in this pane AND not visible in any pane
-            if (!visSet.has(key) && getCount(key) === 0) slowKeys.push(key)
-          }
+          const nextSet = new Set(nextVisible)
+          const prevSet = new Set<string>(visibleKeysRef.current)
 
-          // Resubscribe strategy after scroll stops:
-          // 1) Immediately re-enable FAST subscriptions for visible rows so UI becomes live right away.
-          // 2) For INVISIBLE rows, stagger re-subscription over time using the same effective throttle
-          //    that the server applies to slow updates. The server assigns a per-key slowFactor approximately as:
-          //       slowFactor = max(200, ceil(totalRows / 4))
-          //    where totalRows is the number of known rows on the server. We approximate totalRows here with the
-          //    total rendered rows in this pane (visible + invisible). The resulting portion of all rows that gets
-          //    re-subscribed per second is 1 / slowFactor. For example, if slowFactor = 200, we re-subscribe ~0.5%
-          //    of all rows per second. This avoids a thundering herd while ensuring off-viewport data comes back
-          //    online smoothly.
           if (ws && ws.readyState === WebSocket.OPEN) {
-            // 1) Fast (visible) rows: immediate pair + stats subscriptions
-            for (const key of visKeys) {
+            // Unsubscribe keys no longer visible in this pane
+            for (const key of prevSet) {
+              if (nextSet.has(key)) continue
+              const [pair, token, chain] = key.split('|')
+              try {
+                const { next } = markHidden(key)
+                if (next === 0) {
+                  sendUnsubscribe(ws, { pair, token, chain })
+                }
+              } catch (err) {
+                console.error(`[TokensPane:${title}] unsubscribe on scrollStop failed for`, key, String(err))
+              }
+            }
+            // Subscribe newly visible keys
+            for (const key of nextSet) {
+              if (prevSet.has(key)) continue
               const [pair, token, chain] = key.split('|')
               try {
                 const { prev } = markVisible(key)
                 if (prev === 0) {
                   sendSubscribe(ws, { pair, token, chain })
                 }
-                registerFastSubscription(key)
               } catch (err) {
-                console.error(`[TokensPane:${title}] resubscribe fast failed for`, key, String(err))
+                console.error(`[TokensPane:${title}] subscribe on scrollStop failed for`, key, String(err))
               }
             }
-
-            // 2) Invisible rows: stagger slow subscriptions using per-second batching derived from the same math
-            //    the server uses for slow updates. UX impact:
-            //    - Visible rows are snappy (instant updates).
-            //    - Invisible rows trickle back in over time, preventing WS/CPU spikes on large tables.
-            const totalAll = visKeys.length + slowKeys.length
-            const estimatedSlowFactor = Math.max(200, Math.ceil(totalAll / 4))
-            // Portion per second = 1 / slowFactor; translate to a batch count per tick (per ~1s).
-            const batchPerSecond = Math.max(1, Math.ceil(totalAll / estimatedSlowFactor))
-
-            // Prepare queue and clear any previous schedule
-            if (slowResubIntervalRef.current != null) {
-              try {
-                window.clearInterval(slowResubIntervalRef.current)
-              } catch {
-                /* no-op */
-              }
-              slowResubIntervalRef.current = null
-            }
-            if (slowResubStartTimeoutRef.current != null) {
-              try {
-                window.clearTimeout(slowResubStartTimeoutRef.current)
-              } catch {
-                /* no-op */
-              }
-              slowResubStartTimeoutRef.current = null
-            }
-            slowResubQueueRef.current = [...slowKeys]
-
-            const tick = () => {
-              const remaining = slowResubQueueRef.current.length
-              if (remaining <= 0) {
-                if (slowResubIntervalRef.current != null) {
-                  try {
-                    window.clearInterval(slowResubIntervalRef.current)
-                  } catch {
-                    /* no-op */
-                  }
-                  slowResubIntervalRef.current = null
-                }
-                return
-              }
-              const quota = Math.min(batchPerSecond, remaining)
-              for (let i = 0; i < quota; i++) {
-                const key = slowResubQueueRef.current.shift()
-                if (!key) break
-                const [pair, token, chain] = key.split('|')
-                try {
-                  sendSubscribeSlow(ws, { pair, token, chain })
-                  registerSlowSubscription(key)
-                } catch (err) {
-                  console.error(
-                    `[TokensPane:${title}] resubscribe slow failed for`,
-                    key,
-                    String(err),
-                  )
-                }
-              }
-            }
-
-            // Debounced start: wait 1000ms after scroll stop before beginning slow re-subscriptions.
-            slowResubStartTimeoutRef.current = window.setTimeout(() => {
-              // run first batch at t=+1s, then continue once per second
-              tick()
-              slowResubIntervalRef.current = window.setInterval(tick, 1000)
-            }, 1000)
           }
-          // Update tracking sets
-          visibleKeysRef.current = new Set(visKeys)
-          slowKeysRef.current = new Set(slowKeys)
+          visibleKeysRef.current = nextSet
         }}
       />
       <div ref={sentinelRef} style={{ height: 1 }} />

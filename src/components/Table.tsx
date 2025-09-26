@@ -8,8 +8,6 @@ import {
   ExternalLink,
   Eye,
   PauseCircle,
-  Timer,
-  Snail,
   ChartNoAxesCombined,
 } from 'lucide-react'
 import { BurnDetailsTooltip } from './BurnDetailsTooltip'
@@ -102,7 +100,7 @@ export default function Table({
   onScrollStop?: (visibleRows: TokenRow[]) => void
   getRowStatus?: (
     row: TokenRow,
-  ) => { state: 'fast' | 'unsubscribed' | 'queued-slow' | 'slow'; tooltip?: string } | undefined
+  ) => { state: 'subscribed' | 'unsubscribed'; tooltip?: string } | undefined
   onBothEndsVisible?: (v: boolean) => void
   onContainerRef?: (el: HTMLDivElement | null) => void
   onOpenRowDetails?: (row: TokenRow) => void
@@ -301,7 +299,7 @@ export default function Table({
         /* ignore observe errors */
       }
     }
-    // Proactively compute currently visible rows once to seed visibility and fast subscriptions
+    // Proactively compute currently visible rows once to seed visibility and subscriptions
     try {
       const vis: { el: Element; row: TokenRow }[] = []
       const contRect = rootEl?.getBoundingClientRect()
@@ -732,52 +730,25 @@ export default function Table({
                             const s = getRowStatus?.(t)
                             if (s) {
                               const size = 14
-                              const color =
-                                s.state === 'fast'
-                                  ? '#16a34a'
-                                  : s.state === 'slow'
-                                    ? '#6b7280'
-                                    : s.state === 'queued-slow'
-                                      ? '#f59e0b'
-                                      : '#9ca3af'
+                              const color = s.state === 'subscribed' ? '#16a34a' : '#9ca3af'
                               const title = s.tooltip ?? ''
-                              if (s.state === 'fast')
+                              if (s.state === 'subscribed')
                                 return (
                                   <span
                                     title={title}
-                                    aria-label="Subscribed (fast)"
+                                    aria-label="Subscribed"
                                     style={{ display: 'inline-flex', alignItems: 'center' }}
                                   >
                                     <Eye size={size} color={color} />
                                   </span>
                                 )
-                              if (s.state === 'slow')
-                                return (
-                                  <span
-                                    title={title}
-                                    aria-label="Subscribed (slow)"
-                                    style={{ display: 'inline-flex', alignItems: 'center' }}
-                                  >
-                                    <Snail size={size} color={color} />
-                                  </span>
-                                )
-                              if (s.state === 'queued-slow')
-                                return (
-                                  <span
-                                    title={title}
-                                    aria-label="Queued for slow subscription"
-                                    style={{ display: 'inline-flex', alignItems: 'center' }}
-                                  >
-                                    <Timer size={size} color={color} />
-                                  </span>
-                                )
                               return (
                                 <span
                                   title={title}
-                                  aria-label="Unsubscribed during scroll"
+                                  aria-label="Unsubscribed"
                                   style={{ display: 'inline-flex', alignItems: 'center' }}
                                 >
-                                  <PauseCircle size={14} color={color} />
+                                  <PauseCircle size={size} color={color} />
                                 </span>
                               )
                             }

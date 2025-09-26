@@ -3,14 +3,14 @@ import { test, expect, Page } from '@playwright/test'
 
 type TableName = 'Trending Tokens' | 'New Tokens'
 
-async function firstFastRowId(page: Page, table: TableName): Promise<string> {
+async function firstSubscribedRowId(page: Page, table: TableName): Promise<string> {
   const heading = page.getByRole('heading', { name: table })
   await expect(heading).toBeVisible()
   const tableEl = heading.locator('..').locator('table.tokens')
   await expect(tableEl).toBeVisible()
-  const fastRow = tableEl.locator('tbody tr:has([aria-label="Subscribed (fast)"])').first()
-  await expect(fastRow).toBeVisible()
-  const rowId = (await fastRow.getAttribute('data-row-id')) ?? ''
+  const subscribedRow = tableEl.locator('tbody tr:has([aria-label="Subscribed"])').first()
+  await expect(subscribedRow).toBeVisible()
+  const rowId = (await subscribedRow.getAttribute('data-row-id')) ?? ''
   expect(rowId.length).toBeGreaterThan(0)
   return rowId
 }
@@ -48,8 +48,8 @@ test.describe('DetailModal compare streaming', () => {
   test('Compare rate becomes > 0 and chart leaves Subscribing state', async ({ page }) => {
     await page.goto('/')
 
-    // Use a fast row for determinism, then open details
-    const rowId = await firstFastRowId(page, 'Trending Tokens')
+    // Use a subscribed row for determinism, then open details
+    const rowId = await firstSubscribedRowId(page, 'Trending Tokens')
     await openDetails(page, 'Trending Tokens', rowId)
 
     // Base chart should quickly leave the empty state
@@ -82,7 +82,7 @@ test.describe('DetailModal compare streaming', () => {
   test('Compare last update timestamp appears ("updated Ns ago")', async ({ page }) => {
     await page.goto('/')
 
-    const rowId = await firstFastRowId(page, 'New Tokens')
+    const rowId = await firstSubscribedRowId(page, 'New Tokens')
     await openDetails(page, 'New Tokens', rowId)
 
     await pickCompareToken(page)

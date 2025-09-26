@@ -20,6 +20,26 @@
 // The flexibility of JavaScript allows creating mock objects and test data.
 import { isTieredChannelEnabled } from './utils/featureFlags.mjs'
 
+// Feature-gated allow-lists
+const OUT_ALLOWED_ROOMS = new Set([
+  'scanner-filter',
+  'unsubscribe-scanner-filter',
+  'subscribe-pair',
+  'unsubscribe-pair',
+  'subscribe-pair-stats',
+  'unsubscribe-pair-stats',
+])
+const IN_ALLOWED_EVENTS = new Set(['scanner-pairs', 'tick', 'pair-stats'])
+
+export function isAllowedOutgoingEvent(event) {
+  if (isTieredChannelEnabled()) return true
+  return OUT_ALLOWED_ROOMS.has(String(event))
+}
+export function isAllowedIncomingEvent(event) {
+  if (isTieredChannelEnabled()) return true
+  return IN_ALLOWED_EVENTS.has(String(event))
+}
+
 export function buildScannerSubscription(params) {
   return { event: 'scanner-filter', data: { ...params } }
 }
@@ -30,18 +50,12 @@ export function buildScannerUnsubscription(params) {
 export function buildPairSubscription({ pair, token, chain }) {
   return { event: 'subscribe-pair', data: { pair, token, chain } }
 }
-export function buildPairSlowSubscription({ pair, token, chain }) {
-  return { event: 'subscribe-pair-slow', data: { pair, token, chain } }
-}
 export function buildPairUnsubscription({ pair, token, chain }) {
   return { event: 'unsubscribe-pair', data: { pair, token, chain } }
 }
 
 export function buildPairStatsSubscription({ pair, token, chain }) {
   return { event: 'subscribe-pair-stats', data: { pair, token, chain } }
-}
-export function buildPairStatsSlowSubscription({ pair, token, chain }) {
-  return { event: 'subscribe-pair-stats-slow', data: { pair, token, chain } }
 }
 export function buildPairStatsUnsubscription({ pair, token, chain }) {
   return { event: 'unsubscribe-pair-stats', data: { pair, token, chain } }
@@ -61,6 +75,7 @@ export function sendSubscribe(ws, { pair, token, chain }) {
   try {
     ws &&
       ws.readyState === 1 &&
+      isAllowedOutgoingEvent('subscribe-pair') &&
       ws.send(JSON.stringify(buildPairSubscription({ pair, token, chain })))
   } catch (err) {
     try {
@@ -70,6 +85,7 @@ export function sendSubscribe(ws, { pair, token, chain }) {
   try {
     ws &&
       ws.readyState === 1 &&
+      isAllowedOutgoingEvent('subscribe-pair-stats') &&
       ws.send(JSON.stringify(buildPairStatsSubscription({ pair, token, chain })))
   } catch (err) {
     try {
@@ -77,34 +93,11 @@ export function sendSubscribe(ws, { pair, token, chain }) {
     } catch {}
   }
 }
-
-export function sendSubscribeSlow(ws, { pair, token, chain }) {
-  // Gate slow channels behind feature flag (off by default)
-  if (!isTieredChannelEnabled()) return
-  try {
-    ws &&
-      ws.readyState === 1 &&
-      ws.send(JSON.stringify(buildPairSlowSubscription({ pair, token, chain })))
-  } catch (err) {
-    try {
-      console.error('[ws.sendSubscribeSlow] subscribe-pair-slow failed', err)
-    } catch {}
-  }
-  try {
-    ws &&
-      ws.readyState === 1 &&
-      ws.send(JSON.stringify(buildPairStatsSlowSubscription({ pair, token, chain })))
-  } catch (err) {
-    try {
-      console.error('[ws.sendSubscribeSlow] subscribe-pair-stats-slow failed', err)
-    } catch {}
-  }
-}
-
 export function sendUnsubscribe(ws, { pair, token, chain }) {
   try {
     ws &&
       ws.readyState === 1 &&
+      isAllowedOutgoingEvent('unsubscribe-pair') &&
       ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
   } catch (err) {
     try {
@@ -114,6 +107,7 @@ export function sendUnsubscribe(ws, { pair, token, chain }) {
   try {
     ws &&
       ws.readyState === 1 &&
+      isAllowedOutgoingEvent('unsubscribe-pair-stats') &&
       ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
   } catch (err) {
     try {
@@ -125,6 +119,8 @@ export function sendUnsubscribe(ws, { pair, token, chain }) {
 // Map incoming WS message to reducer action (plain object), or null if not handled
 export function mapIncomingMessageToAction(msg) {
   if (!msg || typeof msg !== 'object') return null
+  // Gate all incoming events except allow-list when feature flag is OFF
+  if (!isAllowedIncomingEvent(msg.event)) return null
   switch (msg.event) {
     case 'scanner-pairs':
       // full dataset replacement for a page (production uses data.pairs)

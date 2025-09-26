@@ -384,7 +384,7 @@ export function generateScannerResponse(params = {}) {
     item.deadAddress = deadAddress
     item.ownerAddress = ownerAddress
 
-    // Deterministic social links with ~80% chance per link, derived from seed + token + slow epoch
+    // Deterministic social links with ~80% chance per link, derived from seed + token + coarse epoch
     try {
       const epochMs = 90 * 24 * 3600 * 1000 // 90 days to make updates very infrequent
       const epoch = Math.floor(now / epochMs)

@@ -1,5 +1,5 @@
 // visibility.bus.js
-// A tiny shared registry to coordinate fast-viewport visibility for pair subscriptions
+// A tiny shared registry to coordinate viewport visibility for pair subscriptions
 // across multiple panes. Keys are the composite 'pair|token|chain'.
 //
 // Behavior:

@@ -4,7 +4,7 @@ import type { Page } from '@playwright/test'
 type TableName = 'Trending Tokens' | 'New Tokens'
 type Counter = 'buys' | 'sells'
 
-async function getFastRowIdAndCellText(
+async function getSubscribedRowIdAndCellText(
   page: Page,
   table: TableName,
   nth: number,
@@ -13,12 +13,12 @@ async function getFastRowIdAndCellText(
   await expect(heading).toBeVisible()
   const tableEl = heading.locator('..').locator('table.tokens')
   await expect(tableEl).toBeVisible()
-  // Prefer a row that is fast-subscribed (Eye icon) to ensure timely WS updates
-  const fastRow = tableEl.locator('tbody tr:has([aria-label="Subscribed (fast)"])').first()
-  await expect(fastRow).toBeVisible()
-  const rowId = await fastRow.getAttribute('data-row-id')
+  // Prefer a row that is currently subscribed (Eye icon) to ensure timely WS updates
+  const subRow = tableEl.locator('tbody tr:has([aria-label="Subscribed"])').first()
+  await expect(subRow).toBeVisible()
+  const rowId = await subRow.getAttribute('data-row-id')
   expect(rowId).toBeTruthy()
-  const cell = fastRow.locator(`td:nth-child(${String(nth)})`)
+  const cell = subRow.locator(`td:nth-child(${String(nth)})`)
   await expect(cell).toBeVisible()
   const raw = await cell.textContent()
   const text = (raw ?? '').trim()
@@ -122,8 +122,8 @@ for (const { table, kind } of cases) {
   }) => {
     await page.goto('/')
 
-    // Select a fast-subscribed row and get its id
-    const { rowId } = await getFastRowIdAndCellText(page, table, 8)
+    // Select a subscribed row and get its id
+    const { rowId } = await getSubscribedRowIdAndCellText(page, table, 8)
 
     // Ensure subscriptions are (re)sent after socket is ready and target row is focused
     await forceResubscribe(page, table)

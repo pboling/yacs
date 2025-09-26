@@ -1,100 +1,25 @@
-import React, { useEffect, useState } from 'react'
-import { onSubscriptionMetricsChange, getSubscriptionMetrics } from '../subscription.lock.bus.js'
-
-interface MetricsSnapshot {
-  active: boolean
-  allowed: string[]
-  limits: { normal: number; fast: number; slow: number }
-  counts: { fast: number; slow: number }
-  fastKeys: string[]
-  slowKeys: string[]
-  visiblePaneCounts: Record<string, number>
-  renderedPaneCounts: Record<string, number>
-}
-
-function useDebugMetrics() {
-  const [snap, setSnap] = useState<MetricsSnapshot>(
-    () => getSubscriptionMetrics() as MetricsSnapshot,
-  )
-  useEffect(() => {
-    const off = onSubscriptionMetricsChange((s: MetricsSnapshot) => {
-      setSnap(s)
-    })
-    return () => {
-      try {
-        off()
-      } catch {
-        /* no-op */
-      }
-    }
-  }, [])
-  return snap
-}
+import React from 'react'
 
 export default function SubscriptionDebugOverlay({ align = 'left' }: { align?: 'left' | 'right' }) {
-  const snap = useDebugMetrics()
-  const normalActive = snap.active ? 0 : snap.counts.fast
-  const normalCap = snap.limits.normal
-  const fastModalActive = snap.active ? snap.counts.fast : 0
+  // Metrics overlay removed. Keeping a tiny stub to avoid breaking imports if re-enabled elsewhere.
   return (
     <div
-      style={
-        {
-          position: 'fixed',
-          bottom: 8,
-          [align]: 8,
-          zIndex: 9999,
-          fontSize: 11,
-          background: 'rgba(17,24,39,0.85)',
-          color: '#e5e7eb',
-          padding: '8px 10px',
-          border: '1px solid #374151',
-          borderRadius: 6,
-          maxWidth: 340,
-          lineHeight: 1.35,
-          fontFamily: 'ui-monospace, monospace',
-        } as React.CSSProperties
-      }
+      style={{
+        position: 'fixed',
+        bottom: 8,
+        [align]: 8 as any,
+        zIndex: 9999,
+        fontSize: 11,
+        background: 'rgba(17,24,39,0.85)',
+        color: '#e5e7eb',
+        padding: '6px 8px',
+        border: '1px solid #374151',
+        borderRadius: 6,
+        lineHeight: 1.35,
+        fontFamily: 'ui-monospace, monospace',
+      }}
     >
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>Subscription Debug</div>
-      <div>
-        Lock: {snap.active ? 'ON' : 'off'} | Allowed: {snap.allowed.length} | Visible sum:{' '}
-        {Object.values(snap.visiblePaneCounts).reduce((a, b) => a + b, 0)} | Rendered sum:{' '}
-        {Object.values(snap.renderedPaneCounts).reduce((a, b) => a + b, 0)}
-      </div>
-      <div>
-        Normal (viewport) {normalActive}/{normalCap} · Fast (Modal x5) {fastModalActive}/
-        {snap.allowed.length} · Slow {snap.counts.slow}/{snap.limits.slow}
-      </div>
-      <div style={{ marginTop: 4 }}>
-        <span style={{ color: '#9ca3af' }}>Fast Keys (first 12):</span>{' '}
-        {(() => {
-          const s = snap.fastKeys.slice(0, 12).join(', ')
-          return s === '' ? '—' : s
-        })()}
-      </div>
-      <div>
-        <span style={{ color: '#9ca3af' }}>Slow Keys (first 12):</span>{' '}
-        {(() => {
-          const s = snap.slowKeys.slice(0, 12).join(', ')
-          return s === '' ? '—' : s
-        })()}
-      </div>
-      <div style={{ marginTop: 4 }}>
-        <span style={{ color: '#9ca3af' }}>Panes visible:</span>{' '}
-        {Object.entries(snap.visiblePaneCounts)
-          .map(([k, v]) => `${k}:${v}`)
-          .join(' ')}
-      </div>
-      <div>
-        <span style={{ color: '#9ca3af' }}>Panes rendered:</span>{' '}
-        {Object.entries(snap.renderedPaneCounts)
-          .map(([k, v]) => `${k}:${v}`)
-          .join(' ')}
-      </div>
-      <div style={{ marginTop: 4, color: '#6b7280' }}>
-        window.SUB_LOCK_DEBUG.getSnapshot() for full details.
-      </div>
+      <div style={{ fontWeight: 600 }}>Subscription Debug disabled</div>
     </div>
   )
 }

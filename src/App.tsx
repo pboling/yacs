@@ -26,11 +26,9 @@ import {
   buildPairSubscription,
   buildPairStatsSubscription,
   mapIncomingMessageToAction,
-  buildPairX5Subscription,
-  buildPairStatsX5Subscription,
+  isAllowedOutgoingEvent,
 } from './ws.mapper.js'
 import { computePairPayloads } from './ws.subs.js'
-import { isTieredChannelEnabled } from './utils/featureFlags.mjs'
 import ErrorBoundary from './components/ErrorBoundary'
 import NumberCell from './components/NumberCell'
 import TokensPane from './components/TokensPane'
@@ -41,8 +39,6 @@ import { getCount } from './visibility.bus.js'
 import { emitUpdate } from './updates.bus'
 import { engageSubscriptionLock, releaseSubscriptionLock } from './subscription.lock.bus.js'
 import { onSubscriptionLockChange, isSubscriptionLockActive } from './subscription.lock.bus.js'
-import { onSubscriptionMetricsChange, getSubscriptionMetrics } from './subscription.lock.bus.js'
-import SubscriptionDebugOverlay from './components/SubscriptionDebugOverlay'
 import { toChainId } from './utils/chain'
 import { buildPairKey, buildTickKey } from './utils/key_builder'
 
@@ -81,35 +77,7 @@ function TopBar({
   onThemeChange: (v: ThemeName) => void
   lockActive: boolean
 }) {
-  // Strongly type subscription metrics (JS module → typed alias here)
-  interface SubMetrics {
-    active: boolean
-    allowed: string[]
-    limits: { normal: number; fast: number; slow: number }
-    counts: { fast: number; slow: number }
-    fastKeys: string[]
-    slowKeys: string[]
-    visiblePaneCounts: Record<string, number>
-    renderedPaneCounts: Record<string, number>
-  }
-  const getSubscriptionMetricsTyped = getSubscriptionMetrics as unknown as () => SubMetrics
-  const onSubscriptionMetricsChangeTyped = onSubscriptionMetricsChange as unknown as (
-    cb: (m: SubMetrics) => void,
-  ) => () => void
-
-  const [metrics, setMetrics] = useState<SubMetrics>(() => getSubscriptionMetricsTyped())
-  useEffect(() => {
-    const off = onSubscriptionMetricsChangeTyped((m) => {
-      setMetrics(m)
-    })
-    return () => {
-      try {
-        off()
-      } catch {
-        /* no-op */
-      }
-    }
-  }, [onSubscriptionMetricsChangeTyped])
+  // Subscription metrics removed; only lockActive badge remains
   return (
     <div
       style={{
@@ -124,35 +92,6 @@ function TopBar({
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <h1 style={{ margin: 0 }}>{title}</h1>
         <UpdateRate version={import.meta.env.DEV ? version : undefined} />
-        {/* Subscription metrics: Normal (viewport), Fast (Modal x5), Slow */}
-        {(() => {
-          const normalActive = lockActive ? 0 : metrics.counts.fast
-          const normalCap = metrics.limits.normal
-          const fastEnabled = isTieredChannelEnabled()
-          const fastModalActive = fastEnabled ? (lockActive ? metrics.counts.fast : 0) : 0
-          const fastCap = fastEnabled ? metrics.allowed.length : 0
-          const fastLabelTitle = fastEnabled ? 'Fast (Modal x5)' : 'Fast (disabled)'
-          const fastLabelInline = fastEnabled ? 'Fast (x5)' : 'Fast (disabled)'
-          const slowEnabled = isTieredChannelEnabled()
-          const slowActive = slowEnabled ? metrics.counts.slow : 0
-          const slowCap = slowEnabled ? metrics.limits.slow : 0
-          const slowLabel = slowEnabled ? 'Slow' : 'Slow (disabled)'
-          return (
-            <span
-              style={{
-                fontSize: 11,
-                padding: '2px 6px',
-                border: '1px solid #374151',
-                borderRadius: 12,
-                background: 'rgba(255,255,255,0.06)',
-                letterSpacing: 0.5,
-              }}
-              title={`Normal (viewport) ${normalActive}/${normalCap} · ${fastLabelTitle} ${fastModalActive}/${fastCap} · ${slowLabel} ${slowActive}/${slowCap}`}
-            >
-              Normal {normalActive}/{normalCap} · {fastLabelInline} {fastModalActive}/{fastCap} · {slowLabel} {slowActive}/{slowCap}
-            </span>
-          )
-        })()}
         {lockActive && (
           <span
             style={{
@@ -363,16 +302,6 @@ function App() {
     token: string
     chain: string
   }) => { event: 'subscribe-pair-stats'; data: { pair: string; token: string; chain: string } }
-  const buildPairX5SubscriptionSafe = buildPairX5Subscription as unknown as (p: {
-    pair: string
-    token: string
-    chain: string
-  }) => { event: 'subscribe-pair-x5'; data: { pair: string; token: string; chain: string } }
-  const buildPairStatsX5SubscriptionSafe = buildPairStatsX5Subscription as unknown as (p: {
-    pair: string
-    token: string
-    chain: string
-  }) => { event: 'subscribe-pair-stats-x5'; data: { pair: string; token: string; chain: string } }
   const buildScannerUnsubscriptionSafe = buildScannerUnsubscription as unknown as (
     params: GetScannerResultParams,
   ) => { event: 'unsubscribe-scanner-filter'; data: GetScannerResultParams }
@@ -386,6 +315,7 @@ function App() {
     token: string
     chain: string
   }[]
+  const isAllowedOutgoingEventSafe = isAllowedOutgoingEvent as unknown as (ev: string) => boolean
 
   const [state, dispatch] = useReducer(
     tokensReducer as unknown as (state: State | undefined, action: Action) => State,
@@ -955,6 +885,15 @@ function App() {
 
   const wsSend = (obj: unknown) => {
     try {
+      const ev = obj && typeof obj === 'object' ? (obj as { event?: unknown }).event : undefined
+      if (typeof ev === 'string' && !isAllowedOutgoingEventSafe(ev)) {
+        try {
+          console.warn('WS: blocked (feature flag) outgoing room:', ev)
+        } catch {
+          /* no-op */
+        }
+        return
+      }
       const anyWin = window as unknown as { __APP_WS__?: WebSocket }
       const ws = anyWin.__APP_WS__
       if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj))
@@ -990,18 +929,22 @@ function App() {
     } catch {
       /* no-op */
     }
-    // Cancel current subs and switch to 5x for this row (only when tiered-channel is enabled)
+    // Cancel scanner streams for both tables while modal is focused, then subscribe to the selected token
+    try {
+      wsSend(buildScannerUnsubscriptionSafe({ ...trendingFilters, page: TRENDING_PAGE }))
+      wsSend(buildScannerUnsubscriptionSafe({ ...newFilters, page: NEW_PAGE }))
+    } catch {
+      /* no-op */
+    }
     const pair = row.pairAddress ?? ''
     const token = row.tokenAddress ?? ''
     if (pair && token) {
       const chain = toChainId(row.chain)
-      if (isTieredChannelEnabled()) {
-        // Unsubscribe first to avoid duplicate modes, then subscribe to x5 channels
-        wsSend({ event: 'unsubscribe-pair', data: { pair, token, chain } })
-        wsSend({ event: 'unsubscribe-pair-stats', data: { pair, token, chain } })
-        wsSend(buildPairX5SubscriptionSafe({ pair, token, chain }))
-        wsSend(buildPairStatsX5SubscriptionSafe({ pair, token, chain }))
-      }
+      // Ensure any existing subs for this pair are cleared, then add normal subs for the modal
+      wsSend({ event: 'unsubscribe-pair', data: { pair, token, chain } })
+      wsSend({ event: 'unsubscribe-pair-stats', data: { pair, token, chain } })
+      wsSend(buildPairSubscriptionSafe({ pair, token, chain }))
+      wsSend(buildPairStatsSubscriptionSafe({ pair, token, chain }))
     }
   }
   const closeDetails = () => {
@@ -1017,25 +960,24 @@ function App() {
     } catch {
       /* no-op */
     }
+    // Resume scanner streams for both tables
+    try {
+      wsSend(buildScannerSubscriptionSafe({ ...trendingFilters, page: TRENDING_PAGE }))
+      wsSend(buildScannerSubscriptionSafe({ ...newFilters, page: NEW_PAGE }))
+    } catch {
+      /* no-op */
+    }
+    // Clean up modal-specific pair subscriptions; panes will manage visibility-based subs
     if (row) {
       const pair = row.pairAddress ?? ''
       const token = row.tokenAddress ?? ''
       if (pair && token) {
         const chain = toChainId(row.chain)
-        // Revert to normal fast subscription
-        wsSend(buildPairSubscriptionSafe({ pair, token, chain }))
-        wsSend(buildPairStatsSubscriptionSafe({ pair, token, chain }))
+        wsSend({ event: 'unsubscribe-pair', data: { pair, token, chain } })
+        wsSend({ event: 'unsubscribe-pair-stats', data: { pair, token, chain } })
       }
     }
   }
-
-  const debugEnabled = useMemo(() => {
-    try {
-      return new URLSearchParams(window.location.search).get('debug') === 'true'
-    } catch {
-      return false
-    }
-  }, [])
 
   return (
     <div style={{ position: 'relative' }}>
@@ -1425,7 +1367,6 @@ function App() {
           </ErrorBoundary>
         </div>
       </div>
-      {debugEnabled && <SubscriptionDebugOverlay align="right" />}
     </div>
   )
 }

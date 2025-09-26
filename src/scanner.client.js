@@ -12,14 +12,6 @@ import { mapScannerResultToToken } from './tdd.runtime.js'
 
 // In Vite dev, prefer a relative base ('') so requests hit the dev proxy (/scanner)
 // Otherwise use VITE_API_BASE if provided, falling back to the public API.
-const isViteDev = (() => {
-  try {
-    // import.meta is available in ESM; env is injected by Vite in dev
-    return Boolean(import.meta && import.meta.env && import.meta.env.DEV)
-  } catch {
-    return false
-  }
-})()
 const viteApiBase = (() => {
   try {
     return (import.meta && import.meta.env && import.meta.env.VITE_API_BASE) || null
