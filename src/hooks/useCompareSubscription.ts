@@ -6,7 +6,10 @@ import {
   buildPairStatsUnsubscription,
   buildPairX5Subscription,
   buildPairStatsX5Subscription,
+  buildPairSubscription,
+  buildPairStatsSubscription,
 } from '../ws.mapper.js'
+import { isTieredChannelEnabled } from '../utils/featureFlags.mjs'
 
 export interface MinimalCompareRow {
   id: string
@@ -173,26 +176,45 @@ export function useCompareSubscription({
           for (const chainVariant of variants) {
             if (abortRef.current.signal.aborted) break
             try {
-              ws.send(
-                JSON.stringify(
-                  buildPairX5Subscription({
-                    pair: compareRow.pairAddress,
-                    token: compareRow.tokenAddress,
-                    chain: chainVariant,
-                  }),
-                ),
-              )
-            } catch {}
-            try {
-              ws.send(
-                JSON.stringify(
-                  buildPairStatsX5Subscription({
-                    pair: compareRow.pairAddress,
-                    token: compareRow.tokenAddress,
-                    chain: chainVariant,
-                  }),
-                ),
-              )
+              if (isTieredChannelEnabled()) {
+                ws.send(
+                  JSON.stringify(
+                    buildPairX5Subscription({
+                      pair: compareRow.pairAddress,
+                      token: compareRow.tokenAddress,
+                      chain: chainVariant,
+                    }),
+                  ),
+                )
+                ws.send(
+                  JSON.stringify(
+                    buildPairStatsX5Subscription({
+                      pair: compareRow.pairAddress,
+                      token: compareRow.tokenAddress,
+                      chain: chainVariant,
+                    }),
+                  ),
+                )
+              } else {
+                ws.send(
+                  JSON.stringify(
+                    buildPairSubscription({
+                      pair: compareRow.pairAddress,
+                      token: compareRow.tokenAddress,
+                      chain: chainVariant,
+                    }),
+                  ),
+                )
+                ws.send(
+                  JSON.stringify(
+                    buildPairStatsSubscription({
+                      pair: compareRow.pairAddress,
+                      token: compareRow.tokenAddress,
+                      chain: chainVariant,
+                    }),
+                  ),
+                )
+              }
             } catch {}
           }
           subscribedIdRef.current = compareRow.id

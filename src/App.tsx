@@ -30,6 +30,7 @@ import {
   buildPairStatsX5Subscription,
 } from './ws.mapper.js'
 import { computePairPayloads } from './ws.subs.js'
+import { isTieredChannelEnabled } from './utils/featureFlags.mjs'
 import ErrorBoundary from './components/ErrorBoundary'
 import NumberCell from './components/NumberCell'
 import TokensPane from './components/TokensPane'
@@ -127,9 +128,15 @@ function TopBar({
         {(() => {
           const normalActive = lockActive ? 0 : metrics.counts.fast
           const normalCap = metrics.limits.normal
-          const fastModalActive = lockActive ? metrics.counts.fast : 0
-          const slowActive = metrics.counts.slow
-          const slowCap = metrics.limits.slow
+          const fastEnabled = isTieredChannelEnabled()
+          const fastModalActive = fastEnabled ? (lockActive ? metrics.counts.fast : 0) : 0
+          const fastCap = fastEnabled ? metrics.allowed.length : 0
+          const fastLabelTitle = fastEnabled ? 'Fast (Modal x5)' : 'Fast (disabled)'
+          const fastLabelInline = fastEnabled ? 'Fast (x5)' : 'Fast (disabled)'
+          const slowEnabled = isTieredChannelEnabled()
+          const slowActive = slowEnabled ? metrics.counts.slow : 0
+          const slowCap = slowEnabled ? metrics.limits.slow : 0
+          const slowLabel = slowEnabled ? 'Slow' : 'Slow (disabled)'
           return (
             <span
               style={{
@@ -140,10 +147,9 @@ function TopBar({
                 background: 'rgba(255,255,255,0.06)',
                 letterSpacing: 0.5,
               }}
-              title={`Normal (viewport) ${normalActive}/${normalCap} · Fast (Modal x5) ${fastModalActive}/${metrics.allowed.length} · Slow ${slowActive}/${slowCap}`}
+              title={`Normal (viewport) ${normalActive}/${normalCap} · ${fastLabelTitle} ${fastModalActive}/${fastCap} · ${slowLabel} ${slowActive}/${slowCap}`}
             >
-              Normal {normalActive}/{normalCap} · Fast (x5) {fastModalActive}/
-              {metrics.allowed.length} · Slow {slowActive}/{slowCap}
+              Normal {normalActive}/{normalCap} · {fastLabelInline} {fastModalActive}/{fastCap} · {slowLabel} {slowActive}/{slowCap}
             </span>
           )
         })()}
@@ -991,16 +997,18 @@ function App() {
     } catch {
       /* no-op */
     }
-    // Cancel current subs and switch to 5x for this row
+    // Cancel current subs and switch to 5x for this row (only when tiered-channel is enabled)
     const pair = row.pairAddress ?? ''
     const token = row.tokenAddress ?? ''
     if (pair && token) {
       const chain = toChainId(row.chain)
-      // Unsubscribe first to avoid duplicate modes
-      wsSend({ event: 'unsubscribe-pair', data: { pair, token, chain } })
-      wsSend({ event: 'unsubscribe-pair-stats', data: { pair, token, chain } })
-      wsSend(buildPairX5SubscriptionSafe({ pair, token, chain }))
-      wsSend(buildPairStatsX5SubscriptionSafe({ pair, token, chain }))
+      if (isTieredChannelEnabled()) {
+        // Unsubscribe first to avoid duplicate modes, then subscribe to x5 channels
+        wsSend({ event: 'unsubscribe-pair', data: { pair, token, chain } })
+        wsSend({ event: 'unsubscribe-pair-stats', data: { pair, token, chain } })
+        wsSend(buildPairX5SubscriptionSafe({ pair, token, chain }))
+        wsSend(buildPairStatsX5SubscriptionSafe({ pair, token, chain }))
+      }
     }
   }
   const closeDetails = () => {

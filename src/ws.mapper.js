@@ -18,6 +18,7 @@
 // Aligns with test-task-types.ts message shapes, but implemented in JS for tests.
 // This approach allows developers to leverage the benefits of static typing for reliable code.
 // The flexibility of JavaScript allows creating mock objects and test data.
+import { isTieredChannelEnabled } from './utils/featureFlags.mjs'
 
 export function buildScannerSubscription(params) {
   return { event: 'scanner-filter', data: { ...params } }
@@ -78,6 +79,8 @@ export function sendSubscribe(ws, { pair, token, chain }) {
 }
 
 export function sendSubscribeSlow(ws, { pair, token, chain }) {
+  // Gate slow channels behind feature flag (off by default)
+  if (!isTieredChannelEnabled()) return
   try {
     ws &&
       ws.readyState === 1 &&
@@ -130,7 +133,8 @@ export function mapIncomingMessageToAction(msg) {
         payload: { page: msg.data.page ?? 1, scannerPairs: msg.data.scannerPairs ?? [] },
       }
     case 'scanner-append':
-      // incremental append of new items for a page
+      // incremental append of new items for a page — gated behind tiered-channel
+      if (!isTieredChannelEnabled()) return null
       return {
         type: 'scanner/append',
         payload: { page: msg.data.page ?? 1, scannerPairs: msg.data.scannerPairs ?? [] },
@@ -146,6 +150,8 @@ export function mapIncomingMessageToAction(msg) {
     case 'pair-stats':
       return { type: 'pair/stats', payload: { data: msg.data } }
     case 'wpeg-prices': {
+      // not supported by production endpoint — gate behind tiered-channel
+      if (!isTieredChannelEnabled()) return null
       const prices = msg.data && typeof msg.data === 'object' ? msg.data.prices || {} : {}
       return { type: 'wpeg/prices', payload: { prices } }
     }
