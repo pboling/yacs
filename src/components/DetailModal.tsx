@@ -168,11 +168,6 @@ export default function DetailModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, compareRow?.id])
 
-  // Drive history and latestRow updates directly from the per-key updates bus
-  useEffect(() => {
-    /* removed old single-key subscription (pair|token|chain) in favor of explicit tick + pair-stats subscriptions */
-  }, [])
-
   // Engage / update subscription lock when compare token changes
   useEffect(() => {
     if (!open || !row) return
