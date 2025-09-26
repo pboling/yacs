@@ -37,14 +37,15 @@ export default function UpdateRate({
 
   const [avgRate, setAvgRate] = useState(0)
 
+  // Sample every 2s, convert to updates per minute, and keep a 5-minute rolling window (150 samples)
   useEffect(() => {
     const id = setInterval(() => {
       const count = counterRef.current
       counterRef.current = 0
-      const perSec = count / 2 // 2s sampling → per-second rate
+      const perMin = (count / 2) * 60 // 2s sampling → per-second rate × 60 → per-minute
       setSeries((prev) => {
-        const next = [...prev, perSec]
-        if (next.length > 30) next.splice(0, next.length - 30)
+        const next = [...prev, perMin]
+        if (next.length > 150) next.splice(0, next.length - 150) // 5 minutes @ 2s per sample
         return next
       })
     }, 2000)
@@ -74,9 +75,9 @@ export default function UpdateRate({
       <span
         className="muted"
         style={{ fontSize: 14 }}
-        title="Average updates per second over the last 1 minute"
+        title="Average updates per minute over the last 5 minutes"
       >
-        {avgRate.toFixed(2)} upd/s (1m avg)
+        {avgRate.toFixed(2)} upd/min (5m avg)
       </span>
       <Sparkline data={series} width={width} height={height} />
       {ver != null && (
