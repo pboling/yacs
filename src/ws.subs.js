@@ -18,11 +18,16 @@ export function computePairPayloads(items) {
 
   const idToName = (id) => {
     switch (Number(id)) {
-      case 1: return 'ETH'
-      case 56: return 'BSC'
-      case 8453: return 'BASE'
-      case 900: return 'SOL'
-      default: return String(id)
+      case 1:
+        return 'ETH'
+      case 56:
+        return 'BSC'
+      case 8453:
+        return 'BASE'
+      case 900:
+        return 'SOL'
+      default:
+        return String(id)
     }
   }
 
@@ -30,7 +35,12 @@ export function computePairPayloads(items) {
     if (!it || typeof it !== 'object') continue
     const pair = typeof it.pairAddress === 'string' ? it.pairAddress : undefined
     const token = typeof it.token1Address === 'string' ? it.token1Address : undefined
-    const chainIdNum = typeof it.chainId === 'number' ? it.chainId : (typeof it.chainId === 'string' ? Number(it.chainId) : undefined)
+    const chainIdNum =
+      typeof it.chainId === 'number'
+        ? it.chainId
+        : typeof it.chainId === 'string'
+          ? Number(it.chainId)
+          : undefined
     if (!pair || !token || chainIdNum == null || Number.isNaN(chainIdNum)) continue
 
     const chainIdStr = String(chainIdNum)

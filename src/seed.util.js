@@ -8,17 +8,17 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const DEFAULT_SEED = 0xC0FFEE
+const DEFAULT_SEED = 0xc0ffee
 
 function toUInt32(n) {
   const x = Number(n)
   if (!Number.isFinite(x)) return undefined
-  return (x >>> 0)
+  return x >>> 0
 }
 
 export function getBaseSeed() {
   // Use globalThis.process to avoid relying on @types/node in TS builds.
-  const env = ((globalThis /** @type {any} */).process?.env) ?? {}
+  const env = globalThis /** @type {any} */.process?.env ?? {}
   const fromEnv = env.VITE_SEED ?? env.SEED
   const parsedEnv = toUInt32(fromEnv)
   if (parsedEnv !== undefined) return parsedEnv
@@ -30,7 +30,9 @@ export function getBaseSeed() {
       const parsed = toUInt32(m[0])
       if (parsed !== undefined) return parsed
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return DEFAULT_SEED >>> 0
 }
 

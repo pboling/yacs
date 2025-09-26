@@ -36,8 +36,19 @@ export function createApp() {
     // Allow-listed server-side sorting for bookmarkable initial load
     // sort: one of ['tokenName','exchange','price','priceUsd','mcap','volume','volumeUsd','age','tx','liquidity']
     // dir:  one of ['asc','desc']
-    const sortAllow = new Set(['tokenName','exchange','price','priceUsd','mcap','volume','volumeUsd','age','tx','liquidity'])
-    const dirAllow = new Set(['asc','desc'])
+    const sortAllow = new Set([
+      'tokenName',
+      'exchange',
+      'price',
+      'priceUsd',
+      'mcap',
+      'volume',
+      'volumeUsd',
+      'age',
+      'tx',
+      'liquidity',
+    ])
+    const dirAllow = new Set(['asc', 'desc'])
     const sortParam = typeof norm.sort === 'string' ? norm.sort : undefined
     const dirParam = typeof norm.dir === 'string' ? norm.dir.toLowerCase() : undefined
     // Pass through to generator (seeded), but we'll sort response below
@@ -51,22 +62,36 @@ export function createApp() {
         const toNum = (v) => (typeof v === 'number' ? v : parseFloat(String(v || '0')) || 0)
         const getMcap = (it) => {
           const cands = [it.currentMcap, it.initialMcap, it.pairMcapUsd, it.pairMcapUsdInitial]
-          for (const c of cands) { const n = toNum(c); if (n > 0) return n }
+          for (const c of cands) {
+            const n = toNum(c)
+            if (n > 0) return n
+          }
           return 0
         }
         const getVal = (it) => {
           switch (sortKey) {
-            case 'tokenName': return String(it.token1Name || '')
-            case 'exchange': return String(it.routerAddress || it.virtualRouterType || it.migratedFromVirtualRouter || '')
+            case 'tokenName':
+              return String(it.token1Name || '')
+            case 'exchange':
+              return String(
+                it.routerAddress || it.virtualRouterType || it.migratedFromVirtualRouter || '',
+              )
             case 'price':
-            case 'priceUsd': return toNum(it.price)
-            case 'mcap': return getMcap(it)
+            case 'priceUsd':
+              return toNum(it.price)
+            case 'mcap':
+              return getMcap(it)
             case 'volume':
-            case 'volumeUsd': return toNum(it.volume)
-            case 'age': return new Date(it.age).getTime() || 0
-            case 'tx': return toNum(it.txns)
-            case 'liquidity': return toNum(it.liquidity)
-            default: return 0
+            case 'volumeUsd':
+              return toNum(it.volume)
+            case 'age':
+              return new Date(it.age).getTime() || 0
+            case 'tx':
+              return toNum(it.txns)
+            case 'liquidity':
+              return toNum(it.liquidity)
+            default:
+              return 0
           }
         }
         items.sort((a, b) => {
@@ -74,12 +99,14 @@ export function createApp() {
           const vb = getVal(b)
           let cmp
           if (typeof va === 'string' && typeof vb === 'string') cmp = va.localeCompare(vb)
-          else cmp = (va < vb) ? -1 : (va > vb) ? 1 : 0
+          else cmp = va < vb ? -1 : va > vb ? 1 : 0
           return sortDir === 'asc' ? cmp : -cmp
         })
         json.scannerPairs = items
       }
-    } catch { /* ignore sorting errors, return unsorted */ }
+    } catch {
+      /* ignore sorting errors, return unsorted */
+    }
 
     res.type('application/json').send(json)
   })

@@ -17,7 +17,12 @@
  */
 export function calcMarketCapFromResponse(scanner) {
   const toNum = (s) => (s ? parseFloat(s) : 0)
-  const candidates = [scanner.currentMcap, scanner.initialMcap, scanner.pairMcapUsd, scanner.pairMcapUsdInitial]
+  const candidates = [
+    scanner.currentMcap,
+    scanner.initialMcap,
+    scanner.pairMcapUsd,
+    scanner.pairMcapUsdInitial,
+  ]
   for (const c of candidates) {
     const v = toNum(c)
     if (v > 0) return v
@@ -64,7 +69,11 @@ export function mapScannerResultToToken(scanner) {
   const ownerAddress = scanner.ownerAddress
   // Derive burned status
   let burned
-  if (typeof percentBurned === 'number' && typeof ownerAddress === 'string' && typeof deadAddress === 'string') {
+  if (
+    typeof percentBurned === 'number' &&
+    typeof ownerAddress === 'string' &&
+    typeof deadAddress === 'string'
+  ) {
     if (percentBurned > 50 || ownerAddress.toLowerCase() === deadAddress.toLowerCase()) {
       burned = true
     } else if (percentBurned >= 0) {
@@ -80,7 +89,11 @@ export function mapScannerResultToToken(scanner) {
     tokenAddress: scanner.token1Address,
     pairAddress: scanner.pairAddress,
     chain: chainName,
-    exchange: scanner.routerAddress || scanner.virtualRouterType || scanner.migratedFromVirtualRouter || 'unknown',
+    exchange:
+      scanner.routerAddress ||
+      scanner.virtualRouterType ||
+      scanner.migratedFromVirtualRouter ||
+      'unknown',
     priceUsd,
     volumeUsd,
     mcap,
@@ -100,10 +113,18 @@ export function mapScannerResultToToken(scanner) {
       honeypot: !!scanner.honeyPot,
       contractVerified: scanner.contractVerified,
       // Social links (prefer new link* fields, fallback to legacy *Link)
-      ...(scanner.linkDiscord || scanner.discordLink ? { linkDiscord: scanner.linkDiscord || scanner.discordLink } : {}),
-      ...(scanner.linkTelegram || scanner.telegramLink ? { linkTelegram: scanner.linkTelegram || scanner.telegramLink } : {}),
-      ...(scanner.linkTwitter || scanner.twitterLink ? { linkTwitter: scanner.linkTwitter || scanner.twitterLink } : {}),
-      ...(scanner.linkWebsite || scanner.webLink ? { linkWebsite: scanner.linkWebsite || scanner.webLink } : {}),
+      ...(scanner.linkDiscord || scanner.discordLink
+        ? { linkDiscord: scanner.linkDiscord || scanner.discordLink }
+        : {}),
+      ...(scanner.linkTelegram || scanner.telegramLink
+        ? { linkTelegram: scanner.linkTelegram || scanner.telegramLink }
+        : {}),
+      ...(scanner.linkTwitter || scanner.twitterLink
+        ? { linkTwitter: scanner.linkTwitter || scanner.twitterLink }
+        : {}),
+      ...(scanner.linkWebsite || scanner.webLink
+        ? { linkWebsite: scanner.linkWebsite || scanner.webLink }
+        : {}),
     },
     totalSupply,
     burnedSupply,
@@ -169,11 +190,14 @@ export function applyTickToToken(token, swaps, ctx) {
   let newPrice = parseNum(latest.priceToken1Usd, NaN)
   if (!Number.isFinite(newPrice) || newPrice <= 0) {
     // Fallback: try any other non-outlier swap price, otherwise keep old price
-    const alt = swaps.filter((s) => !s.isOutlier).map((s) => parseNum(s.priceToken1Usd, NaN)).find((n) => Number.isFinite(n) && n > 0)
+    const alt = swaps
+      .filter((s) => !s.isOutlier)
+      .map((s) => parseNum(s.priceToken1Usd, NaN))
+      .find((n) => Number.isFinite(n) && n > 0)
     newPrice = Number.isFinite(alt) ? alt : oldPrice
   }
 
-  const newMcap = (parseNum(ctx.totalSupply, 0)) * newPrice
+  const newMcap = parseNum(ctx.totalSupply, 0) * newPrice
 
   let buys = 0
   let sells = 0
@@ -182,7 +206,11 @@ export function applyTickToToken(token, swaps, ctx) {
     if (s.isOutlier) continue
     const amt1 = parseNum(s.amountToken1, 0)
     const pxParsed = parseNum(s.priceToken1Usd, NaN)
-    const px = Number.isFinite(pxParsed) ? pxParsed : (Number.isFinite(newPrice) && newPrice > 0 ? newPrice : oldPrice)
+    const px = Number.isFinite(pxParsed)
+      ? pxParsed
+      : Number.isFinite(newPrice) && newPrice > 0
+        ? newPrice
+        : oldPrice
     volumeDelta += px * Math.abs(amt1)
     const tin = (s.tokenInAddress || '').toLowerCase()
     const t0 = (ctx.token0Address || '').toLowerCase()
@@ -204,7 +232,7 @@ export function applyTickToToken(token, swaps, ctx) {
   // We let liquidity drift by a fraction (10%) of the price percentage change.
   const prevLiq = token.liquidity?.current ?? 0
   const pricePct = oldPrice > 0 && newPrice > 0 ? (newPrice - oldPrice) / oldPrice : 0
-  const driftFactor = 0.10 // 10% of price pct change affects liquidity
+  const driftFactor = 0.1 // 10% of price pct change affects liquidity
   const liqDelta = prevLiq * pricePct * driftFactor
   const nextLiq = Math.max(0, prevLiq + liqDelta)
   const liqChangePc = prevLiq > 0 ? ((nextLiq - prevLiq) / prevLiq) * 100 : 0

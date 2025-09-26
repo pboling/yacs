@@ -5,7 +5,7 @@ import {
   buildPairSubscription,
   buildPairStatsSubscription,
   buildPairUnsubscription,
-  buildPairStatsUnsubscription
+  buildPairStatsUnsubscription,
 } from '../ws.mapper.js'
 
 export interface MinimalCompareRow {
@@ -48,12 +48,16 @@ export function useCompareSubscription({
 
   // Load last live id from localStorage once
   useEffect(() => {
-    try { lastLiveIdRef.current = window.localStorage.getItem('detailModal.lastCompareLiveId') } catch {}
+    try {
+      lastLiveIdRef.current = window.localStorage.getItem('detailModal.lastCompareLiveId')
+    } catch {}
   }, [])
 
   const persistLastLive = (id: string) => {
     lastLiveIdRef.current = id
-    try { window.localStorage.setItem('detailModal.lastCompareLiveId', id) } catch {}
+    try {
+      window.localStorage.setItem('detailModal.lastCompareLiveId', id)
+    } catch {}
   }
 
   const revertToLastLive = () => {
@@ -70,7 +74,7 @@ export function useCompareSubscription({
 
   // Compute canLiveStream on changes
   useEffect(() => {
-    const ok = !!(open && compareRow && compareRow.pairAddress && compareRow.tokenAddress)
+    const ok = !!(open && compareRow?.pairAddress && compareRow.tokenAddress)
     setCanLiveStream(ok)
     if (!ok) {
       setIsSubscribing(false)
@@ -82,12 +86,37 @@ export function useCompareSubscription({
     // Cleanup helper
     const unsubscribe = () => {
       const ws = wsRef.current
-      if (abortRef.current) { try { abortRef.current.abort() } catch {} abortRef.current = null }
+      if (abortRef.current) {
+        try {
+          abortRef.current.abort()
+        } catch {}
+        abortRef.current = null
+      }
       if (subscribedIdRef.current && ws && ws.readyState === WebSocket.OPEN) {
-        const prev = allRows.find(r => r.id === subscribedIdRef.current)
+        const prev = allRows.find((r) => r.id === subscribedIdRef.current)
         if (prev?.pairAddress && prev.tokenAddress) {
-          try { ws.send(JSON.stringify(buildPairUnsubscription({ pair: prev.pairAddress, token: prev.tokenAddress, chain: prev.chain }))) } catch {}
-          try { ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair: prev.pairAddress, token: prev.tokenAddress, chain: prev.chain }))) } catch {}
+          try {
+            ws.send(
+              JSON.stringify(
+                buildPairUnsubscription({
+                  pair: prev.pairAddress,
+                  token: prev.tokenAddress,
+                  chain: prev.chain,
+                }),
+              ),
+            )
+          } catch {}
+          try {
+            ws.send(
+              JSON.stringify(
+                buildPairStatsUnsubscription({
+                  pair: prev.pairAddress,
+                  token: prev.tokenAddress,
+                  chain: prev.chain,
+                }),
+              ),
+            )
+          } catch {}
         }
       }
       subscribedIdRef.current = null
@@ -100,7 +129,9 @@ export function useCompareSubscription({
 
     if (!canLiveStream || !compareRow) {
       unsubscribe()
-      return () => { unsubscribe() }
+      return () => {
+        unsubscribe()
+      }
     }
 
     // Debounce rapid compare changes
@@ -126,8 +157,28 @@ export function useCompareSubscription({
           const variants = new Set<string>([String(compareRow.chain), toChainId(compareRow.chain)])
           for (const chainVariant of variants) {
             if (abortRef.current.signal.aborted) break
-            try { ws.send(JSON.stringify(buildPairSubscription({ pair: compareRow.pairAddress, token: compareRow.tokenAddress, chain: chainVariant }))) } catch {}
-            try { ws.send(JSON.stringify(buildPairStatsSubscription({ pair: compareRow.pairAddress, token: compareRow.tokenAddress, chain: chainVariant }))) } catch {}
+            try {
+              ws.send(
+                JSON.stringify(
+                  buildPairSubscription({
+                    pair: compareRow.pairAddress,
+                    token: compareRow.tokenAddress,
+                    chain: chainVariant,
+                  }),
+                ),
+              )
+            } catch {}
+            try {
+              ws.send(
+                JSON.stringify(
+                  buildPairStatsSubscription({
+                    pair: compareRow.pairAddress,
+                    token: compareRow.tokenAddress,
+                    chain: chainVariant,
+                  }),
+                ),
+              )
+            } catch {}
           }
           subscribedIdRef.current = compareRow.id
           if (hasSeedData) {
@@ -143,8 +194,12 @@ export function useCompareSubscription({
       if (ws.readyState === WebSocket.OPEN) {
         doSubscribe()
       } else if (ws.readyState === WebSocket.CONNECTING) {
-        const handler = () => { doSubscribe() }
-        try { ws.addEventListener('open', handler, { once: true }) } catch {}
+        const handler = () => {
+          doSubscribe()
+        }
+        try {
+          ws.addEventListener('open', handler, { once: true })
+        } catch {}
       }
     }, debounceMs)
 
@@ -166,13 +221,25 @@ export function useCompareSubscription({
     if (!open || !compareRow || !canLiveStream) return
     const chainId = toChainId(compareRow.chain)
     const chainName = String(compareRow.chain)
-    const pairStatsKeyNumeric = compareRow.pairAddress && compareRow.tokenAddress ? `${compareRow.pairAddress}|${compareRow.tokenAddress}|${chainId}` : null
-    const pairStatsKeyName = compareRow.pairAddress && compareRow.tokenAddress ? `${compareRow.pairAddress}|${compareRow.tokenAddress}|${chainName}` : null
+    const pairStatsKeyNumeric =
+      compareRow.pairAddress && compareRow.tokenAddress
+        ? `${compareRow.pairAddress}|${compareRow.tokenAddress}|${chainId}`
+        : null
+    const pairStatsKeyName =
+      compareRow.pairAddress && compareRow.tokenAddress
+        ? `${compareRow.pairAddress}|${compareRow.tokenAddress}|${chainName}`
+        : null
     const tickKeyNumeric = compareRow.tokenAddress ? `${compareRow.tokenAddress}|${chainId}` : null
     const tickKeyName = compareRow.tokenAddress ? `${compareRow.tokenAddress}|${chainName}` : null
 
     const off = onUpdate((e) => {
-      if (e.key !== pairStatsKeyNumeric && e.key !== pairStatsKeyName && e.key !== tickKeyNumeric && e.key !== tickKeyName) return
+      if (
+        e.key !== pairStatsKeyNumeric &&
+        e.key !== pairStatsKeyName &&
+        e.key !== tickKeyNumeric &&
+        e.key !== tickKeyName
+      )
+        return
       const latest = getRowById(compareRow.id)
       if (latest) {
         applyCompareSnapshot(compareRow.id)
@@ -184,7 +251,11 @@ export function useCompareSubscription({
       }
       setLastUpdateAt(Date.now())
     })
-    return () => { try { off() } catch {} }
+    return () => {
+      try {
+        off()
+      } catch {}
+    }
   }, [open, compareRow?.id, canLiveStream])
 
   return { isSubscribing, canLiveStream, lastUpdateAt, revertToLastLive }

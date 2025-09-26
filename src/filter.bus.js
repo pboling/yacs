@@ -19,8 +19,14 @@ const applyCompleteListeners = new Set()
  * @returns {() => void} Unsubscribe function.
  */
 export function onFilterFocusStart(cb) {
-    focusStartListeners.add(cb)
-    return () => { try { focusStartListeners.delete(cb) } catch { /* no-op */ } }
+  focusStartListeners.add(cb)
+  return () => {
+    try {
+      focusStartListeners.delete(cb)
+    } catch {
+      /* no-op */
+    }
+  }
 }
 /**
  * Subscribe to the filter apply-complete event.
@@ -30,8 +36,14 @@ export function onFilterFocusStart(cb) {
  * @returns {() => void} Unsubscribe function.
  */
 export function onFilterApplyComplete(cb) {
-    applyCompleteListeners.add(cb)
-    return () => { try { applyCompleteListeners.delete(cb) } catch { /* no-op */ } }
+  applyCompleteListeners.add(cb)
+  return () => {
+    try {
+      applyCompleteListeners.delete(cb)
+    } catch {
+      /* no-op */
+    }
+  }
 }
 
 /**
@@ -39,16 +51,24 @@ export function onFilterApplyComplete(cb) {
  * Listeners are executed in registration order; exceptions are caught and ignored.
  */
 export function emitFilterFocusStart() {
-    for (const cb of Array.from(focusStartListeners)) {
-        try { cb() } catch (e) { /* ignore */ }
+  for (const cb of Array.from(focusStartListeners)) {
+    try {
+      cb()
+    } catch {
+      /* ignore */
     }
+  }
 }
 /**
  * Emit the filter apply-complete event synchronously to all current subscribers.
  * Use after the UI has applied filters and updated rows/pages.
  */
 export function emitFilterApplyComplete() {
-    for (const cb of Array.from(applyCompleteListeners)) {
-        try { cb() } catch (e) { /* ignore */ }
+  for (const cb of Array.from(applyCompleteListeners)) {
+    try {
+      cb()
+    } catch {
+      /* ignore */
     }
+  }
 }

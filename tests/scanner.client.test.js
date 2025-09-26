@@ -62,7 +62,15 @@ function makeScanner(overrides = {}) {
 }
 
 const sampleResponse = {
-  scannerPairs: [makeScanner(), makeScanner({ pairAddress: '0xPAIR2', token1Address: '0xTOKEN2', token1Symbol: 'TK2', token1Name: 'Token2' })],
+  scannerPairs: [
+    makeScanner(),
+    makeScanner({
+      pairAddress: '0xPAIR2',
+      token1Address: '0xTOKEN2',
+      token1Symbol: 'TK2',
+      token1Name: 'Token2',
+    }),
+  ],
   page: 1,
   totalPages: 5,
 }
@@ -93,7 +101,10 @@ test('fetchScanner uses injected fetch and maps tokens', async () => {
       json: async () => sampleResponse,
     }
   }
-  const { raw, tokens } = await fetchScanner({ chain: 'ETH', page: 1 }, { baseUrl: 'https://mock', fetchImpl: mockFetch })
+  const { raw, tokens } = await fetchScanner(
+    { chain: 'ETH', page: 1 },
+    { baseUrl: 'https://mock', fetchImpl: mockFetch },
+  )
   assert.equal(raw, sampleResponse)
   assert.equal(tokens.length, 2)
   assert.ok(calls[0].startsWith('https://mock/scanner?'))

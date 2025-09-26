@@ -34,10 +34,10 @@ This repo is a React 19 + TypeScript 5 + Vite 7 (Rolldown) app. Below are the es
   - npm run preview → serves the built dist/ folder.
 
 - Linting
-  - npm run lint → ESLint (flat config) with type-aware rules and React rules. Targets **/*.ts, **/*.tsx; ignores dist/.
+  - npm run lint → ESLint (flat config) with type-aware rules and React rules. Targets **/\*.ts, **/\*.tsx; ignores dist/.
 
 - Testing (dependency-free)
-  - Uses Node’s built-in test runner (node:test). Tests live under tests/ and some src/*.test.js.
+  - Uses Node’s built-in test runner (node:test). Tests live under tests/ and some src/\*.test.js.
   - Run all discovered tests: node --test
   - Run a specific folder/file: node --test tests or node --test tests/scanner.client.test.js
   - Inline demo: node --input-type=module --eval "import test from 'node:test'; import assert from 'node:assert/strict'; await test('ok', () => assert.ok(true));"
@@ -56,7 +56,7 @@ This repo includes UI end-to-end tests using Playwright that validate live WebSo
 - What the runner does
   - The Playwright config (playwright.config.ts) auto-starts the dev stack via npm run dev:serve (backend + Vite dev server) and waits for http://localhost:5173.
   - Tests live under e2e/ and include:
-    - ws-setup.spec.ts → asserts the app establishes a WebSocket connection (waits for a page websocket and window.__APP_WS__ to be OPEN).
+    - ws-setup.spec.ts → asserts the app establishes a WebSocket connection (waits for a page websocket and window.**APP_WS** to be OPEN).
     - ws-sells-updates.spec.ts → asserts that the first row in both tables updates within a timeout, indicating live data flow.
 
 - Troubleshooting
@@ -89,37 +89,37 @@ Each token row should display the following information:
 
 ```typescript
 interface TokenData {
-  id: string;
-  tokenName: string;
-  tokenSymbol: string;
-  tokenAddress: string;
-  pairAddress: string;
-  chain: "ETH" | "SOL" | "BASE" | "BSC";
-  exchange: string; // this is the router or virtualRouter fields
-  priceUsd: number;
-  volumeUsd: number;
-  mcap: number;
+  id: string
+  tokenName: string
+  tokenSymbol: string
+  tokenAddress: string
+  pairAddress: string
+  chain: 'ETH' | 'SOL' | 'BASE' | 'BSC'
+  exchange: string // this is the router or virtualRouter fields
+  priceUsd: number
+  volumeUsd: number
+  mcap: number
   priceChangePcs: {
-    "5m": number;
-    "1h": number;
-    "6h": number;
-    "24h": number;
-  };
+    '5m': number
+    '1h': number
+    '6h': number
+    '24h': number
+  }
   transactions: {
-    buys: number;
-    sells: number;
-  };
+    buys: number
+    sells: number
+  }
   audit: {
-    mintable: boolean;
-    freezable: boolean;
-    honeypot: boolean;
-    contractVerified: boolean;
-  };
-  tokenCreatedTimestamp: Date;
+    mintable: boolean
+    freezable: boolean
+    honeypot: boolean
+    contractVerified: boolean
+  }
+  tokenCreatedTimestamp: Date
   liquidity: {
-    current: number;
-    changePc: number;
-  };
+    current: number
+    changePc: number
+  }
 }
 ```
 
@@ -155,15 +155,18 @@ GET /scanner
 **Parameters:** See `GetScannerResultParams` in `test-task-types.ts`
 
 Server-side sorting (initial REST load): The /scanner endpoint accepts optional allow-listed parameters to return the initial page pre-sorted so URLs can be bookmarked and shared.
+
 - sort: one of tokenName, exchange, price, priceUsd, mcap, volume, volumeUsd, age, tx, liquidity
 - dir: one of asc, desc (default: desc)
 
 Examples:
+
 - /scanner?chain=ETH&page=1&sort=volume&dir=desc
 - /scanner?chain=SOL&page=1&sort=age&dir=asc
 - /scanner?page=1&sort=mcap (defaults to dir=desc)
 
 Notes:
+
 - Sorting is applied only to the initial REST payload; live updates over WebSocket still update values in-place. Client-side sorting can still be toggled in the UI independently.
 - Invalid values are ignored (endpoint falls back to unsorted for sort; dir falls back to desc) — parameters are validated against an allow-list on the server.
 
@@ -184,10 +187,10 @@ Example tick event handling:
 
 ```typescript
 // From tick event data.swaps, get the latest non-outlier swap
-const latestSwap = swaps.filter((swap) => !swap.isOutlier).pop();
+const latestSwap = swaps.filter((swap) => !swap.isOutlier).pop()
 if (latestSwap) {
-  const newPrice = parseFloat(latestSwap.priceToken1Usd);
-  const newMarketCap = totalSupply * newPrice;
+  const newPrice = parseFloat(latestSwap.priceToken1Usd)
+  const newMarketCap = totalSupply * newPrice
   // Update your token data with newPrice and newMarketCap
 }
 ```
@@ -215,8 +218,8 @@ Market cap is calculated using this priority order from the API response:
 Alternative calculation (once real time price updates start flowing in):
 
 ```typescript
-const totalSupply = parseFloat(token1TotalSupplyFormatted);
-const marketCap = totalSupply * parseFloat(price);
+const totalSupply = parseFloat(token1TotalSupplyFormatted)
+const marketCap = totalSupply * parseFloat(price)
 ```
 
 ### Lexicon
@@ -253,28 +256,28 @@ Connect to WebSocket and subscribe to scanner updates:
 ```javascript
 // Subscribe to scanner data
 const subscribeMessage = {
-  event: "scanner-filter",
+  event: 'scanner-filter',
   data: {
-    rankBy: "volume", // or "age"
-    chain: "SOL",
+    rankBy: 'volume', // or "age"
+    chain: 'SOL',
     isNotHP: true,
   },
-};
+}
 
 // Unsubscribe
 const unsubscribeMessage = {
-  event: "unsubscribe-scanner-filter",
+  event: 'unsubscribe-scanner-filter',
   data: {
     // same filter params as subscribe
   },
-};
+}
 ```
 
 To send a ws subscription:
 
 ```javascript
-const ws = new WebSocket("wss://api-rs.dexcelerate.com/ws");
-ws.send(JSON.stringify(subscribeMessage));
+const ws = new WebSocket('wss://api-rs.dexcelerate.com/ws')
+ws.send(JSON.stringify(subscribeMessage))
 ```
 
 ### Pair Stats Updates
@@ -299,8 +302,8 @@ Example pair-stats handling:
 
 ```typescript
 // Handle pair-stats event
-if (pairStatsEvent.event === "pair-stats") {
-  const data = pairStatsEvent.data;
+if (pairStatsEvent.event === 'pair-stats') {
+  const data = pairStatsEvent.data
   const updatedToken = {
     ...token,
     migrationPc: Number(data.migrationProgress),
@@ -310,7 +313,7 @@ if (pairStatsEvent.event === "pair-stats") {
       honeypot: !data.pair.token1IsHoneypot,
       contractVerified: token.audit.contractVerified, // preserve existing
     },
-  };
+  }
 }
 ```
 
@@ -319,14 +322,14 @@ if (pairStatsEvent.event === "pair-stats") {
 ```javascript
 ws.send(
   JSON.stringify({
-    event: "subscribe-pair-stats",
+    event: 'subscribe-pair-stats',
     data: {
       pair: token.pairAddress,
       token: token.tokenAddress,
       chain: token.chain,
     },
-  })
-);
+  }),
+)
 ```
 
 **Required Pair Subscription for Tick Events**: You must also subscribe to individual pair rooms for each token to receive real-time price updates:
@@ -334,14 +337,14 @@ ws.send(
 ```javascript
 ws.send(
   JSON.stringify({
-    event: "subscribe-pair",
+    event: 'subscribe-pair',
     data: {
       pair: token.pairAddress,
       token: token.tokenAddress,
       chain: token.chain,
     },
-  })
-);
+  }),
+)
 ```
 
 **Required Scanner Filters Subscription**: You must subscribe to scanner-filter room to receive bulk token data:
@@ -349,28 +352,27 @@ ws.send(
 ```javascript
 ws.send(
   JSON.stringify({
-    event: "scanner-filter",
+    event: 'scanner-filter',
     data: scannerFilterParams,
-  })
-);
+  }),
+)
 ```
 
 ### WebSocket Subscription Notes
 
 1. **Price Change Percentages**: These come from the API response (`diff5M`, `diff1H`, `diff6H`, `diff24H`) - NOT calculated from tick events
 2. **Triple Subscriptions Required**: Subscribe to these websocket rooms
-
-    - `scanner-filter` - for bulk token data
-    - `pair-stats` subscriptions for each token - for audit updates and migration progress
-    - `pair` subscriptions for each token - for real-time tick price updates
+   - `scanner-filter` - for bulk token data
+   - `pair-stats` subscriptions for each token - for audit updates and migration progress
+   - `pair` subscriptions for each token - for real-time tick price updates
 
 3. **Real-time Updates**: Handle these WebSocket events:
-    - `scanner-pairs` - Full dataset replacement
-    - `tick` - Price/volume updates
-    - `pair-stats` - Audit/migration updates
+   - `scanner-pairs` - Full dataset replacement
+   - `tick` - Price/volume updates
+   - `pair-stats` - Audit/migration updates
 4. **Data Persistence**:
-    - Preserve existing price/mcap data when receiving scanner-pairs updates
-    - If a pair no longer exists in the scanner-pairs for it's respective page number, remove it from the table
+   - Preserve existing price/mcap data when receiving scanner-pairs updates
+   - If a pair no longer exists in the scanner-pairs for it's respective page number, remove it from the table
 
 #### WebSocket Message Types to Handle
 
@@ -388,11 +390,11 @@ All incoming WebSocket message types are defined in `test-task-types.ts`. See `I
 #### Filtering & Sorting
 
 - Implement client-side filtering controls:
-    - Chain selection (ETH, SOL, BASE, BSC)
-    - Minimum volume filter
-    - Maximum age filter
-    - Minimum Market Cap filter
-    - Exclude honeypot checkbox
+  - Chain selection (ETH, SOL, BASE, BSC)
+  - Minimum volume filter
+  - Maximum age filter
+  - Minimum Market Cap filter
+  - Exclude honeypot checkbox
 - Server-side sorting via API parameters
 
 #### UI/UX
@@ -430,6 +432,7 @@ You will have to use a no-cors extension from the Chrome web store during develo
 `https://chromewebstore.google.com/detail/allow-cors-access-control/` - or any other extension with similar functionality.
 
 ### Dev proxy (added)
+
 - The Vite dev server proxies API and WebSocket calls to avoid CORS during development.
 - REST: fetch('/scanner?…') → proxies to https://api-rs.dexcelerate.com/scanner
 - WS: new WebSocket('ws://localhost:5173/ws') → proxies to wss://api-rs.dexcelerate.com/ws
@@ -437,6 +440,7 @@ You will have to use a no-cors extension from the Chrome web store during develo
   - Example: echo "VITE_API_BASE=/" > .env.local to force relative base; default behavior already uses relative base in dev.
 
 ### Local mock data with reproducible seed
+
 - The local deterministic mock for /scanner is ENABLED by default during development. You can control it with env vars:
   - Force-enable mock: set LOCAL_SCANNER=1 (or VITE_USE_LOCAL_SCANNER=1)
   - Disable mock: set LOCAL_SCANNER=0 (or VITE_USE_LOCAL_SCANNER=0)
@@ -451,6 +455,7 @@ You will have to use a no-cors extension from the Chrome web store during develo
 - This allows you to test initial load without relying on the public API.
 
 ### Testing notes
+
 - Playwright E2E (browser WebSocket validation)
   - Install browsers once: npx playwright install --with-deps (or rely on CI preinstall)
   - Run servers + tests: npm run test:e2e (playwright.config.ts starts both Vite and the local backend via npm run dev:serve)
@@ -473,9 +478,9 @@ You will have to use a no-cors extension from the Chrome web store during develo
   - npm run dev:serve (starts the Express backend and the Vite dev server)
 
 Notes:
+
 - You can still point the frontend at another API by setting VITE_API_BASE (e.g., to the public API), but by default the app assumes the local backend on port 3001.
 - WebSocket errors will surface; the client retries a limited number of times for developer visibility but does not switch to any mock WS.
-
 
 ## WebSocket channels overview and boot overlay
 
@@ -486,5 +491,65 @@ Notes:
 - wpeg-prices → occasional broadcast with wrapped-native prices by chain.
 
 Boot/loading behavior
+
 - The app shows a full-screen loading overlay during startup. It dismisses when either the WebSocket is OPEN or both tables have initialized their pages (from REST/WS). This avoids a deadlock where the UI wouldn’t mount if the WS is slow/unavailable.
-- In test/automation contexts, the overlay can be bypassed via navigator.webdriver, ?e2e=1, or window.__BYPASS_BOOT__ = true.
+- In test/automation contexts, the overlay can be bypassed via navigator.webdriver, ?e2e=1, or window.**BYPASS_BOOT** = true.
+
+## Linting Profiles & Code Style
+
+This project uses **ESLint (flat config)** with two profiles and **Prettier** in compatibility mode.
+
+### Profiles
+
+- Development: `npm run lint`
+  - Warnings allowed (style + exploratory TypeScript warnings)
+  - Prettier issues appear as warnings (`prettier/prettier`)
+  - Encourages iterative cleanup without blocking local dev
+- CI: `npm run lint:ci`
+  - Loads `eslint.ci.config.js` which promotes selected high-signal rules to errors:
+    - `@typescript-eslint/no-unused-vars`
+    - `@typescript-eslint/no-unsafe-assignment`
+    - `@typescript-eslint/no-unsafe-member-access`
+    - `@typescript-eslint/restrict-plus-operands`
+    - `@typescript-eslint/restrict-template-expressions`
+    - `@typescript-eslint/no-unnecessary-type-conversion`
+  - Fails build on any error or (because of `--max-warnings=0`) unexpected warnings
+
+### Prettier Integration
+
+Prettier is run separately for formatting but also integrated into ESLint via `eslint-plugin-prettier` (compatibility mode):
+
+- Config: `.prettierrc.json` (100 col width, no semicolons, single quotes, trailing commas)
+- ESLint disables conflicting stylistic rules using `eslint-config-prettier`
+- Style violations surface as `prettier/prettier` warnings locally (can be promoted in CI later if desired)
+
+### Scripts
+
+| Command                   | Purpose                                        |
+| ------------------------- | ---------------------------------------------- |
+| `npm run lint`            | Dev lint (warnings OK)                         |
+| `npm run lint:fix`        | Auto-fix (dev profile)                         |
+| `npm run lint:ci`         | CI gating lint (errors only, max warnings = 0) |
+| `npm run lint:ci:fix`     | Same as above but attempts fixes first         |
+| `npm run format:prettier` | Apply Prettier formatting to all source files  |
+| `npm run format:check`    | Verify formatting without writing              |
+| `npm run format`          | Run Prettier write, then ESLint --fix          |
+
+### Recommended Workflow
+
+1. Make code changes
+2. Run `npm run format` (fast full-project formatting + lint fixes)
+3. Run `npm run lint` to inspect any residual warnings
+4. Before commit / pre-push hook: run `npm run lint:ci`
+
+### Adding a Pre-Push Hook (Optional)
+
+```
+npx husky add .husky/pre-push "npm run lint:ci && npm test"
+```
+
+### Promoting More Rules in CI
+
+Edit `eslint.ci.config.js` and append rule names to the `promoteToError` array. For style-only enforcement, change `'prettier/prettier': 'warn'` to `'error'` in the Prettier block.
+
+---

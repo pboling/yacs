@@ -46,8 +46,8 @@ for (let code = 'a'.charCodeAt(0); code <= 'z'.charCodeAt(0); code++) {
   const arr = Array.from(set)
   // Sort deterministically: primary lexicographic, secondary by length
   arr.sort((a, b) => a.localeCompare(b) || a.length - b.length)
-  const short = arr.filter(w => w.length <= 5)
-  const long = arr.filter(w => w.length > 5)
+  const short = arr.filter((w) => w.length <= 5)
+  const long = arr.filter((w) => w.length > 5)
   const longPick = Math.min(10, long.length)
   const need = 100
   const out = []
@@ -62,7 +62,7 @@ for (let code = 'a'.charCodeAt(0); code <= 'z'.charCodeAt(0); code++) {
 }
 
 // Write YAML (one item per line)
-const yamlLines = selected.map(w => `- ${w}`)
+const yamlLines = selected.map((w) => `- ${w}`)
 fs.writeFileSync(outPath, yamlLines.join('\n') + '\n', 'utf-8')
 
 console.log(`Wrote ${selected.length} words to ${outPath}`)

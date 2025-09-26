@@ -6,9 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>dexcelerate-fe-test</title>
     <script>
-      (function() {
+      ;(function () {
         try {
-          var allow = { 'cherry-sour': 1, 'rocket-lake': 1, 'legendary': 1 }
+          var allow = { 'cherry-sour': 1, 'rocket-lake': 1, legendary: 1 }
           var m = document.cookie.match(/(?:^|; )theme=([^;]+)/)
           var v = m ? decodeURIComponent(m[1]) : 'cherry-sour'
           if (!allow[v]) v = 'cherry-sour'
@@ -16,7 +16,7 @@
         } catch (e) {
           document.documentElement.setAttribute('data-theme', 'cherry-sour')
         }
-      })();
+      })()
     </script>
   </head>
   <body>

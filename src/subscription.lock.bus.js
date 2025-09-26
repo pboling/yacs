@@ -16,8 +16,6 @@
 //
 // The bus is resilient to HMR / multiple imports by stashing state on globalThis.
 
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
-
 function getStore() {
   const g = /** @type {any} */ (globalThis)
   if (!g.__SUB_LOCK__) {
@@ -26,7 +24,9 @@ function getStore() {
       listeners: new Set(),
     }
   }
-  return /** @type {{state:{active:boolean;allowed:Set<string>};listeners:Set<Function>}} */ (g.__SUB_LOCK__)
+  return /** @type {{state:{active:boolean;allowed:Set<string>};listeners:Set<Function>}} */ (
+    g.__SUB_LOCK__
+  )
 }
 
 export function engageSubscriptionLock(allowedKey) {
@@ -42,7 +42,11 @@ export function engageSubscriptionLock(allowedKey) {
   store.state.allowed = next
   if (!prevActive || next.size > 0) {
     for (const l of store.listeners) {
-      try { l(store.state) } catch { /* no-op */ }
+      try {
+        l(store.state)
+      } catch {
+        /* no-op */
+      }
     }
   }
 }
@@ -53,7 +57,11 @@ export function releaseSubscriptionLock() {
   store.state.active = false
   store.state.allowed = new Set()
   for (const l of store.listeners) {
-    try { l(store.state) } catch { /* no-op */ }
+    try {
+      l(store.state)
+    } catch {
+      /* no-op */
+    }
   }
 }
 
@@ -68,6 +76,7 @@ export function getSubscriptionLockAllowedKeys() {
 export function onSubscriptionLockChange(cb) {
   const store = getStore()
   store.listeners.add(cb)
-  return () => { store.listeners.delete(cb) }
+  return () => {
+    store.listeners.delete(cb)
+  }
 }
-

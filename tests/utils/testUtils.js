@@ -8,16 +8,19 @@
  */
 export function dumpActiveHandles(prefix = 'Diagnostics') {
   try {
-     
-    const getHandles = typeof process._getActiveHandles === 'function' ? process._getActiveHandles : null
-     
-    const getReqs = typeof process._getActiveRequests === 'function' ? process._getActiveRequests : null
+    const getHandles =
+      typeof process._getActiveHandles === 'function' ? process._getActiveHandles : null
+
+    const getReqs =
+      typeof process._getActiveRequests === 'function' ? process._getActiveRequests : null
     const handles = getHandles ? getHandles.call(process) : []
     const reqs = getReqs ? getReqs.call(process) : []
     // Avoid throwing if console is stubbed
     try {
       // Only print a compact summary to keep CI logs readable
-      console.error(`[${prefix}] active handles: ${handles.length}, active requests: ${reqs.length}`)
+      console.error(
+        `[${prefix}] active handles: ${handles.length}, active requests: ${reqs.length}`,
+      )
       for (const h of handles) {
         const name = h && h.constructor ? h.constructor.name : String(h)
         // Best-effort info for timers/sockets
@@ -50,13 +53,17 @@ export async function withDeterministicTimeout(fn, timeoutMs = 12_000) {
       fn(),
       new Promise((_, reject) => {
         to = setTimeout(() => {
-          try { dumpActiveHandles('withDeterministicTimeout') } catch {}
+          try {
+            dumpActiveHandles('withDeterministicTimeout')
+          } catch {}
           reject(new Error(`deterministic timeout after ${timeoutMs}ms`))
         }, timeoutMs)
         // Do not keep the process alive solely due to this timer
         // @ts-ignore - unref may not exist in some environments
         if (typeof to?.unref === 'function') {
-          try { to.unref() } catch {}
+          try {
+            to.unref()
+          } catch {}
         }
       }),
     ])

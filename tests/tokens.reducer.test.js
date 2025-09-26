@@ -78,10 +78,35 @@ test('pair/tick updates price, mcap, volume and persists token0Address meta', ()
   const page1 = [mkScanner({ price: '1.0' })]
   let state = tokensReducer(initialState, actions.scannerPairs(1, page1))
   const swaps = [
-    { timestamp: '1', addressTo: '', addressFrom: '', token0Address: '0xWETH', amountToken0: '1', amountToken1: '100', priceToken0Usd: '3000', priceToken1Usd: '1.2', tokenInAddress: '0xWETH', isOutlier: false },
-    { timestamp: '2', addressTo: '', addressFrom: '', token0Address: '0xWETH', amountToken0: '1', amountToken1: '50', priceToken0Usd: '3000', priceToken1Usd: '1.3', tokenInAddress: '0xTOKEN', isOutlier: false },
+    {
+      timestamp: '1',
+      addressTo: '',
+      addressFrom: '',
+      token0Address: '0xWETH',
+      amountToken0: '1',
+      amountToken1: '100',
+      priceToken0Usd: '3000',
+      priceToken1Usd: '1.2',
+      tokenInAddress: '0xWETH',
+      isOutlier: false,
+    },
+    {
+      timestamp: '2',
+      addressTo: '',
+      addressFrom: '',
+      token0Address: '0xWETH',
+      amountToken0: '1',
+      amountToken1: '50',
+      priceToken0Usd: '3000',
+      priceToken1Usd: '1.3',
+      tokenInAddress: '0xTOKEN',
+      isOutlier: false,
+    },
   ]
-  state = tokensReducer(state, actions.tick({ pair: '0xPAIR', token: '0xTOKEN', chain: 'ETH' }, swaps))
+  state = tokensReducer(
+    state,
+    actions.tick({ pair: '0xPAIR', token: '0xTOKEN', chain: 'ETH' }, swaps),
+  )
   const t = state.byId['0xPAIR']
   assert.equal(t.priceUsd, 1.3)
   assert.ok(state.meta['0xPAIR'].token0Address === '0xWETH')

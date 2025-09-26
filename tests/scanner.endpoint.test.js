@@ -10,11 +10,36 @@ function isIsoDate(s) {
 
 function hasScannerFields(item) {
   const requiredStringFields = [
-    'bundlerHoldings', 'currentMcap', 'devHoldings', 'diff1H', 'diff24H', 'diff5M', 'diff6H',
-    'fdv', 'first1H', 'first24H', 'first5M', 'first6H', 'initialMcap', 'insiderHoldings',
-    'liquidity', 'liquidityLockedAmount', 'liquidityLockedRatio', 'pairMcapUsd', 'pairMcapUsdInitial',
-    'percentChangeInLiquidity', 'percentChangeInMcap', 'price', 'reserves0', 'reserves0Usd',
-    'reserves1', 'reserves1Usd', 'sniperHoldings', 'top10Holdings', 'volume', 'token1TotalSupplyFormatted'
+    'bundlerHoldings',
+    'currentMcap',
+    'devHoldings',
+    'diff1H',
+    'diff24H',
+    'diff5M',
+    'diff6H',
+    'fdv',
+    'first1H',
+    'first24H',
+    'first5M',
+    'first6H',
+    'initialMcap',
+    'insiderHoldings',
+    'liquidity',
+    'liquidityLockedAmount',
+    'liquidityLockedRatio',
+    'pairMcapUsd',
+    'pairMcapUsdInitial',
+    'percentChangeInLiquidity',
+    'percentChangeInMcap',
+    'price',
+    'reserves0',
+    'reserves0Usd',
+    'reserves1',
+    'reserves1Usd',
+    'sniperHoldings',
+    'top10Holdings',
+    'volume',
+    'token1TotalSupplyFormatted',
   ]
   for (const f of requiredStringFields) {
     if (typeof item[f] !== 'string') return false
@@ -31,7 +56,12 @@ function hasScannerFields(item) {
   if (typeof item.token0Symbol !== 'string') return false
   if (typeof item.token1Address !== 'string') return false
   if (typeof item.token1Decimals !== 'string') return false
-  if (typeof item.token1ImageUri !== 'string' && item.token1ImageUri !== null && item.token1ImageUri !== undefined) return false
+  if (
+    typeof item.token1ImageUri !== 'string' &&
+    item.token1ImageUri !== null &&
+    item.token1ImageUri !== undefined
+  )
+    return false
   if (typeof item.token1Name !== 'string') return false
   if (typeof item.token1Symbol !== 'string') return false
   if (typeof item.pairAddress !== 'string') return false
@@ -75,5 +105,5 @@ test('generated items include market cap candidates with at least one > 0', () =
   const res = generateScannerResponse({ chain: 'SOL', page: 1 })
   const s = res.scannerPairs[0]
   const vals = [s.currentMcap, s.initialMcap, s.pairMcapUsd, s.pairMcapUsdInitial].map(parseFloat)
-  assert.ok(vals.some(v => v > 0))
+  assert.ok(vals.some((v) => v > 0))
 })

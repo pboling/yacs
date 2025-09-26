@@ -16,14 +16,22 @@ const isViteDev = (() => {
   try {
     // import.meta is available in ESM; env is injected by Vite in dev
     return Boolean(import.meta && import.meta.env && import.meta.env.DEV)
-  } catch (_) {
+  } catch {
     return false
   }
 })()
-const viteApiBase = (() => { try { return (import.meta && import.meta.env && import.meta.env.VITE_API_BASE) || null } catch { return null } })()
+const viteApiBase = (() => {
+  try {
+    return (import.meta && import.meta.env && import.meta.env.VITE_API_BASE) || null
+  } catch {
+    return null
+  }
+})()
 // In dev, prefer relative base ('') so Vite proxy can handle /scanner when running the dev server.
 // Fall back to localhost:3001 only if explicitly provided via VITE_API_BASE.
-export const API_BASE = isViteDev ? (viteApiBase || '') : (viteApiBase || 'https://api-rs.dexcelerate.com')
+export const API_BASE = isViteDev
+  ? viteApiBase || ''
+  : viteApiBase || 'https://api-rs.dexcelerate.com'
 
 // Build URLSearchParams from GetScannerResultParams-like object
 /**
@@ -81,7 +89,7 @@ export async function fetchScanner(params, opts = {}) {
   const qp = buildScannerQuery(params)
 
   const url = `${baseUrl}/scanner?${qp.toString()}`
-  const res = await fetchImpl(url, { headers: { 'accept': 'application/json' } })
+  const res = await fetchImpl(url, { headers: { accept: 'application/json' } })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     const err = new Error(`Scanner request failed ${res.status}: ${text}`)

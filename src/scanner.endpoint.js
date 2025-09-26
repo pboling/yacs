@@ -25,10 +25,10 @@
 function mulberry32(seed) {
   let t = seed >>> 0
   return function () {
-    t += 0x6D2B79F5
-    let r = Math.imul(t ^ t >>> 15, 1 | t)
-    r ^= r + Math.imul(r ^ r >>> 7, 61 | r)
-    return ((r ^ r >>> 14) >>> 0) / 4294967296
+    t += 0x6d2b79f5
+    let r = Math.imul(t ^ (t >>> 15), 1 | t)
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r)
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296
   }
 }
 
@@ -75,11 +75,16 @@ function pick(arr, rnd) {
  */
 function chainNameToId(name) {
   switch (name) {
-    case 'ETH': return 1
-    case 'BSC': return 56
-    case 'BASE': return 8453
-    case 'SOL': return 900
-    default: return 1
+    case 'ETH':
+      return 1
+    case 'BSC':
+      return 56
+    case 'BASE':
+      return 8453
+    case 'SOL':
+      return 900
+    default:
+      return 1
   }
 }
 
@@ -134,9 +139,9 @@ function loadSymbols() {
 
     // Decide how to interpret the YAML items:
     // 1) If items are already full symbols with numeric suffix (e.g., apple0001) and we have enough, use as-is.
-    const allAlpha = items.every(w => /^[A-Za-z]+$/.test(w))
-    const allFive = allAlpha && items.every(w => w.length === 5)
-    const allFiveWithSuffix = items.every(w => /^[A-Za-z]{5}\d{4}$/.test(w))
+    const allAlpha = items.every((w) => /^[A-Za-z]+$/.test(w))
+    const allFive = allAlpha && items.every((w) => w.length === 5)
+    const allFiveWithSuffix = items.every((w) => /^[A-Za-z]{5}\d{4}$/.test(w))
 
     if (allFiveWithSuffix && items.length >= 2000) {
       CACHED_SYMBOLS = items
@@ -160,7 +165,8 @@ function loadSymbols() {
       CACHED_SYMBOLS = items
       return CACHED_SYMBOLS
     }
-  } catch (e) {
+  } catch {
+    // removed unused catch variable
     // fall through to fallback
   }
   // Fallback: generate deterministic synthetic symbols (guarantee >= 2000)
@@ -206,7 +212,8 @@ export function generateScannerResponse(params = {}) {
   // - If not provided, we deterministically assign a chain per row using a secondary
   //   RNG derived from the seed and the symbol index to achieve a stable dispersion:
   //   ETH 55%, SOL 20%, BASE 15%, BSC 10%.
-  const requestedChain = typeof params.chain === 'string' ? String(params.chain).toUpperCase() : undefined
+  const requestedChain =
+    typeof params.chain === 'string' ? String(params.chain).toUpperCase() : undefined
   const routerMap = {
     ETH: ['0xRT_UNI', '0xRT_SUSHI'],
     BSC: ['0xRT_PCS', '0xRT_APE'],
@@ -225,8 +232,8 @@ export function generateScannerResponse(params = {}) {
     const r = mulberry32(s)()
     // Weighted mapping: ETH 55%, SOL 20%, BASE 15%, BSC 10%
     if (r < 0.55) return 'ETH'
-    if (r < 0.55 + 0.20) return 'SOL'
-    if (r < 0.55 + 0.20 + 0.15) return 'BASE'
+    if (r < 0.55 + 0.2) return 'SOL'
+    if (r < 0.55 + 0.2 + 0.15) return 'BASE'
     return 'BSC'
   }
 
@@ -234,7 +241,7 @@ export function generateScannerResponse(params = {}) {
   // - Selection appears random yet is reproducible for the same params/seed
   // - Symbols are not repeated until the full list has been traversed; then it resets
   const SYMBOLS = loadSymbols()
-  const shuffleSeed = mixSeeds(seed, 0x53484F46) // arbitrary salt ('SHOF') for symbol order
+  const shuffleSeed = mixSeeds(seed, 0x53484f46) // arbitrary salt ('SHOF') for symbol order
   const rndSym = mulberry32(shuffleSeed)
   const indices = Array.from({ length: SYMBOLS.length }, (_, i) => i)
   for (let j = indices.length - 1; j > 0; j--) {
@@ -266,7 +273,8 @@ export function generateScannerResponse(params = {}) {
     const token1Symbol = SYMBOLS[symbolIndex]
 
     // Decide chain: honor explicit request if present, otherwise pick by index with weighted dispersion
-    const chosenChain = requestedChain && routerMap[requestedChain] ? requestedChain : pickChainByIndex(symbolIndex)
+    const chosenChain =
+      requestedChain && routerMap[requestedChain] ? requestedChain : pickChainByIndex(symbolIndex)
     const chainId = chainNameToId(chosenChain)
     const token1Name = `${token1Symbol}-${chosenChain}`
 
@@ -336,7 +344,7 @@ export function generateScannerResponse(params = {}) {
       snipers: Math.floor(rnd() * 200),
       telegramLink: null,
       token0Decimals,
-      token0Symbol: (chosenChain === 'SOL') ? 'WSOL' : (chosenChain === 'BSC') ? 'WBNB' : 'WETH',
+      token0Symbol: chosenChain === 'SOL' ? 'WSOL' : chosenChain === 'BSC' ? 'WBNB' : 'WETH',
       token1Address,
       token1Decimals: String(token1Decimals),
       token1ImageUri: null,
@@ -364,7 +372,12 @@ export function generateScannerResponse(params = {}) {
     // Deterministic ownerAddress: 20% chance to be dead address, otherwise random
     const ownerSeed = mixSeeds(seed, hashParams({ k: String(pairAddress) + '|owner' }))
     const rndOwner = mulberry32(ownerSeed)
-    const ownerAddress = rndOwner() < 0.2 ? deadAddress : `0x${Math.floor(rndOwner() * 1e16).toString(16).padStart(40, '0')}`
+    const ownerAddress =
+      rndOwner() < 0.2
+        ? deadAddress
+        : `0x${Math.floor(rndOwner() * 1e16)
+            .toString(16)
+            .padStart(40, '0')}`
     item.totalSupply = totalSupply
     item.burnedSupply = burnedSupply
     item.percentBurned = percentBurned
@@ -375,10 +388,15 @@ export function generateScannerResponse(params = {}) {
     try {
       const epochMs = 90 * 24 * 3600 * 1000 // 90 days to make updates very infrequent
       const epoch = Math.floor(now / epochMs)
-      const socialSeed = mixSeeds(seed, hashParams({ k: String(pairAddress) + '|' + String(token1Symbol) + '|' + String(epoch) }))
+      const socialSeed = mixSeeds(
+        seed,
+        hashParams({ k: String(pairAddress) + '|' + String(token1Symbol) + '|' + String(epoch) }),
+      )
       const rndSoc = mulberry32(socialSeed)
       const base = String(token1Symbol || 't').toLowerCase()
-      const suffix = String(pairAddress || '').slice(-4).toLowerCase()
+      const suffix = String(pairAddress || '')
+        .slice(-4)
+        .toLowerCase()
       const maybe = () => rndSoc() < 0.8
       const pickTld = () => (rndSoc() < 0.5 ? 'io' : 'xyz')
       const linkWebsite = maybe() ? `https://www.${base}-${suffix}.${pickTld()}` : null
@@ -394,7 +412,9 @@ export function generateScannerResponse(params = {}) {
       if (linkTwitter) item.twitterLink = linkTwitter
       if (linkTelegram) item.telegramLink = linkTelegram
       if (linkDiscord) item.discordLink = linkDiscord
-    } catch { /* no-op */ }
+    } catch {
+      /* no-op */
+    }
 
     // zero-out some mcap fields to exercise priority order randomly
     const roll = rnd()
@@ -446,8 +466,19 @@ export function createScannerMockMiddleware() {
 
     // Apply server-side sorting (allow-listed) for dev middleware as well
     try {
-      const sortAllow = new Set(['tokenName','exchange','price','priceUsd','mcap','volume','volumeUsd','age','tx','liquidity'])
-      const dirAllow = new Set(['asc','desc'])
+      const sortAllow = new Set([
+        'tokenName',
+        'exchange',
+        'price',
+        'priceUsd',
+        'mcap',
+        'volume',
+        'volumeUsd',
+        'age',
+        'tx',
+        'liquidity',
+      ])
+      const dirAllow = new Set(['asc', 'desc'])
       const sortParam = typeof norm.sort === 'string' ? norm.sort : undefined
       const dirParam = typeof norm.dir === 'string' ? String(norm.dir).toLowerCase() : undefined
       const sortKey = sortParam && sortAllow.has(sortParam) ? sortParam : undefined
@@ -457,22 +488,36 @@ export function createScannerMockMiddleware() {
         const toNum = (v) => (typeof v === 'number' ? v : parseFloat(String(v || '0')) || 0)
         const getMcap = (it) => {
           const cands = [it.currentMcap, it.initialMcap, it.pairMcapUsd, it.pairMcapUsdInitial]
-          for (const c of cands) { const n = toNum(c); if (n > 0) return n }
+          for (const c of cands) {
+            const n = toNum(c)
+            if (n > 0) return n
+          }
           return 0
         }
         const getVal = (it) => {
           switch (sortKey) {
-            case 'tokenName': return String(it.token1Name || '')
-            case 'exchange': return String(it.routerAddress || it.virtualRouterType || it.migratedFromVirtualRouter || '')
+            case 'tokenName':
+              return String(it.token1Name || '')
+            case 'exchange':
+              return String(
+                it.routerAddress || it.virtualRouterType || it.migratedFromVirtualRouter || '',
+              )
             case 'price':
-            case 'priceUsd': return toNum(it.price)
-            case 'mcap': return getMcap(it)
+            case 'priceUsd':
+              return toNum(it.price)
+            case 'mcap':
+              return getMcap(it)
             case 'volume':
-            case 'volumeUsd': return toNum(it.volume)
-            case 'age': return new Date(it.age).getTime() || 0
-            case 'tx': return toNum(it.txns)
-            case 'liquidity': return toNum(it.liquidity)
-            default: return 0
+            case 'volumeUsd':
+              return toNum(it.volume)
+            case 'age':
+              return new Date(it.age).getTime() || 0
+            case 'tx':
+              return toNum(it.txns)
+            case 'liquidity':
+              return toNum(it.liquidity)
+            default:
+              return 0
           }
         }
         items.sort((a, b) => {
@@ -480,12 +525,14 @@ export function createScannerMockMiddleware() {
           const vb = getVal(b)
           let cmp
           if (typeof va === 'string' && typeof vb === 'string') cmp = va.localeCompare(vb)
-          else cmp = (va < vb) ? -1 : (va > vb) ? 1 : 0
+          else cmp = va < vb ? -1 : va > vb ? 1 : 0
           return sortDir === 'asc' ? cmp : -cmp
         })
         json.scannerPairs = items
       }
-    } catch { /* ignore sort errors in dev */ }
+    } catch {
+      /* ignore sort errors in dev */
+    }
 
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify(json))
@@ -503,11 +550,11 @@ export function createScannerMockPlugin() {
     apply: 'serve',
 
     configureServer(server) {
-      const enabled = process.env.LOCAL_SCANNER === '1' || process.env.VITE_USE_LOCAL_SCANNER === '1'
+      const enabled =
+        process.env.LOCAL_SCANNER === '1' || process.env.VITE_USE_LOCAL_SCANNER === '1'
       if (!enabled) return
       const mw = createScannerMockMiddleware()
       server.middlewares.use(mw)
     },
   }
 }
-

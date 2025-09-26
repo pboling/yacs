@@ -16,7 +16,7 @@ test('critical imports referenced by App.tsx exist', () => {
   const content = readFileSync(appPath, 'utf8')
 
   // Collect only relative imports that end with .js or .ts from App.tsx — Vite resolves these in dev.
-  const importRegex = /import\s+[^'"\n]+from\s+['\"](\.\S*?\.(?:js|ts))['\"]/g
+  const importRegex = /import\s+[^"'\n]+from\s+["'](\.\S*?\.(?:js|ts))["']/g
   const imports = []
   let m
   while ((m = importRegex.exec(content)) !== null) {

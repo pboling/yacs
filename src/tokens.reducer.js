@@ -20,7 +20,14 @@ export const initialState = {
   byId: {}, // id -> TokenData
   meta: {}, // id -> { totalSupply: number, token0Address?: string }
   pages: {}, // pageNumber -> string[] ids present on that page
-  filters: { excludeHoneypots: false, chains: ['ETH','SOL','BASE','BSC'], minVolume: 0, maxAgeHours: null, minMcap: 0, limit: 200 },
+  filters: {
+    excludeHoneypots: false,
+    chains: ['ETH', 'SOL', 'BASE', 'BSC'],
+    minVolume: 0,
+    maxAgeHours: null,
+    minMcap: 0,
+    limit: 200,
+  },
   wpegPrices: {}, // chain -> number
   version: 0, // monotonically increasing change counter for UI subscriptions
 }
@@ -30,12 +37,24 @@ const __REDUCER_SEEN__ = new WeakSet()
 export function tokensReducer(state = initialState, action) {
   switch (action.type) {
     case 'scanner/pairs': {
-          if (!__REDUCER_SEEN__.has(action)) {
-            __REDUCER_SEEN__.add(action)
-            try { console.log('REDUCER: scanner/pairs ingest', { page: action.payload?.page, count: Array.isArray(action.payload?.scannerPairs) ? action.payload.scannerPairs.length : 'n/a' }) } catch {}
-          }
+      if (!__REDUCER_SEEN__.has(action)) {
+        __REDUCER_SEEN__.add(action)
+        try {
+          console.log('REDUCER: scanner/pairs ingest', {
+            page: action.payload?.page,
+            count: Array.isArray(action.payload?.scannerPairs)
+              ? action.payload.scannerPairs.length
+              : 'n/a',
+          })
+        } catch {}
+      }
       const { page, scannerPairs } = action.payload // scannerPairs: ScannerResult[]
-      const next = { ...state, byId: { ...state.byId }, meta: { ...state.meta }, pages: { ...state.pages } }
+      const next = {
+        ...state,
+        byId: { ...state.byId },
+        meta: { ...state.meta },
+        pages: { ...state.pages },
+      }
       const ids = []
       for (const s of scannerPairs) {
         const tNew = mapScannerResultToToken(s)
@@ -44,7 +63,15 @@ export function tokensReducer(state = initialState, action) {
         ids.push(id)
         // preserve live price/mcap if already updated in state (prefer existing original-cased id)
         const existing = next.byId[id] || next.byId[idLower]
-        const merged = existing ? { ...tNew, priceUsd: existing.priceUsd, mcap: existing.mcap, volumeUsd: existing.volumeUsd, transactions: existing.transactions } : tNew
+        const merged = existing
+          ? {
+              ...tNew,
+              priceUsd: existing.priceUsd,
+              mcap: existing.mcap,
+              volumeUsd: existing.volumeUsd,
+              transactions: existing.transactions,
+            }
+          : tNew
         next.byId[id] = merged
         next.byId[idLower] = merged
         // store meta needed for ticks under both keys
@@ -61,7 +88,12 @@ export function tokensReducer(state = initialState, action) {
     }
     case 'scanner/append': {
       const { page, scannerPairs } = action.payload
-      const next = { ...state, byId: { ...state.byId }, meta: { ...state.meta }, pages: { ...state.pages } }
+      const next = {
+        ...state,
+        byId: { ...state.byId },
+        meta: { ...state.meta },
+        pages: { ...state.pages },
+      }
       const ids = Array.isArray(next.pages[page]) ? [...next.pages[page]] : []
       for (const s of scannerPairs) {
         const tNew = mapScannerResultToToken(s)
@@ -69,7 +101,15 @@ export function tokensReducer(state = initialState, action) {
         const idLower = String(id || '').toLowerCase()
         // merge into byId preserving any live-updated fields if present
         const existing = next.byId[id] || next.byId[idLower]
-        const merged = existing ? { ...tNew, priceUsd: existing.priceUsd, mcap: existing.mcap, volumeUsd: existing.volumeUsd, transactions: existing.transactions } : tNew
+        const merged = existing
+          ? {
+              ...tNew,
+              priceUsd: existing.priceUsd,
+              mcap: existing.mcap,
+              volumeUsd: existing.volumeUsd,
+              transactions: existing.transactions,
+            }
+          : tNew
         next.byId[id] = merged
         next.byId[idLower] = merged
         const totalSupply = parseFloat(s.token1TotalSupplyFormatted || '0') || 0
@@ -88,12 +128,18 @@ export function tokensReducer(state = initialState, action) {
       const id = idOrig.toLowerCase()
       const token = state.byId[id] || state.byId[idOrig]
       if (!token) {
-        console.warn('REDUCER: pair/tick ignored - token not found in state.byId', { idOrig, idLower: id, knownKeys: Object.keys(state.byId).length })
+        console.warn('REDUCER: pair/tick ignored - token not found in state.byId', {
+          idOrig,
+          idLower: id,
+          knownKeys: Object.keys(state.byId).length,
+        })
         return state
       }
       const meta = state.meta[id] || state.meta[idOrig] || {}
       // Persist token0Address if present on any swap; this enables correct buy/sell classification
-      const token0FromSwaps = Array.isArray(swaps) ? (swaps.find((s) => s && s.token0Address)?.token0Address || '') : ''
+      const token0FromSwaps = Array.isArray(swaps)
+        ? swaps.find((s) => s && s.token0Address)?.token0Address || ''
+        : ''
       const token0Address = token0FromSwaps || meta.token0Address || ''
       // Determine effective totalSupply for mcap recomputation:
       // Prefer meta.totalSupply from initial scanner payload; if missing/zero, derive from prior snapshot mcap/price.
@@ -109,14 +155,27 @@ export function tokensReducer(state = initialState, action) {
         if (updated && typeof updated.priceUsd === 'number') {
           if (!__REDUCER_SEEN__.has(action)) {
             __REDUCER_SEEN__.add(action)
-            console.log('REDUCER: pair/tick applied', { id: idOrig, oldPrice: token.priceUsd, newPrice: updated.priceUsd, oldMcap: token.mcap, newMcap: updated.mcap, vol: updated.volumeUsd })
+            console.log('REDUCER: pair/tick applied', {
+              id: idOrig,
+              oldPrice: token.priceUsd,
+              newPrice: updated.priceUsd,
+              oldMcap: token.mcap,
+              newMcap: updated.mcap,
+              vol: updated.volumeUsd,
+            })
           }
         }
-      } catch { /* no-op */ }
+      } catch {
+        /* no-op */
+      }
       return {
         ...state,
         byId: { ...state.byId, [id]: updated, [idOrig]: updated },
-        meta: { ...state.meta, [id]: { ...meta, token0Address }, [idOrig]: { ...meta, token0Address } },
+        meta: {
+          ...state.meta,
+          [id]: { ...meta, token0Address },
+          [idOrig]: { ...meta, token0Address },
+        },
         version: (state.version || 0) + 1,
       }
     }
@@ -139,9 +198,9 @@ export function tokensReducer(state = initialState, action) {
         honeypot: !p.token1IsHoneypot,
         contractVerified: !!p.isVerified,
         // Additional optional audit flags when provided
-        renounced: (p.contractRenounced ?? token.audit?.renounced),
-        locked: (p.liquidityLocked ?? token.audit?.locked),
-        burned: (p.burned ?? token.audit?.burned),
+        renounced: p.contractRenounced ?? token.audit?.renounced,
+        locked: p.liquidityLocked ?? token.audit?.locked,
+        burned: p.burned ?? token.audit?.burned,
         // Social links + paid flag
         linkDiscord: p.linkDiscord ?? token.audit?.linkDiscord,
         linkTelegram: p.linkTelegram ?? token.audit?.linkTelegram,
@@ -152,13 +211,26 @@ export function tokensReducer(state = initialState, action) {
       const migrationPc = Number(data.migrationProgress ?? token.migrationPc ?? 0) || 0
       const security = {
         ...(token.security || {}),
-        renounced: (p.contractRenounced ?? (token.security ? token.security.renounced : undefined)),
-        locked: (p.liquidityLocked ?? (token.security ? token.security.locked : undefined)),
-        burned: (p.burned ?? (token.security ? token.security.burned : undefined)),
+        renounced: p.contractRenounced ?? (token.security ? token.security.renounced : undefined),
+        locked: p.liquidityLocked ?? (token.security ? token.security.locked : undefined),
+        burned: p.burned ?? (token.security ? token.security.burned : undefined),
       }
       const nextTok = { ...token, audit, security, migrationPc }
-      if (!__REDUCER_SEEN__.has(action)) { __REDUCER_SEEN__.add(action); try { console.log('REDUCER: pair/stats applied', { id: idOrig, audit: { contractVerified: audit.contractVerified, honeypot: audit.honeypot }, migrationPc }) } catch {} }
-      return { ...state, byId: { ...state.byId, [id]: nextTok, [idOrig]: nextTok }, version: (state.version || 0) + 1 }
+      if (!__REDUCER_SEEN__.has(action)) {
+        __REDUCER_SEEN__.add(action)
+        try {
+          console.log('REDUCER: pair/stats applied', {
+            id: idOrig,
+            audit: { contractVerified: audit.contractVerified, honeypot: audit.honeypot },
+            migrationPc,
+          })
+        } catch {}
+      }
+      return {
+        ...state,
+        byId: { ...state.byId, [id]: nextTok, [idOrig]: nextTok },
+        version: (state.version || 0) + 1,
+      }
     }
     // case 'pair/patch': {
     //   const { data } = action.payload || {}
@@ -214,7 +286,10 @@ export function tokensReducer(state = initialState, action) {
 
 // Action creators (optional convenience)
 export const actions = {
-  scannerPairs: (page, scannerPairs) => ({ type: 'scanner/pairs', payload: { page, scannerPairs } }),
+  scannerPairs: (page, scannerPairs) => ({
+    type: 'scanner/pairs',
+    payload: { page, scannerPairs },
+  }),
   tick: (pair, swaps) => ({ type: 'pair/tick', payload: { pair, swaps } }),
   pairStats: (data) => ({ type: 'pair/stats', payload: { data } }),
   // pairPatch: (data) => ({ type: 'pair/patch', payload: { data } }),

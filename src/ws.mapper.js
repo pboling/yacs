@@ -59,10 +59,16 @@ export function mapIncomingMessageToAction(msg) {
   switch (msg.event) {
     case 'scanner-pairs':
       // full dataset replacement for a page
-      return { type: 'scanner/pairs', payload: { page: msg.data.page ?? 1, scannerPairs: msg.data.scannerPairs ?? [] } }
+      return {
+        type: 'scanner/pairs',
+        payload: { page: msg.data.page ?? 1, scannerPairs: msg.data.scannerPairs ?? [] },
+      }
     case 'scanner-append':
       // incremental append of new items for a page
-      return { type: 'scanner/append', payload: { page: msg.data.page ?? 1, scannerPairs: msg.data.scannerPairs ?? [] } }
+      return {
+        type: 'scanner/append',
+        payload: { page: msg.data.page ?? 1, scannerPairs: msg.data.scannerPairs ?? [] },
+      }
     case 'tick': {
       // Canonical shape only: { data: { pair: { pair, token, chain }, swaps: [...] } }
       const d = msg.data || {}
@@ -74,7 +80,7 @@ export function mapIncomingMessageToAction(msg) {
     case 'pair-stats':
       return { type: 'pair/stats', payload: { data: msg.data } }
     case 'wpeg-prices': {
-      const prices = (msg.data && typeof msg.data === 'object') ? (msg.data.prices || {}) : {}
+      const prices = msg.data && typeof msg.data === 'object' ? msg.data.prices || {} : {}
       return { type: 'wpeg/prices', payload: { prices } }
     }
     // case 'pair-patch': {

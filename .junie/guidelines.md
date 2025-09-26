@@ -1,11 +1,13 @@
 Project development guidelines
 
 Scope
+
 - Audience: experienced frontend engineers.
 - Stack: React 19 + TypeScript 5.8 + Vite 7 (rolldown-vite alias), ESM only (package.json type: module).
 - Goal: document build/config, linting, testing approach, and practical tips specific to this repo.
 
-1) Build and configuration
+1. Build and configuration
+
 - Prerequisites
   - Node.js >= 20 (repo validated with Node 23). ESM is required.
   - PNPM/NPM/Yarn all work; examples below use npm.
@@ -21,7 +23,7 @@ Scope
 - Production build
   - npm run build performs a TypeScript build (composite project) then Vite build.
   - TypeScript config uses project references via tsconfig.json:
-    - tsconfig.app.json → app sources (src/**/*)
+    - tsconfig.app.json → app sources (src/\*_/_)
     - tsconfig.node.json → node-side config files (vite.config.ts)
   - No output from tsc (noEmit: true); the tsc step is type-checking only.
 
@@ -41,17 +43,17 @@ Scope
   - Config: eslint.config.js using flat config API.
   - Extends: @eslint/js recommended, typescript-eslint recommended, react-hooks latest, react-refresh vite.
   - Script: npm run lint → eslint .
-  - The config targets **/*.ts, **/*.tsx and ignores dist.
+  - The config targets **/\*.ts, **/\*.tsx and ignores dist.
 
-2) Testing
-This template does not include a third-party test runner by default. For lightweight unit tests without adding dependencies, use Node’s built-in test runner (node:test), which works well for pure functions and simple module-level tests.
+2. Testing
+   This template does not include a third-party test runner by default. For lightweight unit tests without adding dependencies, use Node’s built-in test runner (node:test), which works well for pure functions and simple module-level tests.
 
 - One-time prerequisites
   - Node >= 20. The repo sets "type": "module"; author test files as ESM (import syntax) or use --input-type=module for inline tests.
 
 - Directory & naming
-  - You can place tests anywhere; common patterns are tests/**/*.test.{js,ts,mjs,cts} or co-located next to code.
-  - Node’s test runner by default discovers files matching: **/*.test.* or **/*.spec.* (among others) when run as node --test.
+  - You can place tests anywhere; common patterns are tests/\*_/_.test.{js,ts,mjs,cts} or co-located next to code.
+  - Node’s test runner by default discovers files matching: **/_.test._ or **/_.spec._ (among others) when run as node --test.
 
 - Running tests
   - Run a directory or file: node --test path/to/tests
@@ -65,7 +67,7 @@ This template does not include a third-party test runner by default. For lightwe
     import assert from 'node:assert/strict'
 
     test('adds', () => {
-      assert.equal(2 + 2, 4)
+    assert.equal(2 + 2, 4)
     })
 
   - Run it: node --test tests/math.test.js
@@ -82,7 +84,8 @@ This template does not include a third-party test runner by default. For lightwe
 - What we validated now
   - We executed an inline node:test run to confirm the approach works with this repo’s ESM setup using Node 23. This demonstrates the minimal, dependency-free path for simple tests.
 
-3) Additional development information
+3. Additional development information
+
 - React 19 notes
   - This template targets react@^19.1.1 and uses the modern JSX runtime (no need for React import in components).
   - The React Compiler is not enabled. See README for instructions if you opt in; enabling it can affect dev/build performance and ESLint rules.
@@ -91,12 +94,12 @@ This template does not include a third-party test runner by default. For lightwe
   - package.json has "type": "module". Use import/export everywhere, including config scripts. For Node one-offs, pass --input-type=module when using node --eval or name files .mjs.
 
 - Code style
-  - Follow TypeScript strictness flags; fix unused variables/parameters or prefix with _ when intentional.
+  - Follow TypeScript strictness flags; fix unused variables/parameters or prefix with \_ when intentional.
   - Prefer function components and hooks; adhere to eslint-plugin-react-hooks rules (exhaustive-deps, rules-of-hooks).
   - Avoid default exports when possible; verbatimModuleSyntax encourages explicitness.
 
 - Path and module resolution
-  - moduleResolution: bundler aligns with Vite. Avoid Node-style resolution assumptions that conflict with bundlers (e.g., require, __dirname). Use import.meta and Vite aliases if added.
+  - moduleResolution: bundler aligns with Vite. Avoid Node-style resolution assumptions that conflict with bundlers (e.g., require, \_\_dirname). Use import.meta and Vite aliases if added.
 
 - Debugging tips
   - Vite dev: source maps are enabled by default; use browser devtools. React Fast Refresh preserves state during edits.
@@ -112,6 +115,7 @@ This template does not include a third-party test runner by default. For lightwe
   - Run: npm ci, npm run lint, npm run build, optional: basic smoke tests via node --test.
 
 Appendix: Quick commands
+
 - Install: npm ci
 - Dev: npm run dev
 - Lint: npm run lint
