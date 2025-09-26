@@ -228,6 +228,7 @@ export default function TokensPane({
             )
             for (const key of keys) {
               const [pair, token, chain] = key.split('|')
+              // only send when this pane is the first visible viewer
               const { prev } = markVisible(key)
               if (prev === 0) {
                 ws.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))

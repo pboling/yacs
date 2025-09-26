@@ -41,9 +41,10 @@ async function getCellTextByRowId(
 // Deterministic: validate Buys increases for a specific row identified by its token-derived key (data-row-id).
 // Column indices (1-based): 1 Token, 2 Exchange, 3 Price, 4 MCap, 5 Volume, 6 Chg, 7 Age, 8 Buys/Sells, 9 Liquidity.
 function parseBuys(text: string): number {
-  const cleaned = text.replace(/\s+/g, '').replace(/,/g, '')
-  const [buys] = cleaned.split('/')
-  const n = Number(buys)
+  // Extract the first integer-like number from the cell (handles formats like "B:123\nS:456" or "123 / 456")
+  const nums = (text || '').match(/\d[\d,]*/g) || []
+  if (nums.length === 0) return 0
+  const n = Number(nums[0].replace(/,/g, ''))
   return Number.isFinite(n) ? n : 0
 }
 
@@ -51,49 +52,46 @@ test('Trending Tokens: Buys increases via WebSocket (same row key)', async ({ pa
   await page.goto('/')
 
   // Pick a row that is confirmed fast-subscribed to ensure timely updates
-  const { rowId, text } = await getFastRowIdAndCellText(page, 'Trending Tokens', 8)
-  expect(text.length).toBeGreaterThan(0)
+  const { rowId } = await getFastRowIdAndCellText(page, 'Trending Tokens', 8)
+  // Establish a numeric baseline
+  const initial = parseBuys(await getCellTextByRowId(page, 'Trending Tokens', rowId, 8))
 
-  // Warm-up: ensure the cell text changes at least once so we know updates are flowing for this row
-  await expect
-    .poll(async () => await getCellTextByRowId(page, 'Trending Tokens', rowId, 8), {
-      timeout: 30_000,
-      intervals: [100, 250, 500, 1000],
-    })
-    .not.toBe(text)
-
-  // Refresh baseline after first observed change for a deterministic comparison
-  const baseline = parseBuys(await getCellTextByRowId(page, 'Trending Tokens', rowId, 8))
-
+  // Wait until buys increases beyond the baseline (numeric), regardless of text formatting
   await expect
     .poll(async () => parseBuys(await getCellTextByRowId(page, 'Trending Tokens', rowId, 8)), {
       timeout: 30_000,
       intervals: [100, 250, 500, 1000],
     })
-    .toBeGreaterThan(baseline)
+    .toBeGreaterThan(initial)
+
+  // And keep drifting upwards deterministically
+  const next = parseBuys(await getCellTextByRowId(page, 'Trending Tokens', rowId, 8))
+  await expect
+    .poll(async () => parseBuys(await getCellTextByRowId(page, 'Trending Tokens', rowId, 8)), {
+      timeout: 30_000,
+      intervals: [100, 250, 500, 1000],
+    })
+    .toBeGreaterThan(next)
 })
 
 test('New Tokens: Buys increases via WebSocket (same row key)', async ({ page }) => {
   await page.goto('/')
 
-  const { rowId, text } = await getFastRowIdAndCellText(page, 'New Tokens', 8)
-  expect(text.length).toBeGreaterThan(0)
-
-  // Warm-up: ensure the cell text changes at least once so we know updates are flowing for this row
-  await expect
-    .poll(async () => await getCellTextByRowId(page, 'New Tokens', rowId, 8), {
-      timeout: 30_000,
-      intervals: [100, 250, 500, 1000],
-    })
-    .not.toBe(text)
-
-  // Refresh baseline after first observed change for a deterministic comparison
-  const baseline = parseBuys(await getCellTextByRowId(page, 'New Tokens', rowId, 8))
+  const { rowId } = await getFastRowIdAndCellText(page, 'New Tokens', 8)
+  const initial = parseBuys(await getCellTextByRowId(page, 'New Tokens', rowId, 8))
 
   await expect
     .poll(async () => parseBuys(await getCellTextByRowId(page, 'New Tokens', rowId, 8)), {
       timeout: 30_000,
       intervals: [100, 250, 500, 1000],
     })
-    .toBeGreaterThan(baseline)
+    .toBeGreaterThan(initial)
+
+  const nxt = parseBuys(await getCellTextByRowId(page, 'New Tokens', rowId, 8))
+  await expect
+    .poll(async () => parseBuys(await getCellTextByRowId(page, 'New Tokens', rowId, 8)), {
+      timeout: 30_000,
+      intervals: [100, 250, 500, 1000],
+    })
+    .toBeGreaterThan(nxt)
 })
