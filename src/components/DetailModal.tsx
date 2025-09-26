@@ -4,7 +4,7 @@ import { onUpdate } from '../updates.bus'
 import { engageSubscriptionLock } from '../subscription.lock.bus.js'
 import ChartSection from './ChartSection'
 import NumberCell from './NumberCell'
-import { buildPairSubscription, buildPairStatsSubscription, buildPairUnsubscription, buildPairStatsUnsubscription } from '../ws.mapper.js'
+import useCompareSubscription from '../hooks/useCompareSubscription'
 
 export interface DetailModalRow {
   id: string
@@ -167,27 +167,6 @@ export default function DetailModal({
     }
   }, [compareRow, open, row])
   // Subscribe to compare row updates (original detailed pair|token|chain listener removed; handled by unified tick/pair-stats listeners below)
-  useEffect(() => {
-    if (!open || !compareRow?.pairAddress || !compareRow.tokenAddress) return
-    const key = `${compareRow.pairAddress}|${compareRow.tokenAddress}|${toChainId(compareRow.chain)}`
-    const off = onUpdate((e) => {
-      if (e.key !== key) return
-      try {
-        const latest = getRowById(compareRow.id)
-        if (!latest) return
-        setHistory2(prev => ({
-          price: [...prev.price, latest.priceUsd].slice(-300),
-          mcap: [...prev.mcap, latest.mcap].slice(-300),
-            volume: [...prev.volume, latest.volumeUsd].slice(-300),
-            buys: [...prev.buys, latest.transactions.buys].slice(-300),
-            sells: [...prev.sells, latest.transactions.sells].slice(-300),
-            liquidity: [...prev.liquidity, latest.liquidity.current].slice(-300),
-        }))
-        // removed setLatestCompareRow
-      } catch { /* no-op */ }
-    })
-    return () => { try { off() } catch { /* no-op */ } }
-  }, [compareRow, open, getRowById])
 
   // Metric selection (shared across both charts)
   const [selectedMetric, setSelectedMetric] = useState<'price' | 'mcap'>('price')
@@ -333,113 +312,20 @@ export default function DetailModal({
     return () => { try { off() } catch { /* no-op */ } }
   }, [open, baseTickKey, currentRow, getRowById, row?.id, applyBaseSnapshot])
 
-  // Subscribe to pair-stats key for compare
-  useEffect(() => {
-    if (!open || !comparePairStatsKey) return
-    const off = onUpdate((e) => {
-      if (e.key !== comparePairStatsKey) return
-      try {
-        const latest = getRowById(compareRow!.id)
-        if (!latest) return
-        applyCompareSnapshot(latest)
-      } catch { /* no-op */ }
-    })
-    return () => { try { off() } catch { /* no-op */ } }
-  }, [open, comparePairStatsKey, getRowById, compareRow?.id, applyCompareSnapshot])
-
-  // Subscribe to tick key for compare
-  useEffect(() => {
-    if (!open || !compareTickKey) return
-    const off = onUpdate((e) => {
-      if (e.key !== compareTickKey) return
-      try {
-        const latest = getRowById(compareRow!.id)
-        if (!latest) return
-        applyCompareSnapshot(latest)
-      } catch { /* no-op */ }
-    })
-    return () => { try { off() } catch { /* no-op */ } }
-  }, [open, compareTickKey, getRowById, compareRow?.id, applyCompareSnapshot])
-
-  // Explicitly subscribe to compare row (and only compare row) if it's not already part of visible panes.
-  // This ensures we receive its tick & pair-stats updates even when it's not in Trending/New lists.
-  const compareSubscribedRef = useRef<string | null>(null)
-  useEffect(() => {
-    const ws: WebSocket | undefined = (typeof window !== 'undefined' ? (window as any).__APP_WS__ : undefined)
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-      // If socket not ready, ensure any previous subscription is cleared
-      if (!open && compareSubscribedRef.current) {
-        const prev = allRows.find(r => r.id === compareSubscribedRef.current)
-        if (prev?.pairAddress && prev.tokenAddress) {
-          const chain = prev.chain
-          try { ws?.send(JSON.stringify(buildPairUnsubscription({ pair: prev.pairAddress, token: prev.tokenAddress, chain }))) } catch { /* no-op */ }
-          try { ws?.send(JSON.stringify(buildPairStatsUnsubscription({ pair: prev.pairAddress, token: prev.tokenAddress, chain }))) } catch { /* no-op */ }
-        }
-        compareSubscribedRef.current = null
-      }
-      return
-    }
-
-    const send = (payload: any) => { try { ws.send(JSON.stringify(payload)) } catch { /* no-op */ } }
-
-    // Always unsubscribe previous before potentially subscribing new
-    if (compareSubscribedRef.current && (compareRow?.id !== compareSubscribedRef.current || !open)) {
-      const prev = allRows.find(r => r.id === compareSubscribedRef.current)
-      if (prev?.pairAddress && prev.tokenAddress) {
-        const chain = prev.chain
-        send(buildPairUnsubscription({ pair: prev.pairAddress, token: prev.tokenAddress, chain }))
-        send(buildPairStatsUnsubscription({ pair: prev.pairAddress, token: prev.tokenAddress, chain }))
-      }
-      compareSubscribedRef.current = null
-    }
-
-    if (!open) return
-
-    // Subscribe new compare if present
-    if (compareRow?.pairAddress && compareRow.tokenAddress) {
-      if (compareSubscribedRef.current !== compareRow.id) {
-        const chain = compareRow.chain
-        send(buildPairSubscription({ pair: compareRow.pairAddress, token: compareRow.tokenAddress, chain }))
-        send(buildPairStatsSubscription({ pair: compareRow.pairAddress, token: compareRow.tokenAddress, chain }))
-        compareSubscribedRef.current = compareRow.id
-      }
-    }
-
-    return () => {
-      // Cleanup on dependency change or unmount
-      if (compareSubscribedRef.current) {
-        const prev = allRows.find(r => r.id === compareSubscribedRef.current)
-        if (prev?.pairAddress && prev.tokenAddress) {
-          const chain = prev.chain
-          send(buildPairUnsubscription({ pair: prev.pairAddress, token: prev.tokenAddress, chain }))
-          send(buildPairStatsUnsubscription({ pair: prev.pairAddress, token: prev.tokenAddress, chain }))
-        }
-        compareSubscribedRef.current = null
-      }
-    }
-  }, [open, compareRow?.id, allRows])
-
-  // Defer compare subscription until WebSocket opens if it wasn't open initially.
-  useEffect(() => {
-    if (!open || !compareRow?.pairAddress || !compareRow.tokenAddress) return
-    const ws: WebSocket | undefined = (typeof window !== 'undefined' ? (window as any).__APP_WS__ : undefined)
-    if (!ws) return
-    const doSubscribe = () => {
-      if (compareSubscribedRef.current === compareRow.id) return
-      try {
-        ws.send(JSON.stringify(buildPairSubscription({ pair: compareRow.pairAddress!, token: compareRow.tokenAddress!, chain: compareRow.chain })))
-        ws.send(JSON.stringify(buildPairStatsSubscription({ pair: compareRow.pairAddress!, token: compareRow.tokenAddress!, chain: compareRow.chain })))
-        compareSubscribedRef.current = compareRow.id
-      } catch { /* no-op */ }
-    }
-    if (ws.readyState === WebSocket.OPEN) {
-      doSubscribe()
-    } else if (ws.readyState === WebSocket.CONNECTING) {
-      const handler = () => { doSubscribe() }
-      try { ws.addEventListener('open', handler, { once: true }) } catch { /* no-op */ }
-      return () => { try { ws.removeEventListener('open', handler) } catch { /* no-op */ } }
-    }
-  }, [open, compareRow?.id])
+  // Hook-driven debounced subscription for compare token
+  const { isSubscribing: compareIsSubscribing, canLiveStream: compareCanLive } = useCompareSubscription({
+    open,
+    compareRow: compareRow ? { id: compareRow.id, pairAddress: compareRow.pairAddress, tokenAddress: compareRow.tokenAddress, chain: compareRow.chain } : null,
+    allRows: allRows.map(r => ({ id: r.id, pairAddress: r.pairAddress, tokenAddress: r.tokenAddress, chain: r.chain })),
+    toChainId,
+    applyCompareSnapshot: (id: string) => {
+      const latest = getRowById(id)
+      if (latest) applyCompareSnapshot(latest as DetailModalRow)
+    },
+    getRowById: (id: string) => getRowById(id),
+    hasSeedData: history2.price.length > 0,
+    debounceMs: 300,
+  })
 
   return (
     <div
@@ -482,6 +368,12 @@ export default function DetailModal({
                 style={{ background: 'transparent', border: '1px solid #4b5563', borderRadius: 4, padding: '4px 8px', color: 'inherit' }}
                 title="Swap display order"
               >Swap</button>
+            )}
+            {compareRow && compareIsSubscribing && compareCanLive && (
+              <span style={{ fontSize: 11, background: '#374151', padding: '2px 6px', borderRadius: 4 }}>Subscribing…</span>
+            )}
+            {compareRow && !compareCanLive && (
+              <span style={{ fontSize: 11, background: '#4b5563', padding: '2px 6px', borderRadius: 4 }} title="Missing pair/token addresses; cannot live stream.">No live stream</span>
             )}
           </div>
           <button type="button" onClick={onClose} style={{ background: 'transparent', color: 'inherit', border: '1px solid #4b5563', borderRadius: 4, padding: '4px 8px' }}>Close</button>
@@ -546,19 +438,19 @@ export default function DetailModal({
               emptyMessage="Collecting base data…"
             />)
           const compareSection = compareRow ? (
-            <ChartSection
-              key={compareRow.id + '-compare'}
-              title={`${compareRow.tokenName} (${compareRow.tokenSymbol}) – ${compareRow.chain}`}
-              history={history2 as Record<string, number[]>}
-              palette={palette2 as Record<string, string>}
-              selectedMetric={selectedMetric}
-              seriesKeys={seriesKeys}
-              seriesLabels={seriesLabels as Record<string, string>}
-              focusOrder={focusOrderCompare}
-              symbol={compareRow.tokenSymbol}
-              buildPath={buildPath}
-              emptyMessage="Collecting compare data…"
-            />) : null
+             <ChartSection
+               key={compareRow.id + '-compare'}
+               title={`${compareRow.tokenName} (${compareRow.tokenSymbol}) – ${compareRow.chain}${compareIsSubscribing && compareCanLive ? ' (Subscribing…)' : ''}${!compareCanLive ? ' (No live stream)' : ''}`}
+               history={history2 as Record<string, number[]>}
+               palette={palette2 as Record<string, string>}
+               selectedMetric={selectedMetric}
+               seriesKeys={seriesKeys}
+               seriesLabels={seriesLabels as Record<string, string>}
+               focusOrder={focusOrderCompare}
+               symbol={compareRow.tokenSymbol}
+               buildPath={buildPath}
+               emptyMessage={!compareCanLive ? 'No live data (missing pair/token addresses)' : (compareIsSubscribing ? 'Subscribing…' : 'Collecting compare data…')}
+             />) : null
 
           // Determine render order ensuring base always appears when no compare
           const first = reversed && compareRow ? compareSection : baseSection
