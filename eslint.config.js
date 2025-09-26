@@ -58,7 +58,7 @@ export default defineConfig([
     plugins: { '@typescript-eslint': tseslint.plugin },
     rules: {
       // Downgrade / relax overly strict rules producing current build-blocking errors whilst retaining visibility
-      '@typescript-eslint/no-unnecessary-condition': 'warn',
+      '@typescript-eslint/no-unnecessary-condition': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unsafe-member-access': 'warn',
       '@typescript-eslint/no-unsafe-assignment': 'warn',

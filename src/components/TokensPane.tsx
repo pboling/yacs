@@ -290,7 +290,6 @@ export default function TokensPane({
           } catch {
             /* no-op */
           }
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           if (!cancelled) setError(errMsg)
           return
         }
