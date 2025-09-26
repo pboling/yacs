@@ -49,7 +49,7 @@ export default function NumberCell({
   // Manage auto-clear back to white after a stable period without trend changes
   useEffect(() => {
     if (noFade) return
-    const defaultStable = Number(import.meta.env.VITE_STABLE_COLOR_MS ?? '10000')
+    const defaultStable = Number(import.meta.env.VITE_STABLE_COLOR_MS ?? '600000')
     const holdMs = typeof stableMs === 'number' && stableMs > 0 ? stableMs : defaultStable
 
     if (timeoutRef.current) {

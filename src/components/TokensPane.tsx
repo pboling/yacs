@@ -8,7 +8,7 @@ import {
   sendUnsubscribe,
 } from '../ws.mapper.js'
 import { computePairPayloads } from '../ws.subs.js'
-import { markVisible, markHidden, getCount } from '../visibility.bus.js'
+import { markVisible, markHidden } from '../visibility.bus.js'
 import { SubscriptionQueue } from '../subscription.queue'
 import { formatAge } from '../helpers/format'
 import type { GetScannerResultParams, ScannerResult } from '../test-task-types'
@@ -729,7 +729,7 @@ export default function TokensPane({
       } else {
         if (set.has(key)) {
           set.delete(key)
-          const { next } = markHidden(key)
+          markHidden(key)
           try {
             SubscriptionQueue.setVisible(key, false, ws)
           } catch {}
@@ -973,7 +973,7 @@ export default function TokensPane({
             for (const key of prevSet) {
               if (nextSet.has(key)) continue
               try {
-                const { next } = markHidden(key)
+                markHidden(key)
                 try {
                   SubscriptionQueue.setVisible(key, false, ws)
                 } catch {}

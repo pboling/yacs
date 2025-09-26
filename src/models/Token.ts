@@ -8,6 +8,16 @@ export type SubscriptionState =
   | 'inactive-subscribed'
   | 'inactive-unsubscribed'
 
+export interface TokenHistory {
+  ts: number[]
+  price: number[]
+  mcap: number[]
+  volume: number[]
+  buys: number[]
+  sells: number[]
+  liquidity: number[]
+}
+
 export interface Token {
   id: string
   tokenName: string
@@ -49,4 +59,7 @@ export interface Token {
   subscriptionState?: SubscriptionState
   // Epoch millis of the last time this token was unsubscribed (from any state)
   lastUnsubscribedAt?: number
+
+  // Persisted 1-hour rolling history for charts on load
+  history?: TokenHistory
 }

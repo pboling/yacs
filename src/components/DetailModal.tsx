@@ -422,6 +422,18 @@ export default function DetailModal({
     [],
   )
   const seedFromRow = useCallback((latest: DetailModalRow): Record<SeriesKey, number[]> => {
+    const anyLatest = latest as unknown as { history?: { price?: number[]; mcap?: number[]; volume?: number[]; buys?: number[]; sells?: number[]; liquidity?: number[] } }
+    const h = anyLatest.history
+    if (h && Array.isArray(h.price) && Array.isArray(h.mcap)) {
+      return {
+        price: [...(h.price || [])],
+        mcap: [...(h.mcap || [])],
+        volume: [...(h.volume || [])],
+        buys: [...(h.buys || [])],
+        sells: [...(h.sells || [])],
+        liquidity: [...(h.liquidity || [])],
+      }
+    }
     return {
       price: [latest.priceUsd],
       mcap: [latest.mcap],

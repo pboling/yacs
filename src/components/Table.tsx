@@ -1,7 +1,7 @@
 import NumberCell from './NumberCell'
 import AuditIcons from './AuditIcons'
 import { useEffect, useMemo, useState, useRef } from 'react'
-import { Globe, MessageCircle, Send, ExternalLink, Eye, ChartNoAxesCombined } from 'lucide-react'
+import { Globe, MessageCircle, Send, ExternalLink, Eye, ChartNoAxesCombined, ArrowUp, ArrowDown } from 'lucide-react'
 import { BurnDetailsTooltip } from './BurnDetailsTooltip'
 
 // Typed helper to find the last index matching a predicate (avoids using Array.prototype.findLastIndex for broader TS lib support)
@@ -150,6 +150,22 @@ export default function Table({
       /* no-op */
     }
   }, [rows, title])
+
+  const SortHeader = ({ label, k }: { label: string; k: SortKey }) => {
+    const active = sortKey === k
+    const upActive = active && sortDir === 'asc'
+    const downActive = active && sortDir === 'desc'
+    const upColor = upActive ? 'var(--accent-up)' : '#6b7280'
+    const downColor = downActive ? 'var(--accent-down)' : '#6b7280'
+    const labelColor = active ? (upActive ? 'var(--accent-up)' : 'var(--accent-down)') : undefined
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: labelColor }}>
+        <span>{label}</span>
+        <ArrowUp size={12} color={upColor} />
+        <ArrowDown size={12} color={downColor} />
+      </span>
+    )
+  }
 
   // Export helpers
   const exportFormatOptions = ['csv', 'json'] as const
@@ -560,7 +576,7 @@ export default function Table({
                       : 'none'
                   }
                 >
-                  Token
+                  <SortHeader label="Token" k="tokenName" />
                 </th>
                 <th
                   onClick={() => {
@@ -575,7 +591,7 @@ export default function Table({
                   }
                   style={{ width: 30, minWidth: 30, maxWidth: 30 }}
                 >
-                  Exchange
+                  <SortHeader label="Exchange" k="exchange" />
                 </th>
                 <th
                   onClick={() => {
@@ -589,7 +605,7 @@ export default function Table({
                       : 'none'
                   }
                 >
-                  Price
+                  <SortHeader label="Price" k="priceUsd" />
                 </th>
                 <th
                   onClick={() => {
@@ -599,7 +615,7 @@ export default function Table({
                     sortKey === 'mcap' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
                   }
                 >
-                  MCap
+                  <SortHeader label="MCap" k="mcap" />
                 </th>
                 <th
                   onClick={() => {
@@ -613,7 +629,7 @@ export default function Table({
                       : 'none'
                   }
                 >
-                  Volume
+                  <SortHeader label="Volume" k="volumeUsd" />
                 </th>
                 <th>
                   Chg (5m/1h
@@ -628,7 +644,7 @@ export default function Table({
                     sortKey === 'age' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
                   }
                 >
-                  Age
+                  <SortHeader label="Age" k="age" />
                 </th>
                 <th
                   onClick={() => {
@@ -638,9 +654,7 @@ export default function Table({
                     sortKey === 'tx' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
                   }
                 >
-                  Buys
-                  <br />
-                  Sells
+                  <SortHeader label="Buys/Sells" k="tx" />
                 </th>
                 <th
                   onClick={() => {
@@ -654,7 +668,7 @@ export default function Table({
                       : 'none'
                   }
                 >
-                  Liquidity
+                  <SortHeader label="Liquidity" k="liquidity" />
                 </th>
                 <th>Audit</th>
               </tr>

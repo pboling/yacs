@@ -18,6 +18,10 @@ import { mapScannerResultToToken, applyTickToToken } from './tdd.runtime.js'
 
 import { debugLog as __debugLog__ } from './utils/debug.mjs'
 
+// History helpers for 1-hour rolling window
+const ONE_HOUR_MS = 60 * 60 * 1000
+const __emptyHistory__ = () => ({ ts: [], price: [], mcap: [], volume: [], buys: [], sells: [], liquidity: [] })
+
 export const initialState = {
   byId: {}, // id -> TokenData
   meta: {}, // id -> { totalSupply: number, token0Address?: string }
@@ -72,8 +76,9 @@ export function tokensReducer(state = initialState, action) {
               mcap: existing.mcap,
               volumeUsd: existing.volumeUsd,
               transactions: existing.transactions,
+              history: existing.history || __emptyHistory__(),
             }
-          : tNew
+          : { ...tNew, history: __emptyHistory__() }
         next.byId[id] = merged
         next.byId[idLower] = merged
         // store meta needed for ticks under both keys
@@ -110,8 +115,9 @@ export function tokensReducer(state = initialState, action) {
               mcap: existing.mcap,
               volumeUsd: existing.volumeUsd,
               transactions: existing.transactions,
+              history: existing.history || __emptyHistory__(),
             }
-          : tNew
+          : { ...tNew, history: __emptyHistory__() }
         next.byId[id] = merged
         next.byId[idLower] = merged
         const totalSupply = parseFloat(s.token1TotalSupplyFormatted || '0') || 0
@@ -161,6 +167,37 @@ export function tokensReducer(state = initialState, action) {
       }
       const ctx = { totalSupply, token0Address, token1Address: token.tokenAddress }
       const updated = applyTickToToken(token, Array.isArray(swaps) ? swaps : [], ctx)
+
+      // Append to 1-hour rolling history
+      const now = Date.now()
+      const cutoff = now - ONE_HOUR_MS
+      const prevHist = (token.history && typeof token.history === 'object') ? token.history : __emptyHistory__()
+      // Copy arrays to avoid mutating existing references
+      const hist = {
+        ts: [...prevHist.ts, now],
+        price: [...prevHist.price, updated.priceUsd],
+        mcap: [...prevHist.mcap, updated.mcap],
+        volume: [...prevHist.volume, updated.volumeUsd],
+        buys: [...prevHist.buys, updated.transactions?.buys ?? 0],
+        sells: [...prevHist.sells, updated.transactions?.sells ?? 0],
+        liquidity: [...prevHist.liquidity, updated.liquidity?.current ?? 0],
+      }
+      // Evict entries older than cutoff keeping arrays aligned
+      let startIdx = 0
+      const len = hist.ts.length
+      while (startIdx < len && hist.ts[startIdx] < cutoff) startIdx++
+      if (startIdx > 0) {
+        hist.ts = hist.ts.slice(startIdx)
+        hist.price = hist.price.slice(startIdx)
+        hist.mcap = hist.mcap.slice(startIdx)
+        hist.volume = hist.volume.slice(startIdx)
+        hist.buys = hist.buys.slice(startIdx)
+        hist.sells = hist.sells.slice(startIdx)
+        hist.liquidity = hist.liquidity.slice(startIdx)
+      }
+
+      const nextTok = { ...updated, history: hist }
+
       try {
         if (updated && typeof updated.priceUsd === 'number') {
           if (!__REDUCER_SEEN__.has(action)) {
@@ -172,6 +209,7 @@ export function tokensReducer(state = initialState, action) {
               oldMcap: token.mcap,
               newMcap: updated.mcap,
               vol: updated.volumeUsd,
+              histPoints: hist.ts.length,
             })
           }
         }
@@ -180,7 +218,7 @@ export function tokensReducer(state = initialState, action) {
       }
       return {
         ...state,
-        byId: { ...state.byId, [id]: updated, [idOrig]: updated },
+        byId: { ...state.byId, [id]: nextTok, [idOrig]: nextTok },
         meta: {
           ...state.meta,
           [id]: { ...meta, token0Address },
