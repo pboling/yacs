@@ -116,6 +116,11 @@ export default function DetailModal({
     setHistory({ price: [], mcap: [], volume: [], buys: [], sells: [], liquidity: [] })
     setHistory2({ price: [], mcap: [], volume: [], buys: [], sells: [], liquidity: [] })
     setReversed(false)
+  }, [open, row?.id])
+
+  // Manage persisted compare selection without wiping history on table updates
+  useEffect(() => {
+    if (!open || !row?.id) return
     try {
       const stored =
         typeof window !== 'undefined' ? window.localStorage.getItem('detailModal.compareId') : null
