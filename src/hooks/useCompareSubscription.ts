@@ -38,10 +38,27 @@ export function useCompareSubscription({
 }: UseCompareSubscriptionParams) {
   const [isSubscribing, setIsSubscribing] = useState(false)
   const [canLiveStream, setCanLiveStream] = useState(false)
+  const [lastUpdateAt, setLastUpdateAt] = useState<number | null>(null)
   const subscribedIdRef = useRef<string | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wsRef = useRef<WebSocket | undefined>(undefined)
   const firstUpdateSeenRef = useRef(false)
+  const lastLiveIdRef = useRef<string | null>(null)
+
+  // Load last live id from localStorage once
+  useEffect(() => {
+    try { lastLiveIdRef.current = window.localStorage.getItem('detailModal.lastCompareLiveId') } catch {}
+  }, [])
+
+  const persistLastLive = (id: string) => {
+    lastLiveIdRef.current = id
+    try { window.localStorage.setItem('detailModal.lastCompareLiveId', id) } catch {}
+  }
+
+  const revertToLastLive = () => {
+    if (!lastLiveIdRef.current || !open) return null
+    return lastLiveIdRef.current
+  }
 
   // Resolve websocket reference (if already opened by App)
   useEffect(() => {
@@ -98,22 +115,22 @@ export function useCompareSubscription({
       if (!ws) return
       const doSubscribe = () => {
         if (subscribedIdRef.current === compareRow.id) {
-          // Already subscribed
-          if (hasSeedData) {
-            setIsSubscribing(false)
-          }
+          if (hasSeedData) setIsSubscribing(false)
           return
         }
-        // Unsubscribe previous
         unsubscribe()
         if (compareRow.pairAddress && compareRow.tokenAddress) {
-          try { ws.send(JSON.stringify(buildPairSubscription({ pair: compareRow.pairAddress, token: compareRow.tokenAddress, chain: compareRow.chain }))) } catch {}
-          try { ws.send(JSON.stringify(buildPairStatsSubscription({ pair: compareRow.pairAddress, token: compareRow.tokenAddress, chain: compareRow.chain }))) } catch {}
+          // Send subscriptions for both chain name and numeric id (server may accept either)
+          const variants = new Set<string>([String(compareRow.chain), toChainId(compareRow.chain)])
+          for (const chainVariant of variants) {
+            try { ws.send(JSON.stringify(buildPairSubscription({ pair: compareRow.pairAddress, token: compareRow.tokenAddress, chain: chainVariant }))) } catch {}
+            try { ws.send(JSON.stringify(buildPairStatsSubscription({ pair: compareRow.pairAddress, token: compareRow.tokenAddress, chain: chainVariant }))) } catch {}
+          }
           subscribedIdRef.current = compareRow.id
           if (hasSeedData) {
-            // Seed counts as first data point
             setIsSubscribing(false)
             firstUpdateSeenRef.current = true
+            persistLastLive(compareRow.id)
           }
         } else {
           setIsSubscribing(false)
@@ -157,12 +174,14 @@ export function useCompareSubscription({
       if (!firstUpdateSeenRef.current) {
         firstUpdateSeenRef.current = true
         setIsSubscribing(false)
+        persistLastLive(compareRow.id)
       }
+      setLastUpdateAt(Date.now())
     })
     return () => { try { off() } catch {} }
   }, [open, compareRow?.id, canLiveStream])
 
-  return { isSubscribing, canLiveStream }
+  return { isSubscribing, canLiveStream, lastUpdateAt, revertToLastLive }
 }
 
 export default useCompareSubscription
