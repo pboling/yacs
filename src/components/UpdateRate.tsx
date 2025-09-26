@@ -18,11 +18,12 @@ export default function UpdateRate({
   const [series, setSeries] = useState<number[]>([])
   const counterRef = useRef(0)
 
-  const keysArray = Array.isArray(filterKey)
-    ? filterKey.filter(Boolean)
-    : filterKey
-      ? [filterKey]
-      : []
+  const keysArray = useMemo(
+    () => (Array.isArray(filterKey) ? filterKey.filter(Boolean) : filterKey ? [filterKey] : []),
+    [filterKey],
+  )
+
+  const keysSig = useMemo(() => keysArray.join('|'), [keysArray])
 
   useEffect(() => {
     const off = onUpdate((e) => {
@@ -32,7 +33,7 @@ export default function UpdateRate({
     return () => {
       off()
     }
-  }, [keysArray.join('|')])
+  }, [keysSig])
 
   const [avgRate, setAvgRate] = useState(0)
 
@@ -61,7 +62,7 @@ export default function UpdateRate({
     setAvgRate(sum / series.length)
   }, [series])
 
-  const ver = useMemo(() => (typeof version === 'number' ? version : null), [version])
+  const ver = useMemo(() => version ?? null, [version])
 
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>

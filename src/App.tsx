@@ -106,7 +106,7 @@ function TopBar({
         /* no-op */
       }
     }
-  }, [])
+  }, [onSubscriptionMetricsChangeTyped])
   return (
     <div
       style={{
@@ -499,7 +499,8 @@ function App() {
             console.log('WS: open', { url })
             // expose WS to panes so they can send pair subscriptions without prop-drilling
             try {
-              ;(window as unknown as { __APP_WS__ }).__APP_WS__ = ws
+              const glb = window as unknown as { __APP_WS__?: WebSocket }
+              glb.__APP_WS__ = ws
             } catch {
               /* no-op */
             }

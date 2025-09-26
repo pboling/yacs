@@ -140,7 +140,7 @@ export default function DetailModal({
       /* no-op */
     }
     setCompareId(null)
-  }, [open, row?.id])
+  }, [open, row?.id, allRows])
 
   // Seed initial base snapshot so chart isn't empty while waiting for first WS update (id-based)
   useEffect(() => {
@@ -156,6 +156,8 @@ export default function DetailModal({
         liquidity: [row.liquidity.current],
       }
     })
+    // We intentionally seed only when id changes to avoid re-seeding on live updates
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, row?.id])
 
   // Comparison selection state
@@ -192,6 +194,8 @@ export default function DetailModal({
         liquidity: [compareRow.liquidity.current],
       }
     })
+    // We intentionally seed only when compare id changes to avoid re-seeding on live updates
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, compareRow?.id])
 
   // Drive history and latestRow updates directly from the per-key updates bus

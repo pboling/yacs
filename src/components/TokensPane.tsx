@@ -839,13 +839,7 @@ export default function TokensPane({
         /* no-op */
       }
     },
-    [
-      title,
-      buildPairSubscription,
-      buildPairStatsSubscription,
-      buildPairSlowSubscription,
-      buildPairStatsSlowSubscription,
-    ],
+    [title], // Imported mapper functions are module-level singletons; excluding them avoids false positives
   )
 
   // Unsubscribe all visible on unmount (outside dev optional)
@@ -1115,7 +1109,7 @@ export default function TokensPane({
   }, [])
 
   // Update visible count when sets change frequently (after scroll stop too)
-  // Hook into onScrollStop to set counts after recompute
+  // Do not depend on visibleKeysRef.current – it's a mutable ref and not a valid dependency
   useEffect(() => {
     const updateCounts = () => {
       try {
@@ -1130,7 +1124,7 @@ export default function TokensPane({
     return () => {
       clearInterval(id)
     }
-  }, [title, visibleKeysRef.current])
+  }, [])
 
   // Keep rowsRef in sync with derived rows for visibility handlers
   useEffect(() => {
@@ -1147,7 +1141,7 @@ export default function TokensPane({
     }
     const off = onSubscriptionLockChange((st: { active: boolean; allowed: Set<string> }) => {
       try {
-        lockActiveRef.current = !!st.active
+        lockActiveRef.current = st.active
         lockAllowedRef.current = new Set(Array.from(st.allowed))
       } catch {
         /* no-op */

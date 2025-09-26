@@ -88,7 +88,7 @@ export function useCompareSubscription({
       setIsSubscribing(false)
       firstUpdateSeenRef.current = true
     }
-  }, [open, compareRow?.id, hasSeedData])
+  }, [open, compareRow, compareRow?.id, hasSeedData])
 
   // Manage subscription with debounce
   useEffect(() => {
@@ -230,7 +230,7 @@ export function useCompareSubscription({
         unsubscribe()
       }
     }
-  }, [open, compareRow?.id, canLiveStream, hasSeedData, debounceMs, allRows, toChainId])
+  }, [open, compareRow, compareRow?.id, canLiveStream, hasSeedData, debounceMs, allRows, toChainId])
 
   // Listen for onUpdate events for the compare row; mark subscription complete when first update arrives
   useEffect(() => {
@@ -272,7 +272,7 @@ export function useCompareSubscription({
         off()
       } catch {}
     }
-  }, [open, compareRow?.id, canLiveStream, toChainId, getRowById, applyCompareSnapshot])
+  }, [open, compareRow, compareRow?.id, canLiveStream, toChainId, getRowById, applyCompareSnapshot])
 
   return { isSubscribing, canLiveStream, lastUpdateAt, revertToLastLive }
 }
