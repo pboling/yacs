@@ -30,7 +30,6 @@ export const initialState = {
     minMcap: 0,
     limit: 200,
   },
-  wpegPrices: {}, // chain -> number
   version: 0, // monotonically increasing change counter for UI subscriptions
 }
 
@@ -268,16 +267,6 @@ export function tokensReducer(state = initialState, action) {
     //   const nextTok = { ...existing, ...safePatch }
     //   return { ...state, byId: { ...state.byId, [id]: nextTok, [idOrig]: nextTok } }
     // }
-    case 'wpeg/prices': {
-      const prices = action.payload?.prices || {}
-      const normalized = {}
-      for (const k of Object.keys(prices)) {
-        const v = prices[k]
-        const n = typeof v === 'number' ? v : parseFloat(v || '0')
-        if (!Number.isNaN(n)) normalized[k] = n
-      }
-      return { ...state, wpegPrices: { ...state.wpegPrices, ...normalized } }
-    }
     case 'filters/set': {
       return { ...state, filters: { ...state.filters, ...action.payload } }
     }

@@ -1,10 +1,8 @@
 /**
  * Feature flags utility (runtime-only, ESM JS for broad compatibility)
  *
- * Currently supported flags:
- * - tiered-channel: gates usage of non-standard WS channels (X5, append, wpeg-prices)
- *   Default: OFF.
- *   Enable via either URL param ?tiered-channel=true or localStorage['tiered-channel']='true'.
+ * Note: All experimental flags and non-standard WS channels have been removed.
+ * This stub remains only for backwards compatibility and always returns false.
  */
 export function isTieredChannelEnabled() {
   if (typeof window === 'undefined') return false

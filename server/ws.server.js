@@ -336,44 +336,6 @@ export function attachWsServer(server) {
           subs.statsFast.add(pairKey)
           startStreamFor(item)
         }
-
-        // After initial dataset, periodically emit new tokens for this page (scanner-append)
-        // so clients can exercise real-time insertion + sorting behavior.
-        let appendIndex = 0
-        const appendKey = 'append|' + String(page)
-        if (!tickTimers.has(appendKey)) {
-          const appendIntervalMs = Math.max(100, Math.min(2000, TICK_INTERVAL_MS * 10))
-          const interval = setInterval(() => {
-            appendIndex++
-            // Generate a deterministic different page to get a distinct set of items
-            const gen = generateScannerResponse({ ...msg.data, page: page + 10_000 + appendIndex })
-            // Pick the first item that is not already known by pair+token+chain
-            let newItem = null
-            for (const cand of gen.scannerPairs) {
-              const k = cand.pairAddress + '|' + cand.token1Address + '|' + String(cand.chainId)
-              if (!itemsByKey.has(k)) {
-                newItem = cand
-                break
-              }
-            }
-            if (!newItem) return
-            const pairKey2 =
-              newItem.pairAddress + '|' + newItem.token1Address + '|' + String(newItem.chainId)
-            itemsByKey.set(pairKey2, newItem)
-            // Emit append event
-            safeSend(ws, { event: 'scanner-append', data: { page, scannerPairs: [newItem] } })
-            // Auto-subscribe streams for the new item so it starts updating in UI
-            subs.pairsFast.add(pairKey2)
-            subs.statsFast.add(pairKey2)
-            startStreamFor(newItem)
-          }, appendIntervalMs)
-          try {
-            interval.unref && interval.unref()
-          } catch {
-            /* no-op */
-          }
-          tickTimers.set(appendKey, interval)
-        }
       } else if (ev === 'subscribe-pair') {
         const p = msg.data
         const key = p?.pair + '|' + p?.token + '|' + p?.chain
@@ -427,36 +389,6 @@ export function attachWsServer(server) {
           itemsByKey.set(stubKey, item)
         }
         if (item) startStreamFor(item)
-      } else if (ev === 'subscribe-pair-x5') {
-        const p = msg.data
-        const key = p?.pair + '|' + p?.token + '|' + p?.chain
-        subs.pairsFast.add(key)
-        subs.pairsSlow.delete(key)
-        slowFactorByKey.delete(key)
-        fastMultiplierByKey.set(key, 5)
-        let item = itemsByKey.get(key)
-        if (!item && p && p.pair && p.token) {
-          const toId = (c) => {
-            const n = Number(c)
-            if (Number.isFinite(n)) return n
-            const s = String(c || '').toUpperCase()
-            if (s === 'ETH') return 1
-            if (s === 'BSC') return 56
-            if (s === 'BASE') return 8453
-            if (s === 'SOL') return 900
-            return 1
-          }
-          const chainId = toId(p.chain)
-          item = {
-            pairAddress: String(p.pair),
-            token1Address: String(p.token),
-            chainId,
-            price: '1.0',
-          }
-          const stubKey = item.pairAddress + '|' + item.token1Address + '|' + String(item.chainId)
-          itemsByKey.set(stubKey, item)
-        }
-        if (item) startStreamFor(item)
       } else if (ev === 'subscribe-pair-slow') {
         const p = msg.data
         const key = p?.pair + '|' + p?.token + '|' + p?.chain
@@ -500,55 +432,6 @@ export function attachWsServer(server) {
         subs.statsSlow.delete(key)
         slowFactorByKey.delete(key)
         // If only stats subscription arrives first, also start stream so that stats get emitted too
-        let item = itemsByKey.get(key)
-        if (!item) {
-          let prefix = p?.pair + '|' + p?.token + '|'
-          for (const [k, v] of itemsByKey.entries()) {
-            if (typeof k === 'string' && k.startsWith(prefix)) {
-              item = v
-              break
-            }
-          }
-          if (!item) {
-            prefix = p?.pair + '|'
-            for (const [k, v] of itemsByKey.entries()) {
-              if (typeof k === 'string' && k.startsWith(prefix)) {
-                item = v
-                break
-              }
-            }
-          }
-        }
-        if (!item && p && p.pair && p.token) {
-          const toId = (c) => {
-            const n = Number(c)
-            if (Number.isFinite(n)) return n
-            const s = String(c || '').toUpperCase()
-            if (s === 'ETH') return 1
-            if (s === 'BSC') return 56
-            if (s === 'BASE') return 8453
-            if (s === 'SOL') return 900
-            return 1
-          }
-          const chainId = toId(p.chain)
-          item = {
-            pairAddress: String(p.pair),
-            token1Address: String(p.token),
-            chainId,
-            price: '1.0',
-          }
-          const stubKey = item.pairAddress + '|' + item.token1Address + '|' + String(item.chainId)
-          itemsByKey.set(stubKey, item)
-        }
-        if (item) startStreamFor(item)
-      } else if (ev === 'subscribe-pair-stats-x5') {
-        const p = msg.data
-        const key = p?.pair + '|' + p?.token + '|' + p?.chain
-        subs.statsFast.add(key)
-        subs.statsSlow.delete(key)
-        slowFactorByKey.delete(key)
-        fastMultiplierByKey.set(key, 5)
-        // If only stats-x5 arrives first, also start stream so that stats get emitted too
         let item = itemsByKey.get(key)
         if (!item) {
           let prefix = p?.pair + '|' + p?.token + '|'

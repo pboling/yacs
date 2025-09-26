@@ -9,7 +9,6 @@ import {
 } from '../ws.mapper.js'
 import { computePairPayloads } from '../ws.subs.js'
 import { markVisible, markHidden, getCount } from '../visibility.bus.js'
-import { onFilterFocusStart, onFilterApplyComplete } from '../filter.bus.js'
 import { formatAge } from '../helpers/format'
 import type { GetScannerResultParams, ScannerResult } from '../test-task-types'
 import { toChainId } from '../utils/chain'
@@ -122,9 +121,7 @@ export default function TokensPane({
   // Normalize chain to the server's expected id format for subscriptions is now centralized in utils/chain
 
   // Fetch function as typed alias to keep TS happy with JS module
-  const fetchScannerTyped = fetchScanner as unknown as (
-    p: GetScannerResultParams,
-  ) => Promise<{
+  const fetchScannerTyped = fetchScanner as unknown as (p: GetScannerResultParams) => Promise<{
     raw: {
       page?: number | null
       scannerPairs?: ScannerResult[] | null
@@ -416,7 +413,6 @@ export default function TokensPane({
     paneIdRef.current = title
   }, [title])
 
-
   // Emit per-chain counts of currently rendered rows to parent (for combined counts)
   useEffect(() => {
     if (!onChainCountsChange) return
@@ -538,9 +534,7 @@ export default function TokensPane({
       const res = await fetchScannerTyped({ ...filters, page: nextPage })
       const raw = res.raw as unknown
       const list =
-        raw &&
-        typeof raw === 'object' &&
-        Array.isArray((raw as { pairs?: unknown[] }).pairs)
+        raw && typeof raw === 'object' && Array.isArray((raw as { pairs?: unknown[] }).pairs)
           ? (raw as { pairs: unknown[] }).pairs
           : []
       // Deduplicate by pairAddress (case-insensitive)
@@ -722,8 +716,6 @@ export default function TokensPane({
     }
   }, [])
 
-
-
   // Keep rowsRef in sync with derived rows for visibility handlers
   useEffect(() => {
     rowsRef.current = rows
@@ -835,7 +827,11 @@ export default function TokensPane({
                   sendUnsubscribe(ws, { pair, token, chain })
                 }
               } catch (err) {
-                console.error(`[TokensPane:${title}] unsubscribe on scrollStop failed for`, key, String(err))
+                console.error(
+                  `[TokensPane:${title}] unsubscribe on scrollStop failed for`,
+                  key,
+                  String(err),
+                )
               }
             }
             // Subscribe newly visible keys
@@ -848,7 +844,11 @@ export default function TokensPane({
                   sendSubscribe(ws, { pair, token, chain })
                 }
               } catch (err) {
-                console.error(`[TokensPane:${title}] subscribe on scrollStop failed for`, key, String(err))
+                console.error(
+                  `[TokensPane:${title}] subscribe on scrollStop failed for`,
+                  key,
+                  String(err),
+                )
               }
             }
           }

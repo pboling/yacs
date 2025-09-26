@@ -239,9 +239,8 @@ const marketCap = totalSupply * parseFloat(price)
 - Volume (volumeUsd): Cumulative USD volume computed from non-outlier swaps: sum(price × |amountToken1|).
 - Transactions: Count of buys and sells derived from non-outlier swaps using tokenInAddress vs token0Address/token1Address.
 - Liquidity: Displayed as liquidity.current and liquidity.changePc. current drifts deterministically based on price percent changes in the reducer to provide a stable demo.
-- Scanner: Initial dataset source. REST GET /scanner and WS event scanner-pairs/scanner-append provide TokenData rows for pages (Trending/New) and parameters for subsequent per-pair subscriptions.
+- Scanner: Initial dataset source. REST GET /scanner and WS event scanner-pairs provide TokenData rows for pages (Trending/New) and parameters for subsequent per-pair subscriptions.
 - Pair Stats: WebSocket event pair-stats that updates audit flags (mintable, freezable, honeypot, contractVerified), social links, and migrationPc.
-- WPEG Prices: WebSocket event wpeg-prices delivering a map of wrapped native token prices by chain (used for potential conversions).
 - Exchange (router): The DEX router or virtual router identifier shown in the Exchange column.
 - Chain: One of ETH, SOL, BASE, BSC. Chain IDs map to names in code: 1→ETH, 56→BSC, 8453→BASE, 900→SOL, 11155111→ETH (sepolia treated as ETH).
 - Age: tokenCreatedTimestamp from scanner, displayed as how long the token has existed.
@@ -485,16 +484,14 @@ Notes:
 ## WebSocket channels overview and boot overlay
 
 - scanner-filter → server listens for this subscription and responds with scanner-pairs for the requested filter (page, rankBy, chain, etc.). This is the primary/bootstrap stream that seeds the tables. You should consider it the “main” subscription.
-- scanner-pairs / scanner-append → full dataset replacement or incremental additions for a page. The app reducer ingests these to populate state.pages and byId.
+- scanner-pairs → full dataset replacement for a page. The app reducer ingests these to populate state.pages and byId.
 - subscribe-pair / unsubscribe-pair → per-row real-time tick updates (price, volume, buys/sells). The client gates these by viewport to reduce load.
 - subscribe-pair-stats / unsubscribe-pair-stats → per-row audit/security/migration updates. Also gated by viewport.
-- wpeg-prices → occasional broadcast with wrapped-native prices by chain.
 
 Boot/loading behavior
 
 - The app shows a full-screen loading overlay during startup. It dismisses when either the WebSocket is OPEN or both tables have initialized their pages (from REST/WS). This avoids a deadlock where the UI wouldn’t mount if the WS is slow/unavailable.
 - In test/automation contexts, the overlay can be bypassed via navigator.webdriver, ?e2e=1, or window.**BYPASS_BOOT** = true.
-
 
 ## Linting Profiles & Code Style
 

@@ -1,4 +1,3 @@
-import React from 'react'
 
 export default function SubscriptionDebugOverlay({ align = 'left' }: { align?: 'left' | 'right' }) {
   // Metrics overlay removed. Keeping a tiny stub to avoid breaking imports if re-enabled elsewhere.

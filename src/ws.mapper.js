@@ -18,7 +18,6 @@
 // Aligns with test-task-types.ts message shapes, but implemented in JS for tests.
 // This approach allows developers to leverage the benefits of static typing for reliable code.
 // The flexibility of JavaScript allows creating mock objects and test data.
-import { isTieredChannelEnabled } from './utils/featureFlags.mjs'
 
 // Feature-gated allow-lists
 const OUT_ALLOWED_ROOMS = new Set([
@@ -32,11 +31,9 @@ const OUT_ALLOWED_ROOMS = new Set([
 const IN_ALLOWED_EVENTS = new Set(['scanner-pairs', 'tick', 'pair-stats'])
 
 export function isAllowedOutgoingEvent(event) {
-  if (isTieredChannelEnabled()) return true
   return OUT_ALLOWED_ROOMS.has(String(event))
 }
 export function isAllowedIncomingEvent(event) {
-  if (isTieredChannelEnabled()) return true
   return IN_ALLOWED_EVENTS.has(String(event))
 }
 
@@ -59,13 +56,6 @@ export function buildPairStatsSubscription({ pair, token, chain }) {
 }
 export function buildPairStatsUnsubscription({ pair, token, chain }) {
   return { event: 'unsubscribe-pair-stats', data: { pair, token, chain } }
-}
-
-export function buildPairX5Subscription({ pair, token, chain }) {
-  return { event: 'subscribe-pair-x5', data: { pair, token, chain } }
-}
-export function buildPairStatsX5Subscription({ pair, token, chain }) {
-  return { event: 'subscribe-pair-stats-x5', data: { pair, token, chain } }
 }
 
 // Thin send helpers to emit paired messages for a given pair/token/chain
@@ -128,13 +118,6 @@ export function mapIncomingMessageToAction(msg) {
         type: 'scanner/pairs',
         payload: { page: msg.data.page ?? 1, scannerPairs: msg.data.pairs ?? [] },
       }
-    case 'scanner-append':
-      // incremental append of new items for a page — gated behind tiered-channel
-      if (!isTieredChannelEnabled()) return null
-      return {
-        type: 'scanner/append',
-        payload: { page: msg.data.page ?? 1, scannerPairs: msg.data.pairs ?? [] },
-      }
     case 'tick': {
       // Canonical shape only: { data: { pair: { pair, token, chain }, swaps: [...] } }
       const d = msg.data || {}
@@ -145,12 +128,6 @@ export function mapIncomingMessageToAction(msg) {
     }
     case 'pair-stats':
       return { type: 'pair/stats', payload: { data: msg.data } }
-    case 'wpeg-prices': {
-      // not supported by production endpoint — gate behind tiered-channel
-      if (!isTieredChannelEnabled()) return null
-      const prices = msg.data && typeof msg.data === 'object' ? msg.data.prices || {} : {}
-      return { type: 'wpeg/prices', payload: { prices } }
-    }
     // case 'pair-patch': {
     //   // Generic per-pair partial update to merge arbitrary fields into an existing row
     //   return { type: 'pair/patch', payload: { data: msg.data } }

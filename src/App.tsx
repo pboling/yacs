@@ -181,17 +181,11 @@ interface State {
     minMcap?: number
     limit?: number
   }
-  wpegPrices?: Record<string, number>
 }
 
 // Local action types matching tokens.reducer.js
 interface ScannerPairsAction {
   type: 'scanner/pairs'
-  payload: { page: number; scannerPairs: unknown[] }
-}
-
-interface ScannerAppendAction {
-  type: 'scanner/append'
   payload: { page: number; scannerPairs: unknown[] }
 }
 
@@ -205,9 +199,9 @@ interface PairStatsAction {
   payload: { data: unknown }
 }
 
-interface WpegPricesAction {
-  type: 'wpeg/prices'
-  payload: { prices: Record<string, string | number> }
+interface ScannerAppendAction {
+  type: 'scanner/append'
+  payload: { page: number; scannerPairs: unknown[] }
 }
 
 interface FiltersAction {
@@ -222,13 +216,7 @@ interface FiltersAction {
   }
 }
 
-type Action =
-  | ScannerPairsAction
-  | ScannerAppendAction
-  | TickAction
-  | PairStatsAction
-  | WpegPricesAction
-  | FiltersAction
+type Action = ScannerPairsAction | TickAction | PairStatsAction | FiltersAction
 
 /**
  * Table component
@@ -307,7 +295,7 @@ function App() {
   ) => { event: 'unsubscribe-scanner-filter'; data: GetScannerResultParams }
   const mapIncomingMessageToActionSafe = mapIncomingMessageToAction as unknown as (
     msg: unknown,
-  ) => ScannerPairsAction | TickAction | PairStatsAction | WpegPricesAction | null
+  ) => ScannerPairsAction | TickAction | PairStatsAction | null
   const computePairPayloadsSafe = computePairPayloads as unknown as (
     items: ScannerResult[] | unknown[],
   ) => {
@@ -359,7 +347,7 @@ function App() {
     const prodUrl = 'wss://api-rs.dexcelerate.com/ws'
     const envUrl: string | null =
       typeof import.meta.env.VITE_WS_URL === 'string' ? import.meta.env.VITE_WS_URL : null
-    const urls: string[] = ([envUrl, prodUrl].filter(Boolean) as string[])
+    const urls: string[] = [envUrl, prodUrl].filter(Boolean) as string[]
 
     const maxAttempts = import.meta.env.DEV ? 8 : 20
 
@@ -470,10 +458,7 @@ function App() {
                     ? (data as { pairs?: unknown[] }).pairs
                     : undefined
                 if (!Array.isArray(pairs)) {
-                  console.error(
-                    'WS: invalid scanner-pairs payload: missing pairs array',
-                    parsed,
-                  )
+                  console.error('WS: invalid scanner-pairs payload: missing pairs array', parsed)
                   return
                 }
               } else if (event === 'tick') {
@@ -494,18 +479,6 @@ function App() {
                   typeof (data as { pair: { pairAddress?: unknown } }).pair.pairAddress === 'string'
                 if (!ok) {
                   console.error('WS: invalid pair-stats payload: expected pair.pairAddress', parsed)
-                  return
-                }
-              } else if (event === 'wpeg-prices') {
-                const ok =
-                  data &&
-                  typeof data === 'object' &&
-                  typeof (data as { prices?: unknown }).prices === 'object'
-                if (!ok) {
-                  console.error(
-                    'WS: invalid wpeg-prices payload: expected { prices: Record<string,string|number> }',
-                    parsed,
-                  )
                   return
                 }
               }
@@ -747,8 +720,6 @@ function App() {
     buildScannerUnsubscriptionSafe,
   ])
 
-  const wpegPrices = (state as unknown as { wpegPrices?: Record<string, number> }).wpegPrices
-
   const CHAINS = useMemo(() => ['ETH', 'SOL', 'BASE', 'BSC'] as const, [])
   const [trendingCounts, setTrendingCounts] = useState<Record<string, number>>({})
   const [newCounts, setNewCounts] = useState<Record<string, number>>({})
@@ -888,7 +859,7 @@ function App() {
       const ev = obj && typeof obj === 'object' ? (obj as { event?: unknown }).event : undefined
       if (typeof ev === 'string' && !isAllowedOutgoingEventSafe(ev)) {
         try {
-          console.warn('WS: blocked (feature flag) outgoing room:', ev)
+          console.warn('WS: blocked (not allowed) outgoing room:', ev)
         } catch {
           /* no-op */
         }
@@ -1220,23 +1191,6 @@ function App() {
             </div>
           </div>
         </div>
-        {wpegPrices && Object.keys(wpegPrices).length > 0 && (
-          <div
-            style={{
-              margin: '8px 0',
-              padding: '8px',
-              background: '#0d1117',
-              border: '1px solid #30363d',
-              borderRadius: 6,
-              fontSize: 12,
-            }}
-          >
-            <strong>WPEG reference prices:</strong>{' '}
-            {Object.entries(wpegPrices)
-              .map(([chain, price]) => `${chain}: ${price.toFixed(4)}`)
-              .join('  |  ')}
-          </div>
-        )}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <ErrorBoundary
             fallback={
@@ -1271,9 +1225,7 @@ function App() {
                   pages: Partial<Record<number, string[]>>
                 }
               }
-              dispatch={
-                dispatch as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>
-              }
+              dispatch={dispatch as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>}
               defaultSort={initialSort ?? { key: 'tokenName', dir: 'asc' }}
               clientFilters={
                 state.filters as unknown as {
@@ -1335,9 +1287,7 @@ function App() {
                   pages: Partial<Record<number, string[]>>
                 }
               }
-              dispatch={
-                dispatch as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>
-              }
+              dispatch={dispatch as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>}
               defaultSort={initialSort ?? { key: 'age', dir: 'desc' }}
               clientFilters={
                 state.filters as unknown as {
