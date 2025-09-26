@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import UpdateRate from './UpdateRate'
 import { onUpdate } from '../updates.bus'
 import { engageSubscriptionLock } from '../subscription.lock.bus.js'
@@ -110,6 +110,18 @@ export default function DetailModal({
   // Track display order swap (visual only)
   const [reversed, setReversed] = useState(false)
 
+  // Comparison selection state
+  const [compareId, setCompareId] = useState<string | null>(null)
+  // Persist compare selection
+  useEffect(() => {
+    try {
+      if (compareId) window.localStorage.setItem('detailModal.compareId', compareId)
+      else window.localStorage.removeItem('detailModal.compareId')
+    } catch {
+      /* no-op */
+    }
+  }, [compareId])
+
   // Reset series when a new row opens (only when id changes)
   useEffect(() => {
     if (!open || !row?.id) return
@@ -127,15 +139,15 @@ export default function DetailModal({
       if (stored && stored !== row.id) {
         const exists = allRows.some((r) => r.id === stored)
         if (exists) {
-          setCompareId((prev) => (prev !== stored ? stored : prev))
+          if (compareId !== stored) setCompareId(stored)
           return
         }
       }
     } catch {
       /* no-op */
     }
-    setCompareId((prev) => (prev !== null ? null : prev))
-  }, [open, row?.id, allRows])
+    if (compareId !== null) setCompareId(null)
+  }, [open, row?.id, allRows, compareId])
 
   // Seed initial base snapshot so chart isn't empty while waiting for first WS update (id-based)
   useEffect(() => {
@@ -145,17 +157,6 @@ export default function DetailModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, row?.id])
 
-  // Comparison selection state
-  const [compareId, setCompareId] = useState<string | null>(null)
-  // Persist compare selection
-  useEffect(() => {
-    try {
-      if (compareId) window.localStorage.setItem('detailModal.compareId', compareId)
-      else window.localStorage.removeItem('detailModal.compareId')
-    } catch {
-      /* no-op */
-    }
-  }, [compareId])
   const [compareSearch, setCompareSearch] = useState('')
   const [showCompareList, setShowCompareList] = useState(false)
   // Robust resolver for compare row to handle potential id casing or address-based mismatches
@@ -263,6 +264,7 @@ export default function DetailModal({
     const token = row?.tokenAddress
     const chain = row?.chain
     if (!open || !pair || !token || !debugEnabled) return
+    // Only clear the log when the tracked key changes (avoid clearing on every render)
     setUpdatesLog([])
     const key = buildPairKey(pair, token, chain)
     const off = onUpdate((e) => {
@@ -285,7 +287,7 @@ export default function DetailModal({
         /* no-op */
       }
     }
-  }, [open, row, debugEnabled])
+  }, [open, row?.id, debugEnabled])
 
   useEffect(() => {
     try {
@@ -488,6 +490,25 @@ export default function DetailModal({
   }, [open, baseTickKey, currentRow, getRowById, row, row?.id, appendSnapshot])
 
   // Hook-driven debounced subscription for compare token
+  const minimalAllRows = useMemo(
+    () =>
+      allRows.map((r) => ({
+        id: r.id,
+        pairAddress: r.pairAddress,
+        tokenAddress: r.tokenAddress,
+        chain: r.chain,
+      })),
+    [allRows],
+  )
+  const applyCompareSnapshotCb = useCallback(
+    (id: string) => {
+      const latest = getRowById(id)
+      if (latest) setHistory2((prev) => appendSnapshot(prev, latest))
+    },
+    [getRowById, appendSnapshot],
+  )
+  const getRowByIdCb = useCallback((id: string) => getRowById(id), [getRowById])
+
   const {
     isSubscribing: compareIsSubscribing,
     canLiveStream: compareCanLive,
@@ -503,18 +524,10 @@ export default function DetailModal({
           chain: compareRow.chain,
         }
       : null,
-    allRows: allRows.map((r) => ({
-      id: r.id,
-      pairAddress: r.pairAddress,
-      tokenAddress: r.tokenAddress,
-      chain: r.chain,
-    })),
+    allRows: minimalAllRows,
     toChainId,
-    applyCompareSnapshot: (id: string) => {
-      const latest = getRowById(id)
-      if (latest) setHistory2((prev) => appendSnapshot(prev, latest))
-    },
-    getRowById: (id: string) => getRowById(id),
+    applyCompareSnapshot: applyCompareSnapshotCb,
+    getRowById: getRowByIdCb,
     hasSeedData: history2.price.length > 0,
     debounceMs: 300,
   })
