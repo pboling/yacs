@@ -134,17 +134,7 @@ export default function DetailModal({
   // Seed initial base snapshot so chart isn't empty while waiting for first WS update (id-based)
   useEffect(() => {
     if (!open || !row?.id) return
-    setHistory((prev) => {
-      if (prev.price.length > 0) return prev
-      return {
-        price: [row.priceUsd],
-        mcap: [row.mcap],
-        volume: [row.volumeUsd],
-        buys: [row.transactions.buys],
-        sells: [row.transactions.sells],
-        liquidity: [row.liquidity.current],
-      }
-    })
+    setHistory((prev) => (prev.price.length > 0 ? prev : seedFromRow(row)))
     // We intentionally seed only when id changes to avoid re-seeding on live updates
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, row?.id])
@@ -172,17 +162,7 @@ export default function DetailModal({
   // Seed initial compare snapshot when a compare token is chosen (id-based)
   useEffect(() => {
     if (!open || !compareRow?.id) return
-    setHistory2((prev) => {
-      if (prev.price.length > 0) return prev
-      return {
-        price: [compareRow.priceUsd],
-        mcap: [compareRow.mcap],
-        volume: [compareRow.volumeUsd],
-        buys: [compareRow.transactions.buys],
-        sells: [compareRow.transactions.sells],
-        liquidity: [compareRow.liquidity.current],
-      }
-    })
+    setHistory2((prev) => (prev.price.length > 0 ? prev : seedFromRow(compareRow)))
     // We intentionally seed only when compare id changes to avoid re-seeding on live updates
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, compareRow?.id])
@@ -409,27 +389,30 @@ export default function DetailModal({
     ? `${compareRow.tokenAddress}|${toChainId(compareRow.chain)}`
     : null
 
-  // Helper updaters to avoid duplication
-  const applyBaseSnapshot = useCallback((latest: DetailModalRow) => {
-    setHistory((prev) => ({
+  // Generic series helpers
+  function appendSnapshot(
+    prev: Record<SeriesKey, number[]>,
+    latest: DetailModalRow,
+  ): Record<SeriesKey, number[]> {
+    return {
       price: [...prev.price, latest.priceUsd].slice(-300),
       mcap: [...prev.mcap, latest.mcap].slice(-300),
       volume: [...prev.volume, latest.volumeUsd].slice(-300),
       buys: [...prev.buys, latest.transactions.buys].slice(-300),
       sells: [...prev.sells, latest.transactions.sells].slice(-300),
       liquidity: [...prev.liquidity, latest.liquidity.current].slice(-300),
-    }))
-  }, [])
-  const applyCompareSnapshot = useCallback((latest: DetailModalRow) => {
-    setHistory2((prev) => ({
-      price: [...prev.price, latest.priceUsd].slice(-300),
-      mcap: [...prev.mcap, latest.mcap].slice(-300),
-      volume: [...prev.volume, latest.volumeUsd].slice(-300),
-      buys: [...prev.buys, latest.transactions.buys].slice(-300),
-      sells: [...prev.sells, latest.transactions.sells].slice(-300),
-      liquidity: [...prev.liquidity, latest.liquidity.current].slice(-300),
-    }))
-  }, [])
+    }
+  }
+  function seedFromRow(latest: DetailModalRow): Record<SeriesKey, number[]> {
+    return {
+      price: [latest.priceUsd],
+      mcap: [latest.mcap],
+      volume: [latest.volumeUsd],
+      buys: [latest.transactions.buys],
+      sells: [latest.transactions.sells],
+      liquidity: [latest.liquidity.current],
+    }
+  }
 
   // Reset compare history when switching compare token
   const prevCompareIdRef = useRef<string | null>(null)
@@ -451,7 +434,7 @@ export default function DetailModal({
         const id = row?.id
         const latest = currentRow ?? (id ? getRowById(id) : undefined)
         if (!latest) return
-        applyBaseSnapshot(latest)
+        setHistory((prev) => appendSnapshot(prev, latest))
       } catch {
         /* no-op */
       }
@@ -463,7 +446,7 @@ export default function DetailModal({
         /* no-op */
       }
     }
-  }, [open, basePairStatsKey, currentRow, getRowById, row, row?.id, applyBaseSnapshot])
+  }, [open, basePairStatsKey, currentRow, getRowById, row, row?.id])
 
   // Subscribe to tick key for base (high frequency)
   useEffect(() => {
@@ -474,7 +457,7 @@ export default function DetailModal({
         const id = row?.id
         const latest = currentRow ?? (id ? getRowById(id) : undefined)
         if (!latest) return
-        applyBaseSnapshot(latest)
+        setHistory((prev) => appendSnapshot(prev, latest))
       } catch {
         /* no-op */
       }
@@ -486,7 +469,7 @@ export default function DetailModal({
         /* no-op */
       }
     }
-  }, [open, baseTickKey, currentRow, getRowById, row, row?.id, applyBaseSnapshot])
+  }, [open, baseTickKey, currentRow, getRowById, row, row?.id])
 
   // Hook-driven debounced subscription for compare token
   const {
@@ -513,7 +496,7 @@ export default function DetailModal({
     toChainId,
     applyCompareSnapshot: (id: string) => {
       const latest = getRowById(id)
-      if (latest) applyCompareSnapshot(latest)
+      if (latest) setHistory2((prev) => appendSnapshot(prev, latest))
     },
     getRowById: (id: string) => getRowById(id),
     hasSeedData: history2.price.length > 0,
