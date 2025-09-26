@@ -33,7 +33,7 @@ export default function UpdateRate({
     return () => {
       off()
     }
-  }, [keysSig])
+  }, [keysSig, keysArray])
 
   const [avgRate, setAvgRate] = useState(0)
 

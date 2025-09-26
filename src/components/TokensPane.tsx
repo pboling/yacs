@@ -447,7 +447,7 @@ export default function TokensPane({
     const off = onSubscriptionEvictions(({ fast, slow }: { fast: string[]; slow: string[] }) => {
       const ws = wsRef.current
       if (!ws || ws.readyState !== WebSocket.OPEN) return
-      const drop = [...(fast ?? []), ...(slow ?? [])]
+      const drop = [...fast, ...slow]
       for (const key of drop) {
         try {
           const [pair, token, chain] = key.split('|')
@@ -1102,7 +1102,7 @@ export default function TokensPane({
   // React to global subscription lock changes (modal focus)
   useEffect(() => {
     try {
-      lockActiveRef.current = !!isSubscriptionLockActive()
+      lockActiveRef.current = isSubscriptionLockActive()
       lockAllowedRef.current = new Set(getSubscriptionLockAllowedKeys())
     } catch {
       /* no-op */
