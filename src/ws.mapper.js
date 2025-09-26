@@ -28,7 +28,7 @@ const OUT_ALLOWED_ROOMS = new Set([
   'subscribe-pair-stats',
   'unsubscribe-pair-stats',
 ])
-const IN_ALLOWED_EVENTS = new Set(['scanner-pairs', 'tick', 'pair-stats'])
+const IN_ALLOWED_EVENTS = new Set(['scanner-pairs', 'tick', 'pair-stats', 'wpeg-prices'])
 
 export function isAllowedOutgoingEvent(event) {
   return OUT_ALLOWED_ROOMS.has(String(event))
@@ -128,6 +128,11 @@ export function mapIncomingMessageToAction(msg) {
     }
     case 'pair-stats':
       return { type: 'pair/stats', payload: { data: msg.data } }
+    case 'wpeg-prices': {
+      const d = (msg && typeof msg === 'object' ? msg.data : null) || {}
+      const prices = d && typeof d === 'object' && d.prices && typeof d.prices === 'object' ? d.prices : {}
+      return { type: 'wpeg/prices', payload: { prices } }
+    }
     // case 'pair-patch': {
     //   // Generic per-pair partial update to merge arbitrary fields into an existing row
     //   return { type: 'pair/patch', payload: { data: msg.data } }
