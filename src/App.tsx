@@ -35,7 +35,8 @@ import TokensPane from './components/TokensPane'
 import DetailModal from './components/DetailModal'
 import { emitFilterFocusStart, emitFilterApplyComplete } from './filter.bus.js'
 import { fetchScanner } from './scanner.client.js'
-import { getCount, getTotalActive } from './visibility.bus.js'
+import { getCount } from './visibility.bus.js'
+import { SubscriptionQueue } from './subscription.queue'
 import { emitUpdate } from './updates.bus'
 import { engageSubscriptionLock, releaseSubscriptionLock } from './subscription.lock.bus.js'
 import { onSubscriptionLockChange, isSubscriptionLockActive } from './subscription.lock.bus.js'
@@ -84,7 +85,7 @@ function TopBar({
     let timer: number | null = null
     const tick = () => {
       try {
-        setSubCount(getTotalActive())
+        setSubCount(SubscriptionQueue.getSubscribedCount())
       } catch {}
       timer = window.setTimeout(() => {
         raf = window.requestAnimationFrame(tick)

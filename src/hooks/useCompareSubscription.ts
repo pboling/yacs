@@ -223,9 +223,9 @@ export function useCompareSubscription({
         clearTimeout(debounceRef.current)
         debounceRef.current = null
       }
-      // We intentionally do NOT unsubscribe here immediately when compare changes;
-      // unsubscribe happens right before the next subscription inside doSubscribe to minimize churn.
-      unsubscribe()
+      // Do NOT unsubscribe on dependency changes; the next effect run will call unsubscribe()
+      // just before subscribing to the next target to minimize churn.
+      // Unsubscription on unmount is handled by a dedicated effect below.
     }
   }, [open, compareRow, compareRow?.id, canLiveStream, hasSeedData, debounceMs, allRows, toChainId])
 
@@ -270,6 +270,43 @@ export function useCompareSubscription({
       } catch {}
     }
   }, [open, compareRow, compareRow?.id, canLiveStream, toChainId, getRowById, applyCompareSnapshot])
+
+  // On unmount only, ensure we clean up any lingering compare subscriptions
+  useEffect(() => {
+    return () => {
+      try {
+        const ws = wsRef.current
+        if (subscribedIdRef.current && ws && ws.readyState === WebSocket.OPEN) {
+          const prev = allRows.find((r) => r.id === subscribedIdRef.current)
+          if (prev?.pairAddress && prev.tokenAddress) {
+            try {
+              ws.send(
+                JSON.stringify(
+                  buildPairUnsubscription({
+                    pair: prev.pairAddress,
+                    token: prev.tokenAddress,
+                    chain: prev.chain,
+                  }),
+                ),
+              )
+            } catch {}
+            try {
+              ws.send(
+                JSON.stringify(
+                  buildPairStatsUnsubscription({
+                    pair: prev.pairAddress,
+                    token: prev.tokenAddress,
+                    chain: prev.chain,
+                  }),
+                ),
+              )
+            } catch {}
+          }
+        }
+      } catch {}
+      subscribedIdRef.current = null
+    }
+  }, [allRows])
 
   return { isSubscribing, canLiveStream, lastUpdateAt, revertToLastLive }
 }
