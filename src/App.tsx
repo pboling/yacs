@@ -42,6 +42,7 @@ import { engageSubscriptionLock, releaseSubscriptionLock } from './subscription.
 import { onSubscriptionLockChange, isSubscriptionLockActive } from './subscription.lock.bus.js'
 import { onSubscriptionMetricsChange, getSubscriptionMetrics } from './subscription.lock.bus.js'
 import SubscriptionDebugOverlay from './components/SubscriptionDebugOverlay'
+import { toChainId } from './utils/chain'
 
 // Theme allow-list and cookie helpers
 const THEME_ALLOW = ['cherry-sour', 'rocket-lake', 'legendary'] as const
@@ -640,14 +641,6 @@ function App() {
                     const row = byId[idLower] ?? byId[pairAddress]
                     if (row?.tokenAddress) {
                       const chainName = row.chain
-                      const toChainId = (c: string): string => {
-                        const s = c.toUpperCase()
-                        if (s === 'ETH') return '1'
-                        if (s === 'BSC') return '56'
-                        if (s === 'BASE') return '8453'
-                        if (s === 'SOL') return '900'
-                        return '1'
-                      }
                       const key = pairAddress + '|' + row.tokenAddress + '|' + toChainId(chainName)
                       // Emit per-key update
                       try {
@@ -960,17 +953,6 @@ function App() {
     }
   }, [])
 
-  const toChainId = (c: string | number | undefined): string => {
-    if (c == null) return '1'
-    const n = typeof c === 'number' ? c : Number(c)
-    if (Number.isFinite(n)) return String(n)
-    const s = String(c).toUpperCase()
-    if (s === 'ETH') return '1'
-    if (s === 'BSC') return '56'
-    if (s === 'BASE') return '8453'
-    if (s === 'SOL') return '900'
-    return '1'
-  }
   const wsSend = (obj: unknown) => {
     try {
       const anyWin = window as unknown as { __APP_WS__?: WebSocket }

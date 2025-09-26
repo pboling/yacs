@@ -5,6 +5,7 @@ import { engageSubscriptionLock } from '../subscription.lock.bus.js'
 import ChartSection from './ChartSection'
 import NumberCell from './NumberCell'
 import useCompareSubscription from '../hooks/useCompareSubscription'
+import { toChainId } from '../utils/chain'
 
 export interface DetailModalRow {
   id: string
@@ -58,18 +59,6 @@ export default function DetailModal({
 }) {
   const wrapperRef = useRef<HTMLDivElement | null>(null)
 
-  // Added locally (was referenced elsewhere) – normalize chain ids
-  const toChainId = (c: string | number | undefined): string => {
-    if (c == null) return '1'
-    const n = typeof c === 'number' ? c : Number(c)
-    if (Number.isFinite(n)) return String(n)
-    const s = String(c).toUpperCase()
-    if (s === 'ETH') return '1'
-    if (s === 'BSC') return '56'
-    if (s === 'BASE') return '8453'
-    if (s === 'SOL') return '900'
-    return '1'
-  }
 
   // Utility to check for debug=true in the URL
   function isDebugEnabled() {

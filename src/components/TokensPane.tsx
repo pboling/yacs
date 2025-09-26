@@ -14,6 +14,7 @@ import { markVisible, markHidden, getCount } from '../visibility.bus.js'
 import { onFilterFocusStart, onFilterApplyComplete } from '../filter.bus.js'
 import { formatAge } from '../helpers/format'
 import type { GetScannerResultParams, ScannerResult } from '../test-task-types'
+import { toChainId } from '../utils/chain'
 import {
   updatePaneVisibleCount,
   updatePaneRenderedCount,
@@ -127,18 +128,7 @@ export default function TokensPane({
   // Track previously rendered keys to unsubscribe when rows fall out due to limit/sort
   const prevRenderedKeysRef = useRef<Set<string>>(new Set())
 
-  // Normalize chain to the server's expected id format for subscriptions
-  const toChainId = (c: string | number | undefined): string => {
-    if (c == null) return '1'
-    const n = typeof c === 'number' ? c : Number(c)
-    if (Number.isFinite(n)) return String(n)
-    const s = String(c).toUpperCase()
-    if (s === 'ETH') return '1'
-    if (s === 'BSC') return '56'
-    if (s === 'BASE') return '8453'
-    if (s === 'SOL') return '900'
-    return '1'
-  }
+  // Normalize chain to the server's expected id format for subscriptions is now centralized in utils/chain
 
   // Fetch function as typed alias to keep TS happy with JS module
   const fetchScannerTyped = fetchScanner as unknown as (
