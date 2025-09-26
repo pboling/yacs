@@ -21,8 +21,8 @@ async function getFastRowIdAndCellText(
   const cell = fastRow.locator(`td:nth-child(${String(nth)})`)
   await expect(cell).toBeVisible()
   const raw = await cell.textContent()
-  const text = (raw == null ? '' : raw).trim()
-  const rid = rowId ? rowId : ''
+  const text = (raw ?? '').trim()
+  const rid = rowId ?? ''
   expect(rid.length).toBeGreaterThan(0)
   return { rowId: rid, text }
 }
@@ -40,7 +40,7 @@ async function getCellTextByRowId(
   const cell = row.locator(`td:nth-child(${String(nth)})`)
   await expect(cell).toBeVisible()
   const raw = await cell.textContent()
-  return (raw == null ? '' : raw).trim()
+  return (raw ?? '').trim()
 }
 
 function parseCounter(text: string, kind: Counter): number {
