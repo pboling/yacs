@@ -373,33 +373,33 @@ export default function DetailModal({
 
   // Build derived subscription keys
   const basePairStatsKey =
-    row?.pairAddress && row?.tokenAddress
+    row && row.pairAddress && row.tokenAddress
       ? buildPairKey(row.pairAddress, row.tokenAddress, row.chain)
       : null
-  const baseTickKey = row?.tokenAddress ? buildTickKey(row.tokenAddress, row.chain) : null
+  const baseTickKey = row && row.tokenAddress ? buildTickKey(row.tokenAddress, row.chain) : null
   const comparePairStatsKey =
-    compareRow?.pairAddress && compareRow?.tokenAddress
+    compareRow && compareRow.pairAddress && compareRow.tokenAddress
       ? buildPairKey(compareRow.pairAddress, compareRow.tokenAddress, compareRow.chain)
       : null
-  const compareTickKey = compareRow?.tokenAddress
+  const compareTickKey = compareRow && compareRow.tokenAddress
     ? buildTickKey(compareRow.tokenAddress, compareRow.chain)
     : null
 
   // Generic series helpers
-  function appendSnapshot(
-    prev: Record<SeriesKey, number[]>,
-    latest: DetailModalRow,
-  ): Record<SeriesKey, number[]> {
-    return {
-      price: [...prev.price, latest.priceUsd].slice(-300),
-      mcap: [...prev.mcap, latest.mcap].slice(-300),
-      volume: [...prev.volume, latest.volumeUsd].slice(-300),
-      buys: [...prev.buys, latest.transactions.buys].slice(-300),
-      sells: [...prev.sells, latest.transactions.sells].slice(-300),
-      liquidity: [...prev.liquidity, latest.liquidity.current].slice(-300),
-    }
-  }
-  function seedFromRow(latest: DetailModalRow): Record<SeriesKey, number[]> {
+  const appendSnapshot = useCallback(
+    (prev: Record<SeriesKey, number[]>, latest: DetailModalRow): Record<SeriesKey, number[]> => {
+      return {
+        price: [...prev.price, latest.priceUsd].slice(-300),
+        mcap: [...prev.mcap, latest.mcap].slice(-300),
+        volume: [...prev.volume, latest.volumeUsd].slice(-300),
+        buys: [...prev.buys, latest.transactions.buys].slice(-300),
+        sells: [...prev.sells, latest.transactions.sells].slice(-300),
+        liquidity: [...prev.liquidity, latest.liquidity.current].slice(-300),
+      }
+    },
+    [],
+  )
+  const seedFromRow = useCallback((latest: DetailModalRow): Record<SeriesKey, number[]> => {
     return {
       price: [latest.priceUsd],
       mcap: [latest.mcap],
@@ -408,7 +408,7 @@ export default function DetailModal({
       sells: [latest.transactions.sells],
       liquidity: [latest.liquidity.current],
     }
-  }
+  }, [])
 
   // Reset compare history when switching compare token
   const prevCompareIdRef = useRef<string | null>(null)
@@ -442,7 +442,7 @@ export default function DetailModal({
         /* no-op */
       }
     }
-  }, [open, basePairStatsKey, currentRow, getRowById, row, row?.id])
+  }, [open, basePairStatsKey, currentRow, getRowById, row, row?.id, appendSnapshot])
 
   // Subscribe to tick key for base (high frequency)
   useEffect(() => {
@@ -465,7 +465,7 @@ export default function DetailModal({
         /* no-op */
       }
     }
-  }, [open, baseTickKey, currentRow, getRowById, row, row?.id])
+  }, [open, baseTickKey, currentRow, getRowById, row, row?.id, appendSnapshot])
 
   // Hook-driven debounced subscription for compare token
   const {
@@ -539,14 +539,12 @@ export default function DetailModal({
             {row?.tokenAddress && (
               <UpdateRate
                 title="Live rate"
-                version={undefined}
                 filterKey={[baseTickKey, basePairStatsKey].filter((s): s is string => Boolean(s))}
               />
             )}
             {compareRow?.tokenAddress && (
               <UpdateRate
                 title="Compare rate"
-                version={undefined}
                 filterKey={[compareTickKey, comparePairStatsKey].filter((s): s is string =>
                   Boolean(s),
                 )}
@@ -948,7 +946,7 @@ export default function DetailModal({
           )
         })()}
         {/* Debug panel at the bottom */}
-        {debugEnabled && row?.pairAddress && row.tokenAddress && (
+        {debugEnabled && row && row.pairAddress && row.tokenAddress && (
           <div style={{ marginTop: 12, borderTop: '1px solid #374151', paddingTop: 12 }}>
             <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
               Debug updates (raw JSON)
