@@ -151,6 +151,12 @@ export const SubscriptionQueue = {
     else ignored.delete(key)
     ensureQueueWithinQuota(ws)
   },
+  noteUnsubscribed(key: Key) {
+    // Record an explicit unsubscribe timestamp for external unsubscribes
+    try {
+      lastUnsubscribedAt.set(key, Date.now())
+    } catch {}
+  },
   tick,
   // For testing/inspection
   __debug__: {

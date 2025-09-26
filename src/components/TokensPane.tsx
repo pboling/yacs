@@ -297,10 +297,10 @@ export default function TokensPane({
         // Update local ids for this pane only
         const payloads = computePairPayloadsSafe(dedupedList)
         payloadsRef.current = payloads
-                try {
-                  const keys = payloads.map((p) => buildPairKey(p.pair, p.token, p.chain))
-                  SubscriptionQueue.updateUniverse(keys, wsRef.current ?? null)
-                } catch {}
+        try {
+          const keys = payloads.map((p) => buildPairKey(p.pair, p.token, p.chain))
+          SubscriptionQueue.updateUniverse(keys, wsRef.current ?? null)
+        } catch {}
         // Deduplicate pair ids for this pane to avoid duplicate row keys (computePairPayloads emits chain variants)
         const seenPairs = new Set<string>()
         const localIds: string[] = []
@@ -471,7 +471,9 @@ export default function TokensPane({
             // purge local tracking
             visibleKeysRef.current.delete(key)
             // Let SubscriptionQueue enforce quotas for now-hidden rows
-            try { SubscriptionQueue.setVisible(key, false, ws) } catch {}
+            try {
+              SubscriptionQueue.setVisible(key, false, ws)
+            } catch {}
           } catch (err) {
             console.error(
               `[TokensPane:${title}] tracking update on removal failed for`,
@@ -715,7 +717,9 @@ export default function TokensPane({
         if (!set.has(key)) {
           const { prev } = markVisible(key)
           set.add(key)
-          try { SubscriptionQueue.setVisible(key, true, ws) } catch {}
+          try {
+            SubscriptionQueue.setVisible(key, true, ws)
+          } catch {}
           if (prev === 0 && ws && ws.readyState === WebSocket.OPEN) {
             try {
               sendSubscribe(ws, { pair, token, chain })
@@ -726,7 +730,9 @@ export default function TokensPane({
         if (set.has(key)) {
           set.delete(key)
           const { next } = markHidden(key)
-          try { SubscriptionQueue.setVisible(key, false, ws) } catch {}
+          try {
+            SubscriptionQueue.setVisible(key, false, ws)
+          } catch {}
           // Do not auto-unsubscribe on leaving viewport; let SubscriptionQueue manage inactive rows
         }
       }
@@ -750,6 +756,9 @@ export default function TokensPane({
             const { next } = markHidden(key)
             // Only unsubscribe if no other pane still requires the subscription
             if (next === 0) {
+              try {
+                SubscriptionQueue.noteUnsubscribed(key)
+              } catch {}
               sendUnsubscribe(ws, { pair, token, chain })
             }
           }
@@ -794,7 +803,9 @@ export default function TokensPane({
     run()
     return () => {
       if (timer != null) {
-        try { window.clearTimeout(timer) } catch {}
+        try {
+          window.clearTimeout(timer)
+        } catch {}
       }
     }
   }, [])
@@ -843,22 +854,9 @@ export default function TokensPane({
         }}
         onOpenRowDetails={onOpenRowDetails}
         onScrollStart={() => {
-          // Enter scrolling; temporarily consider rows unsubscribed until scroll stops
+          // Enter scrolling; do not alter subscriptions anymore. We only mark scrolling state
+          // and let IntersectionObserver/onScrollStop handle precise visibility transitions.
           scrollingRef.current = true
-          const ws = wsRef.current
-          const visibleNow = new Set<string>(visibleKeysRef.current)
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            for (const key of visibleNow) {
-              try {
-                const { next } = markHidden(key)
-                try { SubscriptionQueue.setVisible(key, false, ws) } catch {}
-                // Do not auto-unsubscribe during scroll; SubscriptionQueue manages inactive rotation
-              } catch (err) {
-                console.error(`[TokensPane:${title}] bulk-visibility update failed for`, key, String(err))
-              }
-            }
-          }
-          visibleKeysRef.current.clear()
         }}
         onToggleRowSubscription={(row: TokenRow) => {
           const dKey = disabledKeyFor(row)
@@ -876,7 +874,9 @@ export default function TokensPane({
               const id = toChainId(row.chain)
               if (pair && tokenAddr) {
                 const keyNum = buildPairKey(pair, tokenAddr, id)
-                try { SubscriptionQueue.setIgnored(keyNum, false, ws) } catch {}
+                try {
+                  SubscriptionQueue.setIgnored(keyNum, false, ws)
+                } catch {}
               }
             } catch {}
             return
@@ -899,8 +899,13 @@ export default function TokensPane({
               visibleKeysRef.current.delete(key)
               const [pair, token, chain] = key.split('|')
               const { next } = markHidden(key)
-              try { SubscriptionQueue.setVisible(key, false, ws) } catch {}
+              try {
+                SubscriptionQueue.setVisible(key, false, ws)
+              } catch {}
               if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
+                try {
+                  SubscriptionQueue.noteUnsubscribed(key)
+                } catch {}
                 try {
                   sendUnsubscribe(ws, { pair, token, chain })
                 } catch {}
@@ -913,7 +918,9 @@ export default function TokensPane({
               const id = toChainId(row.chain)
               if (pair && tokenAddr) {
                 const keyNum = buildPairKey(pair, tokenAddr, id)
-                try { SubscriptionQueue.setIgnored(keyNum, true, ws) } catch {}
+                try {
+                  SubscriptionQueue.setIgnored(keyNum, true, ws)
+                } catch {}
               }
             } catch {}
           } catch {
@@ -967,7 +974,9 @@ export default function TokensPane({
               if (nextSet.has(key)) continue
               try {
                 const { next } = markHidden(key)
-                try { SubscriptionQueue.setVisible(key, false, ws) } catch {}
+                try {
+                  SubscriptionQueue.setVisible(key, false, ws)
+                } catch {}
               } catch (err) {
                 console.error(
                   `[TokensPane:${title}] visibility update on scrollStop failed for`,
@@ -982,7 +991,9 @@ export default function TokensPane({
               const [pair, token, chain] = key.split('|')
               try {
                 const { prev } = markVisible(key)
-                try { SubscriptionQueue.setVisible(key, true, ws) } catch {}
+                try {
+                  SubscriptionQueue.setVisible(key, true, ws)
+                } catch {}
                 if (prev === 0) {
                   sendSubscribe(ws, { pair, token, chain })
                 }

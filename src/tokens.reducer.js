@@ -130,11 +130,19 @@ export function tokensReducer(state = initialState, action) {
       const id = idOrig.toLowerCase()
       const token = state.byId[id] || state.byId[idOrig]
       if (!token) {
-        console.warn('REDUCER: pair/tick ignored - token not found in state.byId', {
-          idOrig,
-          idLower: id,
-          knownKeys: Object.keys(state.byId).length,
-        })
+        // Suppress noisy warnings in tests and production unless explicitly enabled.
+        try {
+          const dbg =
+            (typeof process !== 'undefined' && process.env && process.env.DEX_DEBUG_REDUCER) === '1'
+          if (dbg) {
+            // Only log when developer opts in via DEX_DEBUG_REDUCER=1
+            console.warn('REDUCER: pair/tick ignored - token not found in state.byId', {
+              idOrig,
+              idLower: id,
+              knownKeys: Object.keys(state.byId).length,
+            })
+          }
+        } catch {}
         return state
       }
       const meta = state.meta[id] || state.meta[idOrig] || {}
@@ -276,7 +284,11 @@ export function tokensReducer(state = initialState, action) {
         const n = typeof v === 'number' ? v : parseFloat(v || '0')
         if (!Number.isNaN(n)) normalized[k] = n
       }
-      return { ...state, wpegPrices: { ...state.wpegPrices, ...normalized }, version: (state.version || 0) + 1 }
+      return {
+        ...state,
+        wpegPrices: { ...state.wpegPrices, ...normalized },
+        version: (state.version || 0) + 1,
+      }
     }
     case 'filters/set': {
       return { ...state, filters: { ...state.filters, ...action.payload } }

@@ -58,7 +58,8 @@ export function buildScannerQuery(params = {}) {
  * @returns {any[]} TokenData[]
  */
 export function mapScannerPage(apiResponse) {
-  const items = (apiResponse && apiResponse.pairs) ?? []
+  // Support both shapes: production (scannerPairs) and legacy/tests (pairs)
+  const items = (apiResponse && (apiResponse.scannerPairs || apiResponse.pairs)) || []
   return items.map(mapScannerResultToToken)
 }
 

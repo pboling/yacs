@@ -858,7 +858,8 @@ export default function DetailModal({
                         <div style={{ fontSize: 12 }}>
                           {(() => {
                             if (d.a == null || d.b == null) return '—'
-                            const isCurrency = d.k === 'price' || d.k === 'mcap' || d.k === 'liquidity'
+                            const isCurrency =
+                              d.k === 'price' || d.k === 'mcap' || d.k === 'liquidity'
                             const prefixSymbol = isCurrency ? '$' : ''
                             const delta = d.delta ?? 0
                             const pct = d.pct
@@ -866,13 +867,19 @@ export default function DetailModal({
                             return (
                               <span>
                                 <span>
-                                  <NumberCell value={d.a} prefix={prefixSymbol} /> vs <NumberCell value={d.b} prefix={prefixSymbol} /> (
+                                  <NumberCell value={d.a} prefix={prefixSymbol} /> vs{' '}
+                                  <NumberCell value={d.b} prefix={prefixSymbol} /> (
                                 </span>
                                 <NumberCell value={delta} noFade prefix={delta >= 0 ? '+' : ''} />
                                 {pct != null && (
                                   <>
                                     <span>, </span>
-                                    <NumberCell value={pct} noFade prefix={pct >= 0 ? '+' : ''} suffix="%" />
+                                    <NumberCell
+                                      value={pct}
+                                      noFade
+                                      prefix={pct >= 0 ? '+' : ''}
+                                      suffix="%"
+                                    />
                                   </>
                                 )}
                                 {ratio != null && (

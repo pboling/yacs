@@ -128,15 +128,11 @@ export const ChartSection: React.FC<ChartSectionProps> = ({
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span className="muted">Buys</span>
-            <NumberCell
-              value={latestVal('buys')}
-            />
+            <NumberCell value={latestVal('buys')} />
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span className="muted">Sells</span>
-            <NumberCell
-              value={latestVal('sells')}
-            />
+            <NumberCell value={latestVal('sells')} />
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span>(Not Graphed)</span>

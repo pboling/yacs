@@ -60,8 +60,8 @@ async function saveFixture(json, note = '') {
   const count = Array.isArray(json.pairs)
     ? json.pairs.length
     : Array.isArray(json.scannerPairs)
-    ? json.scannerPairs.length
-    : 0
+      ? json.scannerPairs.length
+      : 0
   const suffix = note ? ` (${note})` : ''
   console.log(`Saved fixture to ${outFile} with ${count} items${suffix}`)
 }
@@ -99,8 +99,12 @@ async function main() {
     if (/ECONNREFUSED|abort|ENOTFOUND|TIMED?OUT/i.test(msg)) {
       console.error('\nEndpoint appears unreachable. You can:')
       console.error('  - Use default public API (no action needed)')
-      console.error('  - Or pass a reachable URL: node scripts/fetch-scanner-fixture.mjs https://api.example/scanner?...')
-      console.error('  - Or set SCANNER_URL env: SCANNER_URL=https://host[:port]/scanner?chain=ETH&page=1\n')
+      console.error(
+        '  - Or pass a reachable URL: node scripts/fetch-scanner-fixture.mjs https://api.example/scanner?...',
+      )
+      console.error(
+        '  - Or set SCANNER_URL env: SCANNER_URL=https://host[:port]/scanner?chain=ETH&page=1\n',
+      )
     }
     // Graceful fallback: generate a deterministic fixture using our in-repo generator
     try {

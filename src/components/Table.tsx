@@ -1,14 +1,7 @@
 import NumberCell from './NumberCell'
 import AuditIcons from './AuditIcons'
 import { useEffect, useMemo, useState, useRef } from 'react'
-import {
-  Globe,
-  MessageCircle,
-  Send,
-  ExternalLink,
-  Eye,
-  ChartNoAxesCombined,
-} from 'lucide-react'
+import { Globe, MessageCircle, Send, ExternalLink, Eye, ChartNoAxesCombined } from 'lucide-react'
 import { BurnDetailsTooltip } from './BurnDetailsTooltip'
 
 // Typed helper to find the last index matching a predicate (avoids using Array.prototype.findLastIndex for broader TS lib support)
@@ -712,21 +705,26 @@ export default function Table({
                                 s.state === 'subscribed'
                                   ? 'var(--accent-up)'
                                   : s.state === 'disabled'
-                                  ? 'var(--accent-down)'
-                                  : undefined // neutral: inherit color
+                                    ? 'var(--accent-down)'
+                                    : undefined // neutral: inherit color
                               const title = s.tooltip ?? ''
                               const label =
                                 s.state === 'subscribed'
                                   ? 'Subscribed (click to disable)'
                                   : s.state === 'disabled'
-                                  ? 'Disabled (click to re-enable)'
-                                  : 'Unsubscribed (click to disable)'
+                                    ? 'Disabled (click to re-enable)'
+                                    : 'Unsubscribed (click to disable)'
                               return (
                                 <span
                                   title={title || label}
                                   aria-label={label}
                                   onClick={() => onToggleRowSubscription?.(t)}
-                                  style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', color: color }}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    cursor: 'pointer',
+                                    color: color,
+                                  }}
                                 >
                                   <Eye size={size} color={color} />
                                 </span>
@@ -851,29 +849,23 @@ export default function Table({
                     </td>
                     <td style={{ width: 50, minWidth: 50, maxWidth: 50 }}>
                       <div
-                          title={`$${t.priceUsd}`}
-                          style={{
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              width: '100%',
-                              maxWidth: '100%',
-                          }}
+                        title={`$${t.priceUsd}`}
+                        style={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          width: '100%',
+                          maxWidth: '100%',
+                        }}
                       >
                         <NumberCell value={t.priceUsd} prefix="$" />
                       </div>
                     </td>
                     <td>
-                      <NumberCell
-                        value={t.mcap}
-                        prefix="$"
-                      />
+                      <NumberCell value={t.mcap} prefix="$" />
                     </td>
                     <td>
-                      <NumberCell
-                        value={t.volumeUsd}
-                        prefix="$"
-                      />
+                      <NumberCell value={t.volumeUsd} prefix="$" />
                     </td>
                     <td>
                       <NumberCell noFade value={t.priceChangePcs['5m']} suffix="%" />
@@ -893,10 +885,7 @@ export default function Table({
                       <NumberCell value={t.transactions.sells} />
                     </td>
                     <td>
-                      <NumberCell
-                        value={t.liquidity.current}
-                        prefix="$"
-                      />
+                      <NumberCell value={t.liquidity.current} prefix="$" />
                     </td>
                     <td>
                       <AuditIcons

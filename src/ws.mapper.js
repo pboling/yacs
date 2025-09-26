@@ -113,10 +113,13 @@ export function mapIncomingMessageToAction(msg) {
   if (!isAllowedIncomingEvent(msg.event)) return null
   switch (msg.event) {
     case 'scanner-pairs':
-      // full dataset replacement for a page (production uses data.pairs)
+      // full dataset replacement for a page (supports both data.scannerPairs and data.pairs)
       return {
         type: 'scanner/pairs',
-        payload: { page: msg.data.page ?? 1, scannerPairs: msg.data.pairs ?? [] },
+        payload: {
+          page: msg.data.page ?? 1,
+          scannerPairs: (msg.data && (msg.data.scannerPairs ?? msg.data.pairs)) || [],
+        },
       }
     case 'tick': {
       // Canonical shape only: { data: { pair: { pair, token, chain }, swaps: [...] } }
@@ -130,7 +133,8 @@ export function mapIncomingMessageToAction(msg) {
       return { type: 'pair/stats', payload: { data: msg.data } }
     case 'wpeg-prices': {
       const d = (msg && typeof msg === 'object' ? msg.data : null) || {}
-      const prices = d && typeof d === 'object' && d.prices && typeof d.prices === 'object' ? d.prices : {}
+      const prices =
+        d && typeof d === 'object' && d.prices && typeof d.prices === 'object' ? d.prices : {}
       return { type: 'wpeg/prices', payload: { prices } }
     }
     // case 'pair-patch': {

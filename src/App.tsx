@@ -93,9 +93,13 @@ function TopBar({
     tick()
     return () => {
       if (timer != null) {
-        try { window.clearTimeout(timer) } catch {}
+        try {
+          window.clearTimeout(timer)
+        } catch {}
       }
-      try { window.cancelAnimationFrame(raf) } catch {}
+      try {
+        window.cancelAnimationFrame(raf)
+      } catch {}
     }
   }, [])
   return (
@@ -775,7 +779,9 @@ function App() {
   useEffect(() => {
     try {
       const pages = (state as unknown as { pages?: Partial<Record<number, string[]>> }).pages ?? {}
-      const hasTrending = Array.isArray((pages as Record<number, string[] | undefined>)[TRENDING_PAGE])
+      const hasTrending = Array.isArray(
+        (pages as Record<number, string[] | undefined>)[TRENDING_PAGE],
+      )
       const hasNew = Array.isArray((pages as Record<number, string[] | undefined>)[NEW_PAGE])
       if (hasTrending || hasNew) {
         setWsScannerReady((prev) => ({
@@ -1263,7 +1269,9 @@ function App() {
                   pages: Partial<Record<number, string[]>>
                 }
               }
-              dispatch={dispatch as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>}
+              dispatch={
+                dispatch as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>
+              }
               defaultSort={initialSort ?? { key: 'tokenName', dir: 'asc' }}
               clientFilters={
                 state.filters as unknown as {
@@ -1325,7 +1333,9 @@ function App() {
                   pages: Partial<Record<number, string[]>>
                 }
               }
-              dispatch={dispatch as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>}
+              dispatch={
+                dispatch as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>
+              }
               defaultSort={initialSort ?? { key: 'age', dir: 'desc' }}
               clientFilters={
                 state.filters as unknown as {
