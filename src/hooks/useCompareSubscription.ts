@@ -2,10 +2,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { onUpdate } from '../updates.bus'
 import {
-  buildPairSubscription,
-  buildPairStatsSubscription,
   buildPairUnsubscription,
   buildPairStatsUnsubscription,
+  buildPairX5Subscription,
+  buildPairStatsX5Subscription,
 } from '../ws.mapper.js'
 
 export interface MinimalCompareRow {
@@ -81,6 +81,15 @@ export function useCompareSubscription({
     }
   }, [open, compareRow?.id, compareRow?.pairAddress, compareRow?.tokenAddress])
 
+  // If we already have seed data for the current compare id, ensure we don't show Subscribing… for long
+  useEffect(() => {
+    if (!open || !compareRow) return
+    if (hasSeedData && subscribedIdRef.current === compareRow.id) {
+      setIsSubscribing(false)
+      firstUpdateSeenRef.current = true
+    }
+  }, [open, compareRow?.id, hasSeedData])
+
   // Manage subscription with debounce
   useEffect(() => {
     // Cleanup helper
@@ -144,6 +153,11 @@ export function useCompareSubscription({
     firstUpdateSeenRef.current = false
 
     debounceRef.current = setTimeout(() => {
+      // Re-resolve the WS in case it became available after mount
+      try {
+        const latestWs = (window as unknown as { __APP_WS__?: WebSocket }).__APP_WS__
+        if (latestWs) wsRef.current = latestWs
+      } catch {}
       const ws = wsRef.current
       if (!ws) return
       const doSubscribe = () => {
@@ -160,7 +174,7 @@ export function useCompareSubscription({
             try {
               ws.send(
                 JSON.stringify(
-                  buildPairSubscription({
+                  buildPairX5Subscription({
                     pair: compareRow.pairAddress,
                     token: compareRow.tokenAddress,
                     chain: chainVariant,
@@ -171,7 +185,7 @@ export function useCompareSubscription({
             try {
               ws.send(
                 JSON.stringify(
-                  buildPairStatsSubscription({
+                  buildPairStatsX5Subscription({
                     pair: compareRow.pairAddress,
                     token: compareRow.tokenAddress,
                     chain: chainVariant,
@@ -200,6 +214,8 @@ export function useCompareSubscription({
         try {
           ws.addEventListener('open', handler, { once: true })
         } catch {}
+      } else {
+        // Socket may be CLOSED or CLOSING; try to discover a fresh one on next render via polling effect
       }
     }, debounceMs)
 
@@ -214,7 +230,7 @@ export function useCompareSubscription({
         unsubscribe()
       }
     }
-  }, [open, compareRow?.id, canLiveStream, hasSeedData, debounceMs])
+  }, [open, compareRow?.id, canLiveStream, hasSeedData, debounceMs, allRows, toChainId])
 
   // Listen for onUpdate events for the compare row; mark subscription complete when first update arrives
   useEffect(() => {
@@ -256,7 +272,7 @@ export function useCompareSubscription({
         off()
       } catch {}
     }
-  }, [open, compareRow?.id, canLiveStream])
+  }, [open, compareRow?.id, canLiveStream, toChainId, getRowById, applyCompareSnapshot])
 
   return { isSubscribing, canLiveStream, lastUpdateAt, revertToLastLive }
 }

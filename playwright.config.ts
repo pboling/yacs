@@ -7,10 +7,7 @@ export default defineConfig({
     timeout: 30_000,
   },
   // Use a verbose, clear console reporter and also generate an HTML report (do not auto-open)
-  reporter: [
-    ['list'],
-    ['html', { open: 'never' }],
-  ],
+  reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     headless: true,
     baseURL: 'http://localhost:5173',

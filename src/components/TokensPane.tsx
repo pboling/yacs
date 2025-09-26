@@ -15,16 +15,18 @@ import { onFilterFocusStart, onFilterApplyComplete } from '../filter.bus.js'
 import { formatAge } from '../helpers/format'
 import type { GetScannerResultParams, ScannerResult } from '../test-task-types'
 import {
-  isSubscriptionLockActive,
-  getSubscriptionLockAllowedKeys,
-  onSubscriptionLockChange,
   updatePaneVisibleCount,
   updatePaneRenderedCount,
   registerFastSubscription,
-  registerSlowSubscription,
   deregisterFastSubscription,
+  registerSlowSubscription,
   deregisterSlowSubscription,
   onSubscriptionEvictions,
+} from '../subscription.lock.bus.js'
+import {
+  onSubscriptionLockChange,
+  isSubscriptionLockActive,
+  getSubscriptionLockAllowedKeys,
 } from '../subscription.lock.bus.js'
 
 // Local minimal types mirroring the reducer output
@@ -122,12 +124,6 @@ export default function TokensPane({
   const scrollingRef = useRef<boolean>(false)
   // Track last update timestamps per key and previous value snapshots
   const lastUpdatedRef = useRef<Map<string, number>>(new Map())
-  const prevSnapRef = useRef<
-    Map<
-      string,
-      { price: number; mcap: number; vol: number; buys: number; sells: number; liq: number }
-    >
-  >(new Map())
   // Track previously rendered keys to unsubscribe when rows fall out due to limit/sort
   const prevRenderedKeysRef = useRef<Set<string>>(new Set())
 
@@ -185,7 +181,6 @@ export default function TokensPane({
   // Subscription lock refs
   const lockActiveRef = useRef<boolean>(false)
   const lockAllowedRef = useRef<Set<string>>(new Set())
-  const prevFastBeforeLockRef = useRef<Set<string>>(new Set())
 
   // Allow App to share a single WebSocket but also support direct sends if present on window.
   useEffect(() => {
@@ -313,7 +308,7 @@ export default function TokensPane({
         const dedupedList: unknown[] = []
         for (const it of list as ScannerResult[]) {
           const addr = (it as unknown as { pairAddress?: string }).pairAddress
-          const k = typeof addr === 'string' ? addr.toLowerCase() : ''
+          const k = (addr ?? '').toLowerCase()
           if (k && !seenPairsLower.has(k)) {
             seenPairsLower.add(k)
             dedupedList.push(it)
@@ -385,7 +380,7 @@ export default function TokensPane({
     const listed = Array.isArray(ids) ? ids : []
     const collected: TokenRow[] = []
     for (const id of listed) {
-      const lowerId = typeof id === 'string' ? id.toLowerCase() : String(id).toLowerCase()
+      const lowerId = id.toLowerCase()
       const t = state.byId[id] ?? state.byId[lowerId]
       if (t) collected.push(t)
     }
@@ -401,7 +396,7 @@ export default function TokensPane({
         ? null
         : Math.max(0, cf.maxAgeHours) * 3600_000
     const now = Date.now()
-    const filtered = collected.filter((t) => {
+    const base = collected.filter((t) => {
       if (selectedChains && !selectedChains.has(t.chain)) return false
       if (t.volumeUsd < minVol) return false
       if (t.mcap < minMcap) return false
@@ -417,7 +412,6 @@ export default function TokensPane({
       return true
     })
     // Fallback: if page has no ids yet (e.g., before first WS/REST), show empty until data arrives
-    const base = filtered
     const sorter = (key: SortKey, dir: Dir) => (a: TokenRow, b: TokenRow) => {
       const getVal = (t: TokenRow): number | string => {
         switch (key) {
@@ -454,47 +448,49 @@ export default function TokensPane({
         ? clientFilters.limit
         : Number.POSITIVE_INFINITY
     const cap = Math.min(visibleCount, limit)
-    const out = sorted.slice(0, Number.isFinite(cap) ? cap : visibleCount)
-    return out
+    return sorted.slice(0, Number.isFinite(cap) ? cap : visibleCount)
   }, [state.byId, state.pages, page, sort, clientFilters, visibleCount])
 
-  // Keep a ref of latest rows for late WS attach logic
+  const paneIdRef = useRef<string>('')
   useEffect(() => {
-    rowsRef.current = rows
-    // Update last-updated timestamps by diffing significant fields per key
-    try {
-      const prev = prevSnapRef.current
-      for (const row of rows) {
-        const pair = row.pairAddress
-        const token = row.tokenAddress
-        if (!pair || !token) continue
-        const key = pair + '|' + token + '|' + toChainId(row.chain)
-        const snap = {
-          price: row.priceUsd,
-          mcap: row.mcap,
-          vol: row.volumeUsd,
-          buys: row.transactions.buys,
-          sells: row.transactions.sells,
-          liq: row.liquidity.current,
-        }
-        const old = prev.get(key)
-        if (
-          !old ||
-          old.price !== snap.price ||
-          old.mcap !== snap.mcap ||
-          old.vol !== snap.vol ||
-          old.buys !== snap.buys ||
-          old.sells !== snap.sells ||
-          old.liq !== snap.liq
-        ) {
-          lastUpdatedRef.current.set(key, Date.now())
-          prev.set(key, snap)
+    paneIdRef.current = title
+  }, [title])
+
+  // Track subscription evictions from central limiter and perform WS unsubs
+  useEffect(() => {
+    const off = onSubscriptionEvictions(({ fast, slow }: { fast: string[]; slow: string[] }) => {
+      const ws = wsRef.current
+      if (!ws || ws.readyState !== WebSocket.OPEN) return
+      const drop = [...(fast || []), ...(slow || [])]
+      for (const key of drop) {
+        try {
+          const [pair, token, chain] = key.split('|')
+          ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
+          ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+          // Reflect locally by clearing from slow set and visible set
+          visibleKeysRef.current.delete(key)
+          slowKeysRef.current.delete(key)
+          deregisterFastSubscription(key)
+          deregisterSlowSubscription(key)
+          // Visibility counter decrement
+          try {
+            markHidden(key)
+          } catch {
+            /* no-op */
+          }
+        } catch {
+          /* no-op */
         }
       }
-    } catch {
-      /* no-op */
+    })
+    return () => {
+      try {
+        off()
+      } catch {
+        /* no-op */
+      }
     }
-  }, [rows])
+  }, [])
 
   // Emit per-chain counts of currently rendered rows to parent (for combined counts)
   useEffect(() => {
@@ -635,7 +631,7 @@ export default function TokensPane({
       const dedupedList: unknown[] = []
       for (const it of list as ScannerResult[]) {
         const addr = (it as unknown as { pairAddress?: string }).pairAddress
-        const k = typeof addr === 'string' ? addr.toLowerCase() : ''
+        const k = (addr ?? '').toLowerCase()
         if (k && !seenPairsLower.has(k)) {
           seenPairsLower.add(k)
           dedupedList.push(it)
@@ -764,10 +760,18 @@ export default function TokensPane({
           } catch {
             /* no-op */
           }
+          try {
+            deregisterFastSubscription(key)
+          } catch {
+            /* no-op */
+          }
         }
         slowKeysRef.current.delete(key)
-        deregisterFastSubscription(key)
-        deregisterSlowSubscription(key)
+        try {
+          deregisterSlowSubscription(key)
+        } catch {
+          /* no-op */
+        }
         return
       }
       const fastSet = visibleKeysRef.current
@@ -776,15 +780,24 @@ export default function TokensPane({
       if (visible) {
         // promote to fast (only if this pane wasn't already tracking it)
         slowSet.delete(key)
+        try {
+          deregisterSlowSubscription(key)
+        } catch {
+          /* no-op */
+        }
         if (!fastSet.has(key)) {
           const { prev } = markVisible(key)
           fastSet.add(key)
-          registerFastSubscription(key)
-          // Only send a fast subscription when this pane is the first visible viewer
+          try {
+            registerFastSubscription(key)
+          } catch {
+            /* no-op */
+          }
+          // Only send a normal (viewport) subscription when first viewer
           if (prev === 0 && ws && ws.readyState === WebSocket.OPEN) {
             try {
-              ws.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
-              ws.send(JSON.stringify(buildPairStatsSubscriptionSafe({ pair, token, chain })))
+              ws.send(JSON.stringify(buildPairSubscription({ pair, token, chain })))
+              ws.send(JSON.stringify(buildPairStatsSubscription({ pair, token, chain })))
             } catch (err) {
               console.error(`[TokensPane:${title}] subscribe failed for`, key, err)
             }
@@ -792,33 +805,46 @@ export default function TokensPane({
         }
       } else {
         const wasFast = fastSet.has(key)
-        if (wasFast) fastSet.delete(key)
+        if (wasFast) {
+          fastSet.delete(key)
+          try {
+            deregisterFastSubscription(key)
+          } catch {
+            /* no-op */
+          }
+        }
         if (!slowSet.has(key)) slowSet.add(key)
+        try {
+          registerSlowSubscription(key)
+        } catch {
+          /* no-op */
+        }
         if (wasFast) {
           const { next } = markHidden(key)
-          deregisterFastSubscription(key)
           // Only downgrade to slow if no other pane is still viewing it
           if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
             try {
-              ws.send(JSON.stringify(buildPairSlowSubscriptionSafe({ pair, token, chain })))
-              ws.send(JSON.stringify(buildPairStatsSlowSubscriptionSafe({ pair, token, chain })))
-              registerSlowSubscription(key)
+              ws.send(JSON.stringify(buildPairSlowSubscription({ pair, token, chain })))
+              ws.send(JSON.stringify(buildPairStatsSlowSubscription({ pair, token, chain })))
             } catch (err) {
               console.error(`[TokensPane:${title}] slow-subscribe failed for`, key, err)
             }
-          } else {
-            // Even if another pane viewing, track as slow (shared fast handled elsewhere)
-            registerSlowSubscription(key)
           }
         }
+      }
+      // Update central pane visible count
+      try {
+        updatePaneVisibleCount(paneIdRef.current, visibleKeysRef.current.size)
+      } catch {
+        /* no-op */
       }
     },
     [
       title,
-      buildPairSubscriptionSafe,
-      buildPairStatsSubscriptionSafe,
-      buildPairSlowSubscriptionSafe,
-      buildPairStatsSlowSubscriptionSafe,
+      buildPairSubscription,
+      buildPairStatsSubscription,
+      buildPairSlowSubscription,
+      buildPairStatsSlowSubscription,
     ],
   )
 
@@ -1088,152 +1114,53 @@ export default function TokensPane({
     }
   }, [])
 
+  // Update visible count when sets change frequently (after scroll stop too)
+  // Hook into onScrollStop to set counts after recompute
   useEffect(() => {
-    // Initialize lock state
+    const updateCounts = () => {
+      try {
+        updatePaneVisibleCount(paneIdRef.current, visibleKeysRef.current.size)
+      } catch {
+        /* no-op */
+      }
+    }
+    updateCounts()
+    // Debounced: if visible set changes frequently, re-set count after 300ms
+    const id = setInterval(updateCounts, 300)
+    return () => {
+      clearInterval(id)
+    }
+  }, [title, visibleKeysRef.current])
+
+  // Keep rowsRef in sync with derived rows for visibility handlers
+  useEffect(() => {
+    rowsRef.current = rows
+  }, [rows])
+
+  // React to global subscription lock changes (modal focus)
+  useEffect(() => {
     try {
-      lockActiveRef.current = isSubscriptionLockActive()
+      lockActiveRef.current = !!isSubscriptionLockActive()
       lockAllowedRef.current = new Set(getSubscriptionLockAllowedKeys())
     } catch {
       /* no-op */
     }
-    const off = onSubscriptionLockChange((s: { active: boolean; allowed: Set<string> }) => {
-      lockActiveRef.current = s.active
-      lockAllowedRef.current = new Set(s.allowed)
-      const ws = wsRef.current
-      if (!ws || ws.readyState !== WebSocket.OPEN) return
-      if (s.active) {
-        // Snapshot current fast keys for later restoration
-        prevFastBeforeLockRef.current = new Set(visibleKeysRef.current)
-        // Stop any slow re-sub scheduling while locked
-        if (slowResubIntervalRef.current != null) {
-          try {
-            window.clearInterval(slowResubIntervalRef.current)
-          } catch {
-            /* no-op */
-          }
-          slowResubIntervalRef.current = null
-        }
-        if (slowResubStartTimeoutRef.current != null) {
-          try {
-            window.clearTimeout(slowResubStartTimeoutRef.current)
-          } catch {
-            /* no-op */
-          }
-          slowResubStartTimeoutRef.current = null
-        }
-        slowResubQueueRef.current = []
-        // Unsubscribe every key not allowed
-        const allowed = s.allowed
-        const toDrop: string[] = []
-        for (const key of visibleKeysRef.current) {
-          if (!allowed.has(key)) toDrop.push(key)
-        }
-        for (const key of slowKeysRef.current) {
-          if (!allowed.has(key)) toDrop.push(key)
-        }
-        // Clear tracking for dropped keys
-        for (const key of toDrop) {
-          try {
-            visibleKeysRef.current.delete(key)
-            slowKeysRef.current.delete(key)
-            deregisterFastSubscription(key)
-            deregisterSlowSubscription(key)
-            const { next } = markHidden(key)
-            if (next === 0) {
-              const [pair, token, chain] = key.split('|')
-              ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
-              ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
-            }
-          } catch (err) {
-            console.error('[TokensPane:' + title + '] lock drop failed for', key, err)
-          }
-        }
-      } else {
-        // Lock released: restore prior fast keys (approximate viewport) and re-subscribe
-        try {
-          const restoreKeys: string[] = []
-          for (const key of prevFastBeforeLockRef.current) {
-            // Only restore if row still exists in current dataset
-            const [pair, token, chain] = key.split('|')
-            const exists = rowsRef.current.some(
-              (r) =>
-                r.pairAddress === pair && r.tokenAddress === token && toChainId(r.chain) === chain,
-            )
-            if (exists) restoreKeys.push(key)
-          }
-          prevFastBeforeLockRef.current.clear()
-          for (const key of restoreKeys) {
-            if (visibleKeysRef.current.has(key)) continue
-            const [pair, token, chain] = key.split('|')
-            try {
-              const { prev } = markVisible(key)
-              visibleKeysRef.current.add(key)
-              registerFastSubscription(key)
-              if (prev === 0) {
-                ws.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
-                ws.send(JSON.stringify(buildPairStatsSubscriptionSafe({ pair, token, chain })))
-              }
-            } catch (err) {
-              console.error(`[TokensPane:${title}] lock-release restore fast failed`, key, err)
-            }
-          }
-        } catch {
-          /* no-op */
-        }
+    const off = onSubscriptionLockChange((st: { active: boolean; allowed: Set<string> }) => {
+      try {
+        lockActiveRef.current = !!st.active
+        lockAllowedRef.current = new Set(Array.from(st.allowed))
+      } catch {
+        /* no-op */
       }
     })
     return () => {
-      off()
-    }
-  }, [
-    title,
-    buildPairSubscriptionSafe,
-    buildPairStatsSubscriptionSafe,
-    buildPairUnsubscription,
-    buildPairStatsUnsubscription,
-  ])
-
-  useEffect(() => {
-    const offEvict = onSubscriptionEvictions((payload: { fast: string[]; slow: string[] }) => {
-      const { fast, slow } = payload
-      const ws = wsRef.current
-      if (!ws || ws.readyState !== WebSocket.OPEN) return
-      for (const key of fast) {
-        if (visibleKeysRef.current.has(key)) {
-          visibleKeysRef.current.delete(key)
-          deregisterFastSubscription(key)
-          try {
-            const { next } = markHidden(key)
-            if (next === 0) {
-              const [pair, token, chain] = key.split('|')
-              ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
-              ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
-            }
-          } catch {
-            /* no-op */
-          }
-        }
+      try {
+        off()
+      } catch {
+        /* no-op */
       }
-      for (const key of slow) {
-        if (slowKeysRef.current.has(key)) {
-          slowKeysRef.current.delete(key)
-          deregisterSlowSubscription(key)
-          try {
-            if (getCount(key) === 0) {
-              const [pair, token, chain] = key.split('|')
-              ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
-              ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
-            }
-          } catch {
-            /* no-op */
-          }
-        }
-      }
-    })
-    return () => {
-      offEvict()
     }
-  }, [title])
+  }, [])
 
   return (
     <div>

@@ -42,7 +42,9 @@ async function getCellTextByRowId(
 }
 
 function parseCounter(text: string, kind: Counter): number {
-  const nums = (text || '').match(/\d[\d,]*/g) || []
+  const src = text ?? ''
+  const matches = src.match(/\d[\d,]*/g)
+  const nums: string[] = matches ? Array.from(matches) : []
   let pick: string | undefined
   if (kind === 'buys') pick = nums[0]
   else pick = nums.length >= 2 ? nums[1] : nums[nums.length - 1]
@@ -56,12 +58,12 @@ async function forceResubscribe(page: Page, table: TableName) {
   const container = heading.locator('..').locator('.table-wrap')
   await expect(container).toBeVisible()
   // Tiny scroll jiggle to trigger onScrollStart/onScrollStop cycle
-  await container.evaluate((el) => {
+  await container.evaluate((el: Element) => {
     const c = el as HTMLElement
     c.scrollTop += 50
   })
   await page.waitForTimeout(50)
-  await container.evaluate((el) => {
+  await container.evaluate((el: Element) => {
     const c = el as HTMLElement
     c.scrollTop = 0
   })
@@ -75,21 +77,21 @@ async function forceResubscribeForRow(page: Page, table: TableName, rowId: strin
   await expect(container).toBeVisible()
   await expect(row).toBeVisible()
   // Scroll so the row is out of view
-  await container.evaluate((el, rid) => {
+  await container.evaluate((el: Element, rid: string) => {
     const c = el as HTMLElement
-    const rowEl = c.querySelector(`tbody tr[data-row-id="${rid}"]`) as HTMLElement | null
+    const rowEl = c.querySelector(`tbody tr[data-row-id="${rid}"]`)
     if (!rowEl) return
-    const rowTop = rowEl.offsetTop
+    const rowTop: number = rowEl.offsetTop
     // Scroll just past the row to hide it
-    c.scrollTop = Math.max(0, rowTop + (c.clientHeight || 200))
+    c.scrollTop = Math.max(0, rowTop + (c.clientHeight ?? 200))
   }, rowId)
   await page.waitForTimeout(100)
   // Scroll back to rowTop to reveal again
-  await container.evaluate((el, rid) => {
+  await container.evaluate((el: Element, rid: string) => {
     const c = el as HTMLElement
-    const rowEl = c.querySelector(`tbody tr[data-row-id="${rid}"]`) as HTMLElement | null
+    const rowEl = c.querySelector(`tbody tr[data-row-id="${rid}"]`)
     if (!rowEl) return
-    const rowTop = rowEl.offsetTop
+    const rowTop: number = rowEl.offsetTop
     c.scrollTop = Math.max(0, rowTop - 20)
   }, rowId)
   await page.waitForTimeout(100)
@@ -114,7 +116,9 @@ const cases: { table: TableName; kind: Counter }[] = [
 ]
 
 for (const { table, kind } of cases) {
-  test(`${table}: ${kind.toUpperCase()} increases via WebSocket (same row key)`, async ({ page }) => {
+  test(`${table}: ${kind.toUpperCase()} increases via WebSocket (same row key)`, async ({
+    page,
+  }) => {
     await page.goto('/')
 
     // Select a fast-subscribed row and get its id
@@ -147,4 +151,3 @@ for (const { table, kind } of cases) {
       .toBeGreaterThan(next)
   })
 }
-

@@ -33,6 +33,9 @@ function useDebugMetrics() {
 
 export default function SubscriptionDebugOverlay({ align = 'left' }: { align?: 'left' | 'right' }) {
   const snap = useDebugMetrics()
+  const normalActive = snap.active ? 0 : snap.counts.fast
+  const normalCap = snap.limits.normal
+  const fastModalActive = snap.active ? snap.counts.fast : 0
   return (
     <div
       style={
@@ -60,8 +63,8 @@ export default function SubscriptionDebugOverlay({ align = 'left' }: { align?: '
         {Object.values(snap.renderedPaneCounts).reduce((a, b) => a + b, 0)}
       </div>
       <div>
-        Fast {snap.counts.fast}/{snap.limits.fast} (normal cap {snap.limits.normal}) | Slow{' '}
-        {snap.counts.slow}/{snap.limits.slow}
+        Normal (viewport) {normalActive}/{normalCap} · Fast (Modal x5) {fastModalActive}/
+        {snap.allowed.length} · Slow {snap.counts.slow}/{snap.limits.slow}
       </div>
       <div style={{ marginTop: 4 }}>
         <span style={{ color: '#9ca3af' }}>Fast Keys (first 12):</span>{' '}

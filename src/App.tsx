@@ -78,9 +78,25 @@ function TopBar({
   onThemeChange: (v: ThemeName) => void
   lockActive: boolean
 }) {
-  const [metrics, setMetrics] = useState(() => getSubscriptionMetrics())
+  // Strongly type subscription metrics (JS module → typed alias here)
+  interface SubMetrics {
+    active: boolean
+    allowed: string[]
+    limits: { normal: number; fast: number; slow: number }
+    counts: { fast: number; slow: number }
+    fastKeys: string[]
+    slowKeys: string[]
+    visiblePaneCounts: Record<string, number>
+    renderedPaneCounts: Record<string, number>
+  }
+  const getSubscriptionMetricsTyped = getSubscriptionMetrics as unknown as () => SubMetrics
+  const onSubscriptionMetricsChangeTyped = onSubscriptionMetricsChange as unknown as (
+    cb: (m: SubMetrics) => void,
+  ) => () => void
+
+  const [metrics, setMetrics] = useState<SubMetrics>(() => getSubscriptionMetricsTyped())
   useEffect(() => {
-    const off = onSubscriptionMetricsChange((m: any) => {
+    const off = onSubscriptionMetricsChangeTyped((m) => {
       setMetrics(m)
     })
     return () => {
@@ -105,21 +121,30 @@ function TopBar({
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <h1 style={{ margin: 0 }}>{title}</h1>
         <UpdateRate version={import.meta.env.DEV ? version : undefined} />
-        {/* Subscription metrics: Fast/Slow counts vs limits */}
-        <span
-          style={{
-            fontSize: 11,
-            padding: '2px 6px',
-            border: '1px solid #374151',
-            borderRadius: 12,
-            background: 'rgba(255,255,255,0.06)',
-            letterSpacing: 0.5,
-          }}
-          title={`Fast ${metrics.counts?.fast ?? 0} / ${metrics.limits?.fast ?? 0} (normal cap ${metrics.limits?.normal ?? 0}) | Slow ${metrics.counts?.slow ?? 0} / ${metrics.limits?.slow ?? 0}`}
-        >
-          F {metrics.counts?.fast ?? 0}/{metrics.limits?.fast ?? 0} · S {metrics.counts?.slow ?? 0}/
-          {metrics.limits?.slow ?? 0}
-        </span>
+        {/* Subscription metrics: Normal (viewport), Fast (Modal x5), Slow */}
+        {(() => {
+          const normalActive = lockActive ? 0 : (metrics.counts?.fast ?? 0)
+          const normalCap = metrics.limits?.normal ?? 0
+          const fastModalActive = lockActive ? (metrics.counts?.fast ?? 0) : 0
+          const slowActive = metrics.counts?.slow ?? 0
+          const slowCap = metrics.limits?.slow ?? 0
+          return (
+            <span
+              style={{
+                fontSize: 11,
+                padding: '2px 6px',
+                border: '1px solid #374151',
+                borderRadius: 12,
+                background: 'rgba(255,255,255,0.06)',
+                letterSpacing: 0.5,
+              }}
+              title={`Normal (viewport) ${normalActive}/${normalCap} · Fast (Modal x5) ${fastModalActive}/${metrics.allowed?.length ?? fastModalActive} · Slow ${slowActive}/${slowCap}`}
+            >
+              Normal {normalActive}/{normalCap} · Fast (x5) {fastModalActive}/
+              {metrics.allowed?.length ?? fastModalActive} · Slow {slowActive}/{slowCap}
+            </span>
+          )
+        })()}
         {lockActive && (
           <span
             style={{
@@ -474,7 +499,7 @@ function App() {
             console.log('WS: open', { url })
             // expose WS to panes so they can send pair subscriptions without prop-drilling
             try {
-              ;(window as unknown as { __APP_WS__?: WebSocket }).__APP_WS__ = ws
+              ;(window as unknown as { __APP_WS__ }).__APP_WS__ = ws
             } catch {
               /* no-op */
             }
