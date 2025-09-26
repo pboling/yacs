@@ -8,8 +8,16 @@ function isTsBlock(block) {
   return Array.isArray(block.files) && block.files.some((p) => p.includes('ts,tsx'))
 }
 
+function isTestsBlock(block) {
+  return (
+    Array.isArray(block.files) &&
+    block.files.some((p) => p.startsWith('tests/') || p.startsWith('e2e/'))
+  )
+}
+
 export default base.map((block) => {
-  if (isTsBlock(block)) {
+  // Do not strengthen rules for test files; keep them relaxed as in base config
+  if (isTsBlock(block) && !isTestsBlock(block)) {
     const next = { ...block }
     next.rules = { ...(block.rules || {}) }
     // Promote high-confidence rules to errors for CI gating

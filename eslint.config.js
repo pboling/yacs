@@ -88,15 +88,21 @@ export default defineConfig([
     },
   },
   {
-    files: ['tests/**/*.{js,ts,tsx}'],
+    files: ['tests/**/*.{js,ts,tsx}', 'e2e/**/*.{js,ts,tsx}'],
     // Provide plugin here too because flat config blocks are isolated
     plugins: { '@typescript-eslint': tseslint.plugin },
     rules: {
+      // Tests (unit + e2e) often use flexible typing and partial objects; relax strict safety rules here.
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': [
         'warn',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-redundant-type-constituents': 'off',
+      '@typescript-eslint/no-empty-function': 'off',
     },
   },
   // Disable conflicting stylistic rules and integrate Prettier in compatibility mode

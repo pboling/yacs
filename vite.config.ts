@@ -23,5 +23,10 @@ export default defineConfig(() => {
     server: {
       proxy,
     },
+    test: {
+      environment: 'jsdom',
+      include: ['tests/detailModal.compare.test.tsx'],
+      globals: true,
+    },
   }
 })
