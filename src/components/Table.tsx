@@ -870,8 +870,19 @@ export default function Table({
                         {t.exchange}
                       </div>
                     </td>
-                    <td>
-                      <NumberCell value={t.priceUsd} prefix="$" />
+                    <td style={{ width: 50, minWidth: 50, maxWidth: 50 }}>
+                      <div
+                          title={`$${t.priceUsd}`}
+                          style={{
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              width: '100%',
+                              maxWidth: '100%',
+                          }}
+                      >
+                        <NumberCell value={t.priceUsd} prefix="$" />
+                      </div>
                     </td>
                     <td>
                       <NumberCell

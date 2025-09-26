@@ -73,7 +73,7 @@ export default function AuditIcons({ flags }: { flags: AuditFlags }) {
       className="audit-icons"
       style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(3, auto)',
+        gridTemplateColumns: 'repeat(2, auto)',
         columnGap: 8,
         rowGap: 4,
         alignItems: 'center',
