@@ -10,7 +10,7 @@ async function firstFastRowId(page: Page, table: TableName): Promise<string> {
   await expect(tableEl).toBeVisible()
   const fastRow = tableEl.locator('tbody tr:has([aria-label="Subscribed (fast)"])').first()
   await expect(fastRow).toBeVisible()
-  const rowId = (await fastRow.getAttribute('data-row-id')) || ''
+  const rowId = (await fastRow.getAttribute('data-row-id')) ?? ''
   expect(rowId.length).toBeGreaterThan(0)
   return rowId
 }
@@ -64,7 +64,7 @@ test.describe('DetailModal compare streaming', () => {
     await expect
       .poll(
         async () => {
-          const text = (await compareRateContainer.textContent()) || ''
+          const text = (await compareRateContainer.textContent()) ?? ''
           return parseRate(text)
         },
         { timeout: 30_000, intervals: [200, 500, 1000] },

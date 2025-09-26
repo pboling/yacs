@@ -123,11 +123,11 @@ function TopBar({
         <UpdateRate version={import.meta.env.DEV ? version : undefined} />
         {/* Subscription metrics: Normal (viewport), Fast (Modal x5), Slow */}
         {(() => {
-          const normalActive = lockActive ? 0 : (metrics.counts?.fast ?? 0)
-          const normalCap = metrics.limits?.normal ?? 0
-          const fastModalActive = lockActive ? (metrics.counts?.fast ?? 0) : 0
-          const slowActive = metrics.counts?.slow ?? 0
-          const slowCap = metrics.limits?.slow ?? 0
+          const normalActive = lockActive ? 0 : metrics.counts.fast
+          const normalCap = metrics.limits.normal
+          const fastModalActive = lockActive ? metrics.counts.fast : 0
+          const slowActive = metrics.counts.slow
+          const slowCap = metrics.limits.slow
           return (
             <span
               style={{
@@ -138,10 +138,10 @@ function TopBar({
                 background: 'rgba(255,255,255,0.06)',
                 letterSpacing: 0.5,
               }}
-              title={`Normal (viewport) ${normalActive}/${normalCap} · Fast (Modal x5) ${fastModalActive}/${metrics.allowed?.length ?? fastModalActive} · Slow ${slowActive}/${slowCap}`}
+              title={`Normal (viewport) ${normalActive}/${normalCap} · Fast (Modal x5) ${fastModalActive}/${metrics.allowed.length} · Slow ${slowActive}/${slowCap}`}
             >
               Normal {normalActive}/{normalCap} · Fast (x5) {fastModalActive}/
-              {metrics.allowed?.length ?? fastModalActive} · Slow {slowActive}/{slowCap}
+              {metrics.allowed.length} · Slow {slowActive}/{slowCap}
             </span>
           )
         })()}
@@ -1181,7 +1181,7 @@ function App() {
                 onChange={(e) => {
                   d({
                     type: 'filters/set',
-                    payload: { limit: Math.max(0, Number(e.currentTarget.value || 0)) },
+                    payload: { limit: Math.max(0, Number(e.currentTarget.value)) },
                   } as FiltersAction)
                 }}
               />
@@ -1207,7 +1207,7 @@ function App() {
                 onChange={(e) => {
                   d({
                     type: 'filters/set',
-                    payload: { minVolume: Number(e.currentTarget.value || 0) },
+                    payload: { minVolume: Number(e.currentTarget.value) },
                   } as FiltersAction)
                 }}
               />
@@ -1261,7 +1261,7 @@ function App() {
                 onChange={(e) => {
                   d({
                     type: 'filters/set',
-                    payload: { minMcap: Number(e.currentTarget.value || 0) },
+                    payload: { minMcap: Number(e.currentTarget.value) },
                   } as FiltersAction)
                 }}
               />

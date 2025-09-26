@@ -356,7 +356,7 @@ export default function DetailModal({
         const v = i < vals.length ? vals[i] : vals[vals.length - 1]
         const x = pad + i * xStep
         const y = pad + (height - pad * 2) * (1 - (v - min) / range)
-        pts.push(x + ',' + y)
+        pts.push(`${x},${y}`)
       }
       return 'M ' + pts.join(' L ')
     }
@@ -446,7 +446,7 @@ export default function DetailModal({
   const prevCompareIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (!open) return
-    const cid = compareRow?.id || null
+    const cid = compareRow?.id ?? null
     if (cid && cid !== prevCompareIdRef.current) {
       setHistory2({ price: [], mcap: [], volume: [], buys: [], sells: [], liquidity: [] })
     }
@@ -459,7 +459,8 @@ export default function DetailModal({
     const off = onUpdate((e) => {
       if (e.key !== basePairStatsKey) return
       try {
-        const latest = currentRow ?? getRowById(row!.id)
+        const id = row?.id
+        const latest = currentRow ?? (id ? getRowById(id) : undefined)
         if (!latest) return
         applyBaseSnapshot(latest)
       } catch {
@@ -473,7 +474,7 @@ export default function DetailModal({
         /* no-op */
       }
     }
-  }, [open, basePairStatsKey, currentRow, getRowById, row?.id, applyBaseSnapshot])
+  }, [open, basePairStatsKey, currentRow, getRowById, row, row?.id, applyBaseSnapshot])
 
   // Subscribe to tick key for base (high frequency)
   useEffect(() => {
@@ -481,7 +482,8 @@ export default function DetailModal({
     const off = onUpdate((e) => {
       if (e.key !== baseTickKey) return
       try {
-        const latest = currentRow ?? getRowById(row!.id)
+        const id = row?.id
+        const latest = currentRow ?? (id ? getRowById(id) : undefined)
         if (!latest) return
         applyBaseSnapshot(latest)
       } catch {
@@ -495,7 +497,7 @@ export default function DetailModal({
         /* no-op */
       }
     }
-  }, [open, baseTickKey, currentRow, getRowById, row?.id, applyBaseSnapshot])
+  }, [open, baseTickKey, currentRow, getRowById, row, row?.id, applyBaseSnapshot])
 
   // Hook-driven debounced subscription for compare token
   const {
@@ -570,14 +572,16 @@ export default function DetailModal({
               <UpdateRate
                 title="Live rate"
                 version={undefined}
-                filterKey={[baseTickKey!, basePairStatsKey!].filter(Boolean)}
+                filterKey={[baseTickKey, basePairStatsKey].filter((s): s is string => Boolean(s))}
               />
             )}
             {compareRow?.tokenAddress && (
               <UpdateRate
                 title="Compare rate"
                 version={undefined}
-                filterKey={[compareTickKey!, comparePairStatsKey!].filter(Boolean)}
+                filterKey={[compareTickKey, comparePairStatsKey].filter((s): s is string =>
+                  Boolean(s),
+                )}
               />
             )}
             {compareRow && (
@@ -849,65 +853,60 @@ export default function DetailModal({
                     Differential (Base vs Compare)
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18 }}>
-                    {diffs.map(
-                      (d) =>
-                        d && (
-                          <div key={d.k} style={{ minWidth: 160 }}>
-                            <div style={{ color: palette[d.k] }}>{seriesLabels[d.k]}</div>
-                            <div style={{ fontSize: 12 }}>
-                              {(() => {
-                                if (d.a == null || d.b == null) return '—'
-                                const isCurrency =
-                                  d.k === 'price' || d.k === 'mcap' || d.k === 'liquidity'
-                                const prefixSymbol = isCurrency ? '$' : ''
-                                const fmtBase = (n: number) =>
-                                  d.k === 'price' ? n.toFixed(8) : Math.round(n).toLocaleString()
-                                const delta = d.delta ?? 0
-                                const pct = d.pct
-                                const ratio = d.ratio
-                                return (
-                                  <span>
-                                    <span>
-                                      {prefixSymbol}
-                                      {fmtBase(d.a)} vs {prefixSymbol}
-                                      {fmtBase(d.b)} (
-                                    </span>
+                    {diffs.map((d) => (
+                      <div key={d.k} style={{ minWidth: 160 }}>
+                        <div style={{ color: palette[d.k] }}>{seriesLabels[d.k]}</div>
+                        <div style={{ fontSize: 12 }}>
+                          {(() => {
+                            if (d.a == null || d.b == null) return '—'
+                            const isCurrency =
+                              d.k === 'price' || d.k === 'mcap' || d.k === 'liquidity'
+                            const prefixSymbol = isCurrency ? '$' : ''
+                            const fmtBase = (n: number) =>
+                              d.k === 'price' ? n.toFixed(8) : Math.round(n).toLocaleString()
+                            const delta = d.delta ?? 0
+                            const pct = d.pct
+                            const ratio = d.ratio
+                            return (
+                              <span>
+                                <span>
+                                  {prefixSymbol}
+                                  {fmtBase(d.a)} vs {prefixSymbol}
+                                  {fmtBase(d.b)} (
+                                </span>
+                                <NumberCell
+                                  value={delta}
+                                  noFade
+                                  formatter={(n) => {
+                                    const base =
+                                      d.k === 'price'
+                                        ? n.toFixed(8)
+                                        : Math.round(n).toLocaleString()
+                                    return (n >= 0 ? '+' : '') + base
+                                  }}
+                                />
+                                {pct != null && (
+                                  <>
+                                    <span>, </span>
                                     <NumberCell
-                                      value={delta}
+                                      value={pct}
                                       noFade
-                                      formatter={(n) => {
-                                        const base =
-                                          d.k === 'price'
-                                            ? n.toFixed(8)
-                                            : Math.round(n).toLocaleString()
-                                        return (n >= 0 ? '+' : '') + base
-                                      }}
+                                      formatter={(n) => (n >= 0 ? '+' : '') + n.toFixed(2) + '%'}
                                     />
-                                    {pct != null && (
-                                      <>
-                                        <span>, </span>
-                                        <NumberCell
-                                          value={pct}
-                                          noFade
-                                          formatter={(n) =>
-                                            (n >= 0 ? '+' : '') + n.toFixed(2) + '%'
-                                          }
-                                        />
-                                      </>
-                                    )}
-                                    {ratio != null && (
-                                      <>
-                                        <span> ratio {ratio.toFixed(3)}</span>
-                                      </>
-                                    )}
-                                    <span>)</span>
-                                  </span>
-                                )
-                              })()}
-                            </div>
-                          </div>
-                        ),
-                    )}
+                                  </>
+                                )}
+                                {ratio != null && (
+                                  <>
+                                    <span> ratio {ratio.toFixed(3)}</span>
+                                  </>
+                                )}
+                                <span>)</span>
+                              </span>
+                            )
+                          })()}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                   {compareRow && (
                     <div style={{ marginTop: 12 }}>
@@ -987,13 +986,13 @@ export default function DetailModal({
               Debug updates (raw JSON)
             </div>
             <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>
-              Base tick key: {baseTickKey || '—'} | Base stats key: {basePairStatsKey || '—'} |
+              Base tick key: {baseTickKey ?? '—'} | Base stats key: {basePairStatsKey ?? '—'} |
               Price points: {history.price.length}
               {compareRow && (
                 <>
                   <br />
-                  Compare tick key: {compareTickKey || '—'} | Compare stats key:{' '}
-                  {comparePairStatsKey || '—'} | Price points: {history2.price.length}
+                  Compare tick key: {compareTickKey ?? '—'} | Compare stats key:{' '}
+                  {comparePairStatsKey ?? '—'} | Price points: {history2.price.length}
                 </>
               )}
             </div>

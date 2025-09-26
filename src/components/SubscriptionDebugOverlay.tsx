@@ -68,11 +68,17 @@ export default function SubscriptionDebugOverlay({ align = 'left' }: { align?: '
       </div>
       <div style={{ marginTop: 4 }}>
         <span style={{ color: '#9ca3af' }}>Fast Keys (first 12):</span>{' '}
-        {snap.fastKeys.slice(0, 12).join(', ') || '—'}
+        {(() => {
+          const s = snap.fastKeys.slice(0, 12).join(', ')
+          return s === '' ? '—' : s
+        })()}
       </div>
       <div>
         <span style={{ color: '#9ca3af' }}>Slow Keys (first 12):</span>{' '}
-        {snap.slowKeys.slice(0, 12).join(', ') || '—'}
+        {(() => {
+          const s = snap.slowKeys.slice(0, 12).join(', ')
+          return s === '' ? '—' : s
+        })()}
       </div>
       <div style={{ marginTop: 4 }}>
         <span style={{ color: '#9ca3af' }}>Panes visible:</span>{' '}

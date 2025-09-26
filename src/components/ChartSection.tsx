@@ -1,6 +1,17 @@
 import React, { useEffect } from 'react'
 import NumberCell from './NumberCell'
 
+declare global {
+  interface Window {
+    __chartSectionStylesInjected?: boolean
+  }
+}
+
+const DEFAULT_METRIC_OPTIONS: readonly { key: string; label: string }[] = Object.freeze([
+  { key: 'price', label: 'Price' },
+  { key: 'mcap', label: 'Market Cap' },
+])
+
 export interface ChartSectionProps {
   title: string
   history: Record<string, number[]>
@@ -30,23 +41,20 @@ export const ChartSection: React.FC<ChartSectionProps> = ({
   buildPath,
   showMetricChooser = false,
   onChangeMetric,
-  metricOptions = [
-    { key: 'price', label: 'Price' },
-    { key: 'mcap', label: 'Market Cap' },
-  ],
+  metricOptions = DEFAULT_METRIC_OPTIONS,
   height = 140,
   emptyMessage = 'No data yet',
 }) => {
-  const hasData = seriesKeys.some((k) => (history[k] || []).length > 0)
+  const hasData = seriesKeys.some((k) => (history[k] ?? []).length > 0)
 
   // Inject keyframes once
   useEffect(() => {
     if (typeof document === 'undefined' || typeof window === 'undefined') return
-    if ((window as any).__chartSectionStylesInjected) return
+    if (window.__chartSectionStylesInjected) return
     const style = document.createElement('style')
     style.textContent = `@keyframes chart-skel {0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}`
     document.head.appendChild(style)
-    ;(window as any).__chartSectionStylesInjected = true
+    window.__chartSectionStylesInjected = true
   }, [])
 
   // Only render two spark lines: selected metric (Price or Market Cap) and Liquidity
@@ -55,7 +63,7 @@ export const ChartSection: React.FC<ChartSectionProps> = ({
   )
 
   const latestVal = (k: string): number | string => {
-    const vals = history[k] || []
+    const vals = history[k] ?? []
     return vals.length ? vals[vals.length - 1] : '—'
   }
 
@@ -174,7 +182,7 @@ export const ChartSection: React.FC<ChartSectionProps> = ({
             fill="none"
           />
           {displayedSeriesKeys.map((k) => {
-            const vals = history[k] || []
+            const vals = history[k] ?? []
             const d = buildPath(vals, 600, height)
             if (!d) return null
             return (
@@ -204,7 +212,7 @@ export const ChartSection: React.FC<ChartSectionProps> = ({
         }}
       >
         {focusOrder.map((k) => {
-          const vals = history[k] || []
+          const vals = history[k] ?? []
           const latest = vals.length > 0 ? vals[vals.length - 1] : '—'
           let prefix = ''
           let formatter: ((n: number) => string) | undefined = undefined

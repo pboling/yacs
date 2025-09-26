@@ -20,8 +20,9 @@ async function getFastRowIdAndCellText(
   expect(rowId).toBeTruthy()
   const cell = fastRow.locator(`td:nth-child(${String(nth)})`)
   await expect(cell).toBeVisible()
-  const text = (await cell.textContent())?.trim() ?? ''
-  const rid = rowId ?? ''
+  const raw = await cell.textContent()
+  const text = (raw == null ? '' : raw).trim()
+  const rid = rowId ? rowId : ''
   expect(rid.length).toBeGreaterThan(0)
   return { rowId: rid, text }
 }
@@ -38,19 +39,19 @@ async function getCellTextByRowId(
   await expect(row).toBeVisible()
   const cell = row.locator(`td:nth-child(${String(nth)})`)
   await expect(cell).toBeVisible()
-  return (await cell.textContent())?.trim() ?? ''
+  const raw = await cell.textContent()
+  return (raw == null ? '' : raw).trim()
 }
 
 function parseCounter(text: string, kind: Counter): number {
-  const src = text ?? ''
-  const matches = src.match(/\d[\d,]*/g)
-  const nums: string[] = matches ? Array.from(matches) : []
+  const matches = text.match(/\d[\d,]*/g)
+  const nums: string[] = matches ? matches.slice() : []
   let pick: string | undefined
   if (kind === 'buys') pick = nums[0]
   else pick = nums.length >= 2 ? nums[1] : nums[nums.length - 1]
   if (!pick) return 0
   const n = Number(pick.replace(/,/g, ''))
-  return Number.isFinite(n) ? n : 0
+  return isFinite(n) ? n : 0
 }
 
 async function forceResubscribe(page: Page, table: TableName) {
@@ -83,7 +84,7 @@ async function forceResubscribeForRow(page: Page, table: TableName, rowId: strin
     if (!rowEl) return
     const rowTop: number = rowEl.offsetTop
     // Scroll just past the row to hide it
-    c.scrollTop = Math.max(0, rowTop + (c.clientHeight ?? 200))
+    c.scrollTop = Math.max(0, rowTop + c.clientHeight)
   }, rowId)
   await page.waitForTimeout(100)
   // Scroll back to rowTop to reveal again
