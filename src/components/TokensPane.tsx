@@ -9,6 +9,7 @@ import {
 } from '../ws.mapper.js'
 import { computePairPayloads } from '../ws.subs.js'
 import { markVisible, markHidden, getCount } from '../visibility.bus.js'
+import { SubscriptionQueue } from '../subscription.queue'
 import { formatAge } from '../helpers/format'
 import type { GetScannerResultParams, ScannerResult } from '../test-task-types'
 import { toChainId } from '../utils/chain'
@@ -20,26 +21,8 @@ import {
   getSubscriptionLockAllowedKeys,
 } from '../subscription.lock.bus.js'
 
-// Local minimal types mirroring the reducer output
-interface TokenRow {
-  id: string
-  tokenName: string
-  tokenSymbol: string
-  chain: string
-  exchange: string
-  priceUsd: number
-  mcap: number
-  volumeUsd: number
-  priceChangePcs: { '5m': number; '1h': number; '6h': number; '24h': number }
-  tokenCreatedTimestamp: Date
-  transactions: { buys: number; sells: number }
-  liquidity: { current: number; changePc: number }
-  audit?: { contractVerified?: boolean; honeypot?: boolean; freezable?: boolean }
-  security?: { renounced?: boolean; locked?: boolean; burned?: boolean }
-  // Optional fields present in reducer mapping; used to form WS subscription payloads when rows render
-  pairAddress?: string
-  tokenAddress?: string
-}
+// Use shared Token type
+import type { Token as TokenRow } from '../models/Token'
 
 // Action aliases to satisfy TS strictly
 interface ScannerPairsAction {
@@ -314,6 +297,10 @@ export default function TokensPane({
         // Update local ids for this pane only
         const payloads = computePairPayloadsSafe(dedupedList)
         payloadsRef.current = payloads
+                try {
+                  const keys = payloads.map((p) => buildPairKey(p.pair, p.token, p.chain))
+                  SubscriptionQueue.updateUniverse(keys, wsRef.current ?? null)
+                } catch {}
         // Deduplicate pair ids for this pane to avoid duplicate row keys (computePairPayloads emits chain variants)
         const seenPairs = new Set<string>()
         const localIds: string[] = []
@@ -714,6 +701,7 @@ export default function TokensPane({
         if (!set.has(key)) {
           const { prev } = markVisible(key)
           set.add(key)
+          try { SubscriptionQueue.setVisible(key, true, ws) } catch {}
           if (prev === 0 && ws && ws.readyState === WebSocket.OPEN) {
             try {
               sendSubscribe(ws, { pair, token, chain })
@@ -724,6 +712,7 @@ export default function TokensPane({
         if (set.has(key)) {
           set.delete(key)
           const { next } = markHidden(key)
+          try { SubscriptionQueue.setVisible(key, false, ws) } catch {}
           if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
             try {
               sendUnsubscribe(ws, { pair, token, chain })
@@ -766,6 +755,41 @@ export default function TokensPane({
   useEffect(() => {
     rowsRef.current = rows
   }, [rows])
+
+  // Keep subscription queue universe in sync with currently loaded/filtered rows
+  useEffect(() => {
+    try {
+      const keys: string[] = []
+      for (const row of rows) {
+        const pair = row.pairAddress ?? ''
+        const tokenAddr = (row.tokenAddress ?? '').toLowerCase()
+        if (!pair || !tokenAddr) continue
+        const id = toChainId(row.chain)
+        const idNum = Number(id)
+        const chainName = idNum === 1 ? 'ETH' : idNum === 56 ? 'BSC' : idNum === 8453 ? 'BASE' : idNum === 900 ? 'SOL' : id
+        keys.push(buildPairKey(pair, tokenAddr, id))
+        keys.push(buildPairKey(pair, tokenAddr, chainName))
+      }
+      SubscriptionQueue.updateUniverse(keys, wsRef.current ?? null)
+    } catch {}
+  }, [rows])
+
+  // Periodic tick for inactive rolling subscriptions
+  useEffect(() => {
+    let timer: number | null = null
+    const run = () => {
+      try {
+        SubscriptionQueue.tick(wsRef.current ?? null)
+      } catch {}
+      timer = window.setTimeout(run, 2000)
+    }
+    run()
+    return () => {
+      if (timer != null) {
+        try { window.clearTimeout(timer) } catch {}
+      }
+    }
+  }, [])
 
   // React to global subscription lock changes (modal focus)
   useEffect(() => {
@@ -820,6 +844,7 @@ export default function TokensPane({
               const [pair, token, chain] = key.split('|')
               try {
                 const { next } = markHidden(key)
+                try { SubscriptionQueue.setVisible(key, false, ws) } catch {}
                 if (next === 0) {
                   sendUnsubscribe(ws, { pair, token, chain })
                 }
@@ -839,6 +864,20 @@ export default function TokensPane({
             // Re-enable
             set.delete(dKey)
             persistDisabled()
+            try {
+              const ws = wsRef.current
+              const pair = row.pairAddress ?? ''
+              const tokenAddr = (row.tokenAddress ?? '').toLowerCase()
+              const id = toChainId(row.chain)
+              const idNum = Number(id)
+              const chainName = idNum === 1 ? 'ETH' : idNum === 56 ? 'BSC' : idNum === 8453 ? 'BASE' : idNum === 900 ? 'SOL' : id
+              if (pair && tokenAddr) {
+                const keyNum = buildPairKey(pair, tokenAddr, id)
+                const keyName = buildPairKey(pair, tokenAddr, chainName)
+                try { SubscriptionQueue.setIgnored(keyNum, false, ws) } catch {}
+                try { SubscriptionQueue.setIgnored(keyName, false, ws) } catch {}
+              }
+            } catch {}
             return
           }
           // Disable: add to set and unsubscribe any active subscriptions for this token
@@ -859,12 +898,27 @@ export default function TokensPane({
               visibleKeysRef.current.delete(key)
               const [pair, token, chain] = key.split('|')
               const { next } = markHidden(key)
+              try { SubscriptionQueue.setVisible(key, false, ws) } catch {}
               if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
                 try {
                   sendUnsubscribe(ws, { pair, token, chain })
                 } catch {}
               }
             }
+            // Mark this row's keys as ignored (both chain numeric and name variants)
+            try {
+              const pair = row.pairAddress ?? ''
+              const tokenAddr = (row.tokenAddress ?? '').toLowerCase()
+              const id = toChainId(row.chain)
+              const idNum = Number(id)
+              const chainName = idNum === 1 ? 'ETH' : idNum === 56 ? 'BSC' : idNum === 8453 ? 'BASE' : idNum === 900 ? 'SOL' : id
+              if (pair && tokenAddr) {
+                const keyNum = buildPairKey(pair, tokenAddr, id)
+                const keyName = buildPairKey(pair, tokenAddr, chainName)
+                try { SubscriptionQueue.setIgnored(keyNum, true, ws) } catch {}
+                try { SubscriptionQueue.setIgnored(keyName, true, ws) } catch {}
+              }
+            } catch {}
           } catch {
             /* no-op */
           }
@@ -917,6 +971,7 @@ export default function TokensPane({
               const [pair, token, chain] = key.split('|')
               try {
                 const { next } = markHidden(key)
+                try { SubscriptionQueue.setVisible(key, false, ws) } catch {}
                 if (next === 0) {
                   sendUnsubscribe(ws, { pair, token, chain })
                 }
@@ -934,6 +989,7 @@ export default function TokensPane({
               const [pair, token, chain] = key.split('|')
               try {
                 const { prev } = markVisible(key)
+                try { SubscriptionQueue.setVisible(key, true, ws) } catch {}
                 if (prev === 0) {
                   sendSubscribe(ws, { pair, token, chain })
                 }

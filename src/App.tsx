@@ -171,23 +171,7 @@ function TopBar({
 }
 
 // Minimal row type for table consumption
-interface TokenRow {
-  id: string
-  tokenName: string
-  tokenSymbol: string
-  chain: string
-  exchange: string
-  priceUsd: number
-  mcap: number
-  volumeUsd: number
-  priceChangePcs: { '5m': number; '1h': number; '6h': number; '24h': number }
-  tokenCreatedTimestamp: Date
-  transactions: { buys: number; sells: number }
-  liquidity: { current: number; changePc: number }
-  // Optional addresses used for WS correlation
-  tokenAddress?: string
-  pairAddress?: string
-}
+import type { Token as TokenRow } from './models/Token'
 
 type SortKey =
   | 'tokenName'

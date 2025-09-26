@@ -19,37 +19,8 @@ function findLastIndexSafe<T>(arr: T[], predicate: (v: T) => boolean): number {
   return -1
 }
 
-// Local minimal types to avoid circular deps with App
-interface TokenRow {
-  id: string
-  tokenName: string
-  tokenSymbol: string
-  chain: string
-  exchange: string
-  priceUsd: number
-  mcap: number
-  volumeUsd: number
-  priceChangePcs: { '5m': number; '1h': number; '6h': number; '24h': number }
-  tokenCreatedTimestamp: Date
-  transactions: { buys: number; sells: number }
-  liquidity: { current: number; changePc: number }
-  audit?: {
-    contractVerified?: boolean
-    freezable?: boolean
-    honeypot?: boolean
-    linkDiscord?: string
-    linkTelegram?: string
-    linkTwitter?: string
-    linkWebsite?: string
-  }
-  security?: { renounced?: boolean; locked?: boolean; burned?: boolean }
-  // Burn-related fields
-  totalSupply?: number
-  burnedSupply?: number
-  percentBurned?: number
-  deadAddress?: string
-  ownerAddress?: string
-}
+// Shared Token type
+import type { Token as TokenRow } from '../models/Token'
 
 type SortKey =
   | 'tokenName'
