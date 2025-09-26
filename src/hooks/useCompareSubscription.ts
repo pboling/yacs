@@ -21,7 +21,7 @@ interface UseCompareSubscriptionParams {
   allRows: MinimalCompareRow[]
   toChainId: (c: string | number | undefined) => string
   applyCompareSnapshot: (latestId: string) => void
-  getRowById: (id: string) => any
+  getRowById: (id: string) => MinimalCompareRow | undefined
   hasSeedData: boolean
   debounceMs?: number
 }
@@ -68,7 +68,8 @@ export function useCompareSubscription({
   // Resolve websocket reference (if already opened by App)
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      wsRef.current = (window as any).__APP_WS__ as WebSocket | undefined
+      type AppWindow = Window & { __APP_WS__?: WebSocket }
+      wsRef.current = (window as AppWindow).__APP_WS__
     }
   }, [])
 
@@ -133,7 +134,7 @@ export function useCompareSubscription({
 
     if (!open) {
       unsubscribe()
-      return () => {}
+      return
     }
 
     if (!canLiveStream || !compareRow) {
@@ -168,7 +169,7 @@ export function useCompareSubscription({
         unsubscribe()
         if (compareRow.pairAddress && compareRow.tokenAddress) {
           abortRef.current = new AbortController()
-          const variants = new Set<string>([String(compareRow.chain), toChainId(compareRow.chain)])
+          const variants = new Set<string>([compareRow.chain, toChainId(compareRow.chain)])
           for (const chainVariant of variants) {
             if (abortRef.current.signal.aborted) break
             try {
@@ -226,9 +227,7 @@ export function useCompareSubscription({
       }
       // We intentionally do NOT unsubscribe here immediately when compare changes;
       // unsubscribe happens right before the next subscription inside doSubscribe to minimize churn.
-      if (!open) {
-        unsubscribe()
-      }
+      unsubscribe()
     }
   }, [open, compareRow, compareRow?.id, canLiveStream, hasSeedData, debounceMs, allRows, toChainId])
 
@@ -236,7 +235,7 @@ export function useCompareSubscription({
   useEffect(() => {
     if (!open || !compareRow || !canLiveStream) return
     const chainId = toChainId(compareRow.chain)
-    const chainName = String(compareRow.chain)
+    const chainName = compareRow.chain
     const pairStatsKeyNumeric =
       compareRow.pairAddress && compareRow.tokenAddress
         ? `${compareRow.pairAddress}|${compareRow.tokenAddress}|${chainId}`
