@@ -1,18 +1,20 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Sparkline from './Sparkline'
 import { onUpdate } from '../updates.bus'
 
-export default function UpdateRate({ filterKey, version, width = 120, height = 24, title }: { filterKey?: string | null; version?: number; width?: number; height?: number; title?: string }) {
+export default function UpdateRate({ filterKey, version, width = 120, height = 24, title }: { filterKey?: string | string[] | null; version?: number; width?: number; height?: number; title?: string }) {
     const [series, setSeries] = useState<number[]>([])
     const counterRef = useRef(0)
 
+    const keysArray = Array.isArray(filterKey) ? filterKey.filter(Boolean) : (filterKey ? [filterKey] : [])
+
     useEffect(() => {
         const off = onUpdate((e) => {
-            if (filterKey && e.key !== filterKey) return
+            if (keysArray.length > 0 && !keysArray.includes(e.key)) return
             counterRef.current += 1
         })
         return () => { off() }
-    }, [filterKey])
+    }, [keysArray.join('|')])
 
     const [avgRate, setAvgRate] = useState(0)
 

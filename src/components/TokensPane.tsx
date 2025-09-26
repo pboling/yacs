@@ -7,6 +7,7 @@ import { markVisible, markHidden, getCount } from '../visibility.bus.js'
 import { onFilterFocusStart, onFilterApplyComplete } from '../filter.bus.js'
 import { formatAge } from '../helpers/format'
 import type { GetScannerResultParams, ScannerResult } from '../test-task-types'
+import { isSubscriptionLockActive, getSubscriptionLockAllowedKeys, onSubscriptionLockChange } from '../subscription.lock.bus.js'
 
 // Local minimal types mirroring the reducer output
 interface TokenRow {
@@ -114,6 +115,10 @@ export default function TokensPane({
     const slowResubIntervalRef = useRef<number | null>(null)
     // Start-delay timer for slow re-subscriptions after scroll stop (debounce rapid stop-starts)
     const slowResubStartTimeoutRef = useRef<number | null>(null)
+    // Subscription lock refs
+    const lockActiveRef = useRef<boolean>(false)
+    const lockAllowedRef = useRef<Set<string>>(new Set())
+    const prevFastBeforeLockRef = useRef<Set<string>>(new Set())
 
     // Allow App to share a single WebSocket but also support direct sends if present on window.
     useEffect(() => {
@@ -533,6 +538,15 @@ export default function TokensPane({
         if (!pair || !token) return
         const chain = toChainId(row.chain)
         const key = pair + '|' + token + '|' + chain
+        // If subscription lock is active and this key isn't allowed, force unsubscribe state
+        if (lockActiveRef.current && !lockAllowedRef.current.has(key)) {
+            // Ensure we are not tracking it
+            if (visibleKeysRef.current.delete(key)) {
+                try { markHidden(key) } catch { /* no-op */ }
+            }
+            slowKeysRef.current.delete(key)
+            return
+        }
         const fastSet = visibleKeysRef.current
         const slowSet = slowKeysRef.current
         const ws = wsRef.current
@@ -786,6 +800,85 @@ export default function TokensPane({
         }
     }, [])
 
+    useEffect(() => {
+        // Initialize lock state
+        try {
+            lockActiveRef.current = isSubscriptionLockActive()
+            lockAllowedRef.current = new Set(getSubscriptionLockAllowedKeys())
+        } catch { /* no-op */ }
+        const off = onSubscriptionLockChange((s: { active: boolean; allowed: Set<string> }) => {
+            lockActiveRef.current = s.active
+            lockAllowedRef.current = new Set(s.allowed)
+            const ws = wsRef.current
+            if (!ws || ws.readyState !== WebSocket.OPEN) return
+            if (s.active) {
+                // Snapshot current fast keys for later restoration
+                prevFastBeforeLockRef.current = new Set(visibleKeysRef.current)
+                // Stop any slow re-sub scheduling while locked
+                if (slowResubIntervalRef.current != null) {
+                    try { window.clearInterval(slowResubIntervalRef.current) } catch { /* no-op */ }
+                    slowResubIntervalRef.current = null
+                }
+                if (slowResubStartTimeoutRef.current != null) {
+                    try { window.clearTimeout(slowResubStartTimeoutRef.current) } catch { /* no-op */ }
+                    slowResubStartTimeoutRef.current = null
+                }
+                slowResubQueueRef.current = []
+                // Unsubscribe every key not allowed
+                const allowed = s.allowed
+                const toDrop: string[] = []
+                for (const key of visibleKeysRef.current) {
+                    if (!allowed.has(key)) toDrop.push(key)
+                }
+                for (const key of slowKeysRef.current) {
+                    if (!allowed.has(key)) toDrop.push(key)
+                }
+                // Clear tracking for dropped keys
+                for (const key of toDrop) {
+                    try {
+                        visibleKeysRef.current.delete(key)
+                        slowKeysRef.current.delete(key)
+                        const { next } = markHidden(key)
+                        if (next === 0) {
+                            const [pair, token, chain] = key.split('|')
+                            ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
+                            ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+                        }
+                    } catch (err) {
+                        console.error('[TokensPane:' + title + '] lock drop failed for', key, err)
+                    }
+                }
+            } else {
+                // Lock released: restore prior fast keys (approximate viewport) and re-subscribe
+                try {
+                    const restoreKeys: string[] = []
+                    for (const key of prevFastBeforeLockRef.current) {
+                        // Only restore if row still exists in current dataset
+                        const [pair, token, chain] = key.split('|')
+                        const exists = rowsRef.current.some(r => r.pairAddress === pair && r.tokenAddress === token && toChainId(r.chain) === chain)
+                        if (exists) restoreKeys.push(key)
+                    }
+                    prevFastBeforeLockRef.current.clear()
+                    for (const key of restoreKeys) {
+                        if (visibleKeysRef.current.has(key)) continue
+                        const [pair, token, chain] = key.split('|')
+                        try {
+                            const { prev } = markVisible(key)
+                            visibleKeysRef.current.add(key)
+                            if (prev === 0) {
+                                ws.send(JSON.stringify(buildPairSubscriptionSafe({ pair, token, chain })))
+                                ws.send(JSON.stringify(buildPairStatsSubscriptionSafe({ pair, token, chain })))
+                            }
+                        } catch (err) {
+                            console.error(`[TokensPane:${title}] lock-release restore fast failed`, key, err)
+                        }
+                    }
+                } catch { /* no-op */ }
+            }
+        })
+        return () => { off() }
+    }, [title, buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, buildPairUnsubscription, buildPairStatsUnsubscription])
+
     return (
         <div>
             <Table
@@ -848,6 +941,9 @@ export default function TokensPane({
                     const token = row.tokenAddress ?? ''
                     if (!pair || !token) return undefined
                     const key = pair + '|' + token + '|' + toChainId(row.chain)
+                    if (lockActiveRef.current && !lockAllowedRef.current.has(key)) {
+                        return { state: 'unsubscribed', tooltip: 'Temporarily unsubscribed (modal focus)' }
+                    }
                     const ts = lastUpdatedRef.current.get(key)
                     const tooltip = ts ? 'Data Age: ' + formatAge(ts) : 'No updates yet'
                     if (scrollingRef.current) return { state: 'unsubscribed', tooltip }

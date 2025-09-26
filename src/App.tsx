@@ -30,6 +30,8 @@ import { emitFilterFocusStart, emitFilterApplyComplete } from './filter.bus.js'
 import { fetchScanner } from './scanner.client.js'
 import { getCount } from './visibility.bus.js'
 import { emitUpdate } from './updates.bus'
+import { engageSubscriptionLock, releaseSubscriptionLock } from './subscription.lock.bus.js'
+import { onSubscriptionLockChange, isSubscriptionLockActive } from './subscription.lock.bus.js'
 
 // Theme allow-list and cookie helpers
 const THEME_ALLOW = ['cherry-sour', 'rocket-lake', 'legendary'] as const
@@ -48,17 +50,21 @@ function writeThemeCookie(v: ThemeName) {
 }
 
 import UpdateRate from './components/UpdateRate'
-function TopBar({ title, version, theme, onThemeChange }: {
+function TopBar({ title, version, theme, onThemeChange, lockActive }: {
     title: string
     version: number
     theme: ThemeName
     onThemeChange: (v: ThemeName) => void
+    lockActive: boolean
 }) {
     return (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <h1 style={{ margin: 0 }}>{title}</h1>
                 <UpdateRate version={import.meta.env.DEV ? version : undefined} />
+                {lockActive && (
+                    <span style={{ fontSize: 11, padding: '2px 6px', border: '1px solid #4b5563', borderRadius: 12, background: 'rgba(255,255,255,0.06)', letterSpacing: 0.5 }} title="Subscription lock active (modal focus)">Locked</span>
+                )}
             </div>
             <label className="muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                 Theme
@@ -379,11 +385,10 @@ function App() {
                                 if (event === 'tick') {
                                     const dd = data as { pair?: { pair?: string; token?: string; chain?: string } }
                                     const p = (dd as { pair?: { pair?: string; token?: string; chain?: string } }).pair ?? {}
-                                    const pair = p.pair ?? ''
                                     const token = p.token ?? ''
                                     const chain = p.chain ?? ''
-                                    if (pair && token && chain) {
-                                        const key = pair + '|' + token + '|' + chain
+                                    if (token && chain) {
+                                        const key = token + '|' + chain
                                         // Emit per-key update for subscribers (modal, topbar, etc.)
                                         try { emitUpdate({ key, type: 'tick', data }) } catch { /* no-op */ }
                                         if (getCount(key) > 0) {
@@ -610,6 +615,15 @@ function App() {
 
     // Modal state & helpers
     const [detailRow, setDetailRow] = useState<TokenRow | null>(null)
+    const [lockActive, setLockActive] = useState<boolean>(false)
+    useEffect(() => {
+        try {
+            setLockActive(isSubscriptionLockActive())
+        } catch { /* no-op */ }
+        const off = onSubscriptionLockChange((s: { active: boolean }) => { setLockActive(s.active) })
+        return () => { off() }
+    }, [])
+
     const toChainId = (c: string | number | undefined): string => {
         if (c == null) return '1'
         const n = typeof c === 'number' ? c : Number(c)
@@ -637,6 +651,17 @@ function App() {
     const openDetails = (row: TokenRow) => {
         setDetailRow(row)
         try { emitFilterFocusStart() } catch { /* no-op */ }
+        // Engage global subscription lock allowing only this row's key
+        try {
+            const pair = row.pairAddress ?? ''
+            const token = row.tokenAddress ?? ''
+            if (pair && token) {
+                const chain = toChainId(row.chain)
+                engageSubscriptionLock(pair + '|' + token + '|' + chain)
+            } else {
+                engageSubscriptionLock()
+            }
+        } catch { /* no-op */ }
         // Cancel current subs and switch to 5x for this row
         const pair = row.pairAddress ?? ''
         const token = row.tokenAddress ?? ''
@@ -653,6 +678,7 @@ function App() {
         const row = detailRow
         setDetailRow(null)
         try { emitFilterApplyComplete() } catch { /* no-op */ }
+        try { releaseSubscriptionLock() } catch { /* no-op */ }
         if (row) {
             const pair = row.pairAddress ?? ''
             const token = row.tokenAddress ?? ''
@@ -677,12 +703,13 @@ function App() {
                 </div>
             )}
         <div style={{padding: '16px 16px 16px 10px'}}>
-            <DetailModal open={!!detailRow} row={detailRow} currentRow={detailRow ? (getRowById(detailRow.id) ?? detailRow) : null} onClose={closeDetails} getRowById={getRowById} />
+            <DetailModal open={!!detailRow} row={detailRow} currentRow={detailRow ? (getRowById(detailRow.id) ?? detailRow) : null} onClose={closeDetails} getRowById={getRowById} allRows={Object.values((state as unknown as { byId: Record<string, TokenRow> }).byId)} />
             <TopBar
                 title="Dexcelerate Scanner"
                 version={(state as unknown as { version?: number }).version ?? 0}
                 theme={theme}
                 onThemeChange={(v) => { setTheme(v) }}
+                lockActive={lockActive}
             />
             {/* Filters Bar */}
             <div className="filters">

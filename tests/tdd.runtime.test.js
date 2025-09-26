@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { calcMarketCapFromResponse, mapScannerResultToToken, applyTickToToken } from './tdd.runtime.js'
+import { calcMarketCapFromResponse, mapScannerResultToToken, applyTickToToken } from '../src/tdd.runtime.js'
 
 function baseScanner(overrides = {}) {
   return {

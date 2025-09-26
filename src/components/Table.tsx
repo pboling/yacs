@@ -2,6 +2,7 @@ import NumberCell from './NumberCell'
 import AuditIcons from './AuditIcons'
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { Globe, MessageCircle, Send, ExternalLink, Eye, PauseCircle, Timer, Snail, ChartNoAxesCombined } from 'lucide-react'
+import { BurnDetailsTooltip } from './BurnDetailsTooltip'
 
 // Typed helper to find the last index matching a predicate (avoids using Array.prototype.findLastIndex for broader TS lib support)
 function findLastIndexSafe<T>(arr: T[], predicate: (v: T) => boolean): number {
@@ -27,6 +28,12 @@ interface TokenRow {
     liquidity: { current: number; changePc: number }
     audit?: { contractVerified?: boolean; freezable?: boolean; honeypot?: boolean; linkDiscord?: string; linkTelegram?: string; linkTwitter?: string; linkWebsite?: string }
     security?: { renounced?: boolean; locked?: boolean; burned?: boolean }
+    // Burn-related fields
+    totalSupply?: number
+    burnedSupply?: number
+    percentBurned?: number
+    deadAddress?: string
+    ownerAddress?: string
 }
 
 type SortKey = 'tokenName' | 'exchange' | 'priceUsd' | 'mcap' | 'volumeUsd' | 'age' | 'tx' | 'liquidity'
@@ -35,7 +42,6 @@ type SortKey = 'tokenName' | 'exchange' | 'priceUsd' | 'mcap' | 'volumeUsd' | 'a
 import { formatAge } from '../helpers/format'
 
 function ellipsed(input: string, length = 5) {
-    if (typeof input !== 'string') return ''
     if (length <= 0) return ''
     if (input.length <= length) return input
     // Use a single Unicode ellipsis character for compact display
@@ -407,6 +413,9 @@ export default function Table({
         try { obs?.observe(el) } catch { /* ignore observe errors */ }
     }
 
+    // State for burn tooltip hover
+    const [showBurnTooltipIdx, setShowBurnTooltipIdx] = useState<number | null>(null)
+
     return (
         <section>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
@@ -587,6 +596,29 @@ export default function Table({
                                             burned: t.security?.burned,
                                             honeypot: t.audit?.honeypot,
                                         }} />
+                                        {t.security?.burned !== undefined && (
+                                          <span style={{ position: 'relative', marginLeft: 4 }}>
+                                            <span
+                                              onMouseEnter={() => { setShowBurnTooltipIdx(idx); }}
+                                              onMouseLeave={() => { setShowBurnTooltipIdx(null); }}
+                                              style={{ display: 'inline-block', cursor: 'pointer' }}
+                                            >
+                                              {/* Burned icon overlay for tooltip trigger */}
+                                            </span>
+                                            {showBurnTooltipIdx === idx && (
+                                              <div style={{ position: 'absolute', top: 22, left: 0, zIndex: 10000 }}>
+                                                <BurnDetailsTooltip
+                                                  totalSupply={t.totalSupply}
+                                                  burnedSupply={t.burnedSupply}
+                                                  percentBurned={t.percentBurned}
+                                                  deadAddress={t.deadAddress}
+                                                  ownerAddress={t.ownerAddress}
+                                                  burnedStatus={t.security.burned}
+                                                />
+                                              </div>
+                                            )}
+                                          </span>
+                                        )}
                                     </td>
                                 </tr>
                             )

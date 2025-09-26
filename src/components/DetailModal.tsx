@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
-import AuditIcons from './AuditIcons'
-import NumberCell from './NumberCell'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import UpdateRate from './UpdateRate'
 import { onUpdate } from '../updates.bus'
+import { engageSubscriptionLock } from '../subscription.lock.bus.js'
+import ChartSection from './ChartSection'
+import NumberCell from './NumberCell'
+import { buildPairSubscription, buildPairStatsSubscription, buildPairUnsubscription, buildPairStatsUnsubscription } from '../ws.mapper.js'
 
 export interface DetailModalRow {
   id: string
@@ -22,6 +24,12 @@ export interface DetailModalRow {
   // Optional addresses to build WS correlation key for update-rate tracking
   tokenAddress?: string
   pairAddress?: string
+  // Burn-related fields
+  totalSupply?: number
+  burnedSupply?: number
+  percentBurned?: number
+  deadAddress?: string
+  ownerAddress?: string
 }
 
 export default function DetailModal({
@@ -30,6 +38,7 @@ export default function DetailModal({
   currentRow,
   onClose,
   getRowById,
+  allRows,
 }: {
   open: boolean
   row: DetailModalRow | null
@@ -37,8 +46,22 @@ export default function DetailModal({
   onClose: () => void
   // returns the latest snapshot for the id (used to build in-modal history)
   getRowById: (id: string) => DetailModalRow | undefined
+  allRows: DetailModalRow[]
 }) {
   const wrapperRef = useRef<HTMLDivElement | null>(null)
+
+  // Added locally (was referenced elsewhere) – normalize chain ids
+  const toChainId = (c: string | number | undefined): string => {
+    if (c == null) return '1'
+    const n = typeof c === 'number' ? c : Number(c)
+    if (Number.isFinite(n)) return String(n)
+    const s = String(c).toUpperCase()
+    if (s === 'ETH') return '1'
+    if (s === 'BSC') return '56'
+    if (s === 'BASE') return '8453'
+    if (s === 'SOL') return '900'
+    return '1'
+  }
 
   // Utility to check for debug=true in the URL
   function isDebugEnabled() {
@@ -57,91 +80,128 @@ export default function DetailModal({
 
   // Build simple in-memory history while modal is open
   type SeriesKey = 'price' | 'mcap' | 'volume' | 'buys' | 'sells' | 'liquidity'
-  const [history, setHistory] = useState<Record<SeriesKey, number[]>>({ price: [], mcap: [], volume: [], buys: [], sells: [], liquidity: [] })
+  // Added constant lists / labels (were previously implicit)
+  const seriesKeys: SeriesKey[] = ['price', 'mcap', 'volume', 'buys', 'sells', 'liquidity']
+  const seriesLabels: Record<SeriesKey, string> = {
+    price: 'Price',
+    mcap: 'Market Cap',
+    volume: 'Volume',
+    buys: 'Buys',
+    sells: 'Sells',
+    liquidity: 'Liquidity'
+  }
 
-  // Reset series when a new row opens
+  const [history, setHistory] = useState<Record<SeriesKey, number[]>>({ price: [], mcap: [], volume: [], buys: [], sells: [], liquidity: [] })
+  const [history2, setHistory2] = useState<Record<SeriesKey, number[]>>({ price: [], mcap: [], volume: [], buys: [], sells: [], liquidity: [] })
+  // Track display order swap (visual only)
+  const [reversed, setReversed] = useState(false)
+
+  // Reset series when a new row opens (only when id changes)
+  useEffect(() => {
+    if (!open || !row?.id) return
+    setHistory({ price: [], mcap: [], volume: [], buys: [], sells: [], liquidity: [] })
+    setHistory2({ price: [], mcap: [], volume: [], buys: [], sells: [], liquidity: [] })
+    setReversed(false)
+    try {
+      const stored = typeof window !== 'undefined' ? window.localStorage.getItem('detailModal.compareId') : null
+      if (stored && stored !== row.id) {
+        const exists = allRows.some(r => r.id === stored)
+        if (exists) { setCompareId(stored); return }
+      }
+    } catch { /* no-op */ }
+    setCompareId(null)
+  }, [open, row?.id])
+
+  // Seed initial base snapshot so chart isn't empty while waiting for first WS update (id-based)
+  useEffect(() => {
+    if (!open || !row?.id) return
+    setHistory(prev => {
+      if (prev.price.length > 0) return prev
+      return { price: [row.priceUsd], mcap: [row.mcap], volume: [row.volumeUsd], buys: [row.transactions.buys], sells: [row.transactions.sells], liquidity: [row.liquidity.current] }
+    })
+  }, [open, row?.id])
+
+  // Comparison selection state
+  const [compareId, setCompareId] = useState<string | null>(null)
+  // Persist compare selection
+  useEffect(() => {
+    try {
+      if (compareId) window.localStorage.setItem('detailModal.compareId', compareId)
+      else window.localStorage.removeItem('detailModal.compareId')
+    } catch { /* no-op */ }
+  }, [compareId])
+  const [compareSearch, setCompareSearch] = useState('')
+  const [showCompareList, setShowCompareList] = useState(false)
+  const compareRow = compareId ? (getRowById(compareId) ?? allRows.find(r => r.id === compareId) ?? null) : null
+  useEffect(() => { /* removed setting latestCompareRow */ }, [compareRow])
+
+  // Seed initial compare snapshot when a compare token is chosen (id-based)
+  useEffect(() => {
+    if (!open || !compareRow?.id) return
+    setHistory2(prev => {
+      if (prev.price.length > 0) return prev
+      return { price: [compareRow.priceUsd], mcap: [compareRow.mcap], volume: [compareRow.volumeUsd], buys: [compareRow.transactions.buys], sells: [compareRow.transactions.sells], liquidity: [compareRow.liquidity.current] }
+    })
+  }, [open, compareRow?.id])
+
+  // Drive history and latestRow updates directly from the per-key updates bus
+  useEffect(() => { /* removed old single-key subscription (pair|token|chain) in favor of explicit tick + pair-stats subscriptions */ }, [])
+
+  // Engage / update subscription lock when compare token changes
   useEffect(() => {
     if (!open || !row) return
-    setHistory({ price: [], mcap: [], volume: [], buys: [], sells: [], liquidity: [] })
-  }, [open, row])
+    // Allow both pair-stats and high-frequency tick keys for base + compare so their charts update
+    const basePairKey = row.pairAddress && row.tokenAddress ? `${row.pairAddress}|${row.tokenAddress}|${toChainId(row.chain)}` : null
+    const baseTick = row.tokenAddress ? `${row.tokenAddress}|${toChainId(row.chain)}` : null
+    const cmpPairKey = compareRow?.pairAddress && compareRow?.tokenAddress ? `${compareRow.pairAddress}|${compareRow.tokenAddress}|${toChainId(compareRow.chain)}` : null
+    const cmpTick = compareRow?.tokenAddress ? `${compareRow.tokenAddress}|${toChainId(compareRow.chain)}` : null
 
-  // Drive history updates directly from the per-key updates bus to align with actual WS cadence
+    const allowed: string[] = []
+    if (basePairKey) allowed.push(basePairKey)
+    if (baseTick) allowed.push(baseTick)
+    if (cmpPairKey) allowed.push(cmpPairKey)
+    if (cmpTick) allowed.push(cmpTick)
+
+    if (allowed.length > 0) {
+      try { engageSubscriptionLock(allowed) } catch { /* no-op */ }
+    }
+  }, [compareRow, open, row])
+  // Subscribe to compare row updates (original detailed pair|token|chain listener removed; handled by unified tick/pair-stats listeners below)
   useEffect(() => {
-    const pair = row?.pairAddress
-    const token = row?.tokenAddress
-    const chain = row?.chain
-    if (!open || !pair || !token) return
-    const key = `${pair}|${token}|${toChainId(chain)}`
+    if (!open || !compareRow?.pairAddress || !compareRow.tokenAddress) return
+    const key = `${compareRow.pairAddress}|${compareRow.tokenAddress}|${toChainId(compareRow.chain)}`
     const off = onUpdate((e) => {
+      if (e.key !== key) return
       try {
-        if (e.key !== key) return
-        const latest = currentRow ?? getRowById(row.id)
+        const latest = getRowById(compareRow.id)
         if (!latest) return
-        setHistory((prev) => ({
+        setHistory2(prev => ({
           price: [...prev.price, latest.priceUsd].slice(-300),
           mcap: [...prev.mcap, latest.mcap].slice(-300),
-          volume: [...prev.volume, latest.volumeUsd].slice(-300),
-          buys: [...prev.buys, latest.transactions.buys].slice(-300),
-          sells: [...prev.sells, latest.transactions.sells].slice(-300),
-          liquidity: [...prev.liquidity, latest.liquidity.current].slice(-300),
+            volume: [...prev.volume, latest.volumeUsd].slice(-300),
+            buys: [...prev.buys, latest.transactions.buys].slice(-300),
+            sells: [...prev.sells, latest.transactions.sells].slice(-300),
+            liquidity: [...prev.liquidity, latest.liquidity.current].slice(-300),
         }))
+        // removed setLatestCompareRow
       } catch { /* no-op */ }
     })
     return () => { try { off() } catch { /* no-op */ } }
-  }, [open, row, currentRow, getRowById])
+  }, [compareRow, open, getRowById])
 
-  // (Removed) Fallback effect that appended to history on currentRow changes.
-  // The onUpdate-driven effect above remains; no additional behavior changes.
-
-  const seriesKeys: SeriesKey[] = ['price', 'mcap', 'volume', 'buys', 'sells', 'liquidity']
-
-  const palette = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#22d3ee']
-
-  const toChainId = (c: string | number | undefined): string => {
-    if (c == null) return '1'
-    const n = typeof c === 'number' ? c : Number(c)
-    if (Number.isFinite(n)) return String(n)
-    const s = String(c).toUpperCase()
-    if (s === 'ETH') return '1'
-    if (s === 'BSC') return '56'
-    if (s === 'BASE') return '8453'
-    if (s === 'SOL') return '900'
-    return '1'
-  }
-  const header = row ? (
-    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 2fr', gap: 12, alignItems: 'center', marginBottom: 12 }}>
-      <div>
-        <div style={{ fontWeight: 700, fontSize: 16 }}>
-          {row.tokenName.toUpperCase()}/{row.tokenSymbol} / {row.chain}
-        </div>
-        <div className="muted" style={{ fontSize: 12 }}>Token</div>
-      </div>
-      <div>
-        <div>{row.exchange}</div>
-        <div className="muted" style={{ fontSize: 12 }}>Exchange</div>
-      </div>
-      <div>
-        <div>
-          <NumberCell noFade value={row.priceChangePcs['5m']} suffix="%" /> / <NumberCell noFade value={row.priceChangePcs['1h']} suffix="%" /> / <NumberCell noFade value={row.priceChangePcs['6h']} suffix="%" /> / <NumberCell noFade value={row.priceChangePcs['24h']} suffix="%" />
-        </div>
-        <div className="muted" style={{ fontSize: 12 }}>Chg (5m/1h/6h/24h)</div>
-      </div>
-      <div>
-        <div>{formatAge(row.tokenCreatedTimestamp)}</div>
-        <div className="muted" style={{ fontSize: 12 }}>Age</div>
-      </div>
-      <div>
-        <AuditIcons flags={{
-          verified: row.audit?.contractVerified,
-          freezable: row.audit?.freezable,
-          renounced: row.security?.renounced,
-          locked: row.security?.locked,
-          burned: row.security?.burned,
-          honeypot: row.audit?.honeypot,
-        }} />
-      </div>
-    </div>
-  ) : null
+  // Metric selection (shared across both charts)
+  const [selectedMetric, setSelectedMetric] = useState<'price' | 'mcap'>('price')
+  // Palettes
+  const palette: Record<SeriesKey, string> = { price: '#22c55e', mcap: '#3b82f6', volume: '#a3a3a3', buys: '#8b5cf6', sells: '#ef4444', liquidity: '#f59e0b' }
+  const palette2: Record<SeriesKey, string> = { price: '#10b981', mcap: '#2563eb', volume: '#737373', buys: '#6d28d9', sells: '#b91c1c', liquidity: '#d97706' }
+  // Filter compare options
+  const filteredCompareOptions = (() => {
+    if (!open) return [] as DetailModalRow[]
+    const base = allRows.filter(r => r.id !== row?.id)
+    if (!compareSearch) return base.slice(0, 100)
+    const q = compareSearch.toLowerCase()
+    return base.filter(r => r.tokenName.toLowerCase().includes(q) || r.tokenSymbol.toLowerCase().includes(q)).slice(0, 100)
+  })()
 
   // Debug updates panel: capture raw JSON updates for this row
   const [updatesLog, setUpdatesLog] = useState<{ id: number; text: string }[]>([])
@@ -177,14 +237,12 @@ export default function DetailModal({
   }, [updatesLog])
 
   // Build per-series relative scaling spark paths
-  function buildPath(vals: number[], width = 600, height = 120) {
+  const buildPath = useCallback(function buildPath(vals: number[], width = 600, height = 120) {
     const pad = 4
     const w = width
     const h = height
     const n = vals.length
     if (n === 0) return ''
-    // Use per-series relative scaling: true min/max of the series, not clamped to 0.
-    // This makes subtle movements visible even for large positive-only values.
     const max = Math.max(...vals)
     const min = Math.min(...vals)
     const range = Math.max(1e-6, max - min)
@@ -196,16 +254,192 @@ export default function DetailModal({
       pts.push(String(x) + ',' + String(y))
     }
     return pts.length > 0 ? 'M ' + pts.join(' L ') : ''
-  }
+  }, [])
 
-  // Utility to safely format numbers for display
-  function safeNumberFormat(val: unknown, digits = 0) {
-    return typeof val === 'number' && Number.isFinite(val)
-      ? digits > 0
-        ? val.toFixed(digits)
-        : val.toLocaleString()
-      : '—'
-  }
+  // Focus metric order (for differential stats)
+  const focusOrderBase: SeriesKey[] = selectedMetric === 'price' ? ['price', 'mcap', 'liquidity'] : ['mcap', 'price', 'liquidity']
+  const focusOrderCompare: SeriesKey[] = focusOrderBase
+
+  // Differential stats (only for metrics in focusOrderBase)
+  const diffs = (() => {
+    if (!compareRow) return null
+    const make = (k: SeriesKey) => {
+      const aVals = history[k]
+      const bVals = history2[k]
+      const a = aVals[aVals.length - 1]
+      const b = bVals[bVals.length - 1]
+      if (a == null || b == null) return { k, a: undefined, b: undefined, delta: undefined, pct: undefined, ratio: undefined }
+      const delta = a - b
+      const pct = b !== 0 ? (delta / b) * 100 : undefined
+      const ratio = b !== 0 ? a / b : undefined
+      return { k, a, b, delta, pct, ratio }
+    }
+    return focusOrderBase.map(make)
+  })()
+
+  // Build derived subscription keys
+  const basePairStatsKey = row?.pairAddress && row?.tokenAddress ? `${row.pairAddress}|${row.tokenAddress}|${toChainId(row.chain)}` : null
+  const baseTickKey = row?.tokenAddress ? `${row.tokenAddress}|${toChainId(row.chain)}` : null
+  const comparePairStatsKey = compareRow?.pairAddress && compareRow?.tokenAddress ? `${compareRow.pairAddress}|${compareRow.tokenAddress}|${toChainId(compareRow.chain)}` : null
+  const compareTickKey = compareRow?.tokenAddress ? `${compareRow.tokenAddress}|${toChainId(compareRow.chain)}` : null
+
+  // Helper updaters to avoid duplication
+  const applyBaseSnapshot = useCallback((latest: DetailModalRow) => {
+    setHistory(prev => ({
+      price: [...prev.price, latest.priceUsd].slice(-300),
+      mcap: [...prev.mcap, latest.mcap].slice(-300),
+      volume: [...prev.volume, latest.volumeUsd].slice(-300),
+      buys: [...prev.buys, latest.transactions.buys].slice(-300),
+      sells: [...prev.sells, latest.transactions.sells].slice(-300),
+      liquidity: [...prev.liquidity, latest.liquidity.current].slice(-300),
+    }))
+  }, [])
+  const applyCompareSnapshot = useCallback((latest: DetailModalRow) => {
+    setHistory2(prev => ({
+      price: [...prev.price, latest.priceUsd].slice(-300),
+      mcap: [...prev.mcap, latest.mcap].slice(-300),
+      volume: [...prev.volume, latest.volumeUsd].slice(-300),
+      buys: [...prev.buys, latest.transactions.buys].slice(-300),
+      sells: [...prev.sells, latest.transactions.sells].slice(-300),
+      liquidity: [...prev.liquidity, latest.liquidity.current].slice(-300),
+    }))
+  }, [])
+
+  // Subscribe to pair-stats key for base (less frequent, structural stats)
+  useEffect(() => {
+    if (!open || !basePairStatsKey) return
+    const off = onUpdate((e) => {
+      if (e.key !== basePairStatsKey) return
+      try {
+        const latest = currentRow ?? getRowById(row!.id)
+        if (!latest) return
+        applyBaseSnapshot(latest)
+      } catch { /* no-op */ }
+    })
+    return () => { try { off() } catch { /* no-op */ } }
+  }, [open, basePairStatsKey, currentRow, getRowById, row?.id, applyBaseSnapshot])
+
+  // Subscribe to tick key for base (high frequency)
+  useEffect(() => {
+    if (!open || !baseTickKey) return
+    const off = onUpdate((e) => {
+      if (e.key !== baseTickKey) return
+      try {
+        const latest = currentRow ?? getRowById(row!.id)
+        if (!latest) return
+        applyBaseSnapshot(latest)
+      } catch { /* no-op */ }
+    })
+    return () => { try { off() } catch { /* no-op */ } }
+  }, [open, baseTickKey, currentRow, getRowById, row?.id, applyBaseSnapshot])
+
+  // Subscribe to pair-stats key for compare
+  useEffect(() => {
+    if (!open || !comparePairStatsKey) return
+    const off = onUpdate((e) => {
+      if (e.key !== comparePairStatsKey) return
+      try {
+        const latest = getRowById(compareRow!.id)
+        if (!latest) return
+        applyCompareSnapshot(latest)
+      } catch { /* no-op */ }
+    })
+    return () => { try { off() } catch { /* no-op */ } }
+  }, [open, comparePairStatsKey, getRowById, compareRow?.id, applyCompareSnapshot])
+
+  // Subscribe to tick key for compare
+  useEffect(() => {
+    if (!open || !compareTickKey) return
+    const off = onUpdate((e) => {
+      if (e.key !== compareTickKey) return
+      try {
+        const latest = getRowById(compareRow!.id)
+        if (!latest) return
+        applyCompareSnapshot(latest)
+      } catch { /* no-op */ }
+    })
+    return () => { try { off() } catch { /* no-op */ } }
+  }, [open, compareTickKey, getRowById, compareRow?.id, applyCompareSnapshot])
+
+  // Explicitly subscribe to compare row (and only compare row) if it's not already part of visible panes.
+  // This ensures we receive its tick & pair-stats updates even when it's not in Trending/New lists.
+  const compareSubscribedRef = useRef<string | null>(null)
+  useEffect(() => {
+    const ws: WebSocket | undefined = (typeof window !== 'undefined' ? (window as any).__APP_WS__ : undefined)
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      // If socket not ready, ensure any previous subscription is cleared
+      if (!open && compareSubscribedRef.current) {
+        const prev = allRows.find(r => r.id === compareSubscribedRef.current)
+        if (prev?.pairAddress && prev.tokenAddress) {
+          const chain = prev.chain
+          try { ws?.send(JSON.stringify(buildPairUnsubscription({ pair: prev.pairAddress, token: prev.tokenAddress, chain }))) } catch { /* no-op */ }
+          try { ws?.send(JSON.stringify(buildPairStatsUnsubscription({ pair: prev.pairAddress, token: prev.tokenAddress, chain }))) } catch { /* no-op */ }
+        }
+        compareSubscribedRef.current = null
+      }
+      return
+    }
+
+    const send = (payload: any) => { try { ws.send(JSON.stringify(payload)) } catch { /* no-op */ } }
+
+    // Always unsubscribe previous before potentially subscribing new
+    if (compareSubscribedRef.current && (compareRow?.id !== compareSubscribedRef.current || !open)) {
+      const prev = allRows.find(r => r.id === compareSubscribedRef.current)
+      if (prev?.pairAddress && prev.tokenAddress) {
+        const chain = prev.chain
+        send(buildPairUnsubscription({ pair: prev.pairAddress, token: prev.tokenAddress, chain }))
+        send(buildPairStatsUnsubscription({ pair: prev.pairAddress, token: prev.tokenAddress, chain }))
+      }
+      compareSubscribedRef.current = null
+    }
+
+    if (!open) return
+
+    // Subscribe new compare if present
+    if (compareRow?.pairAddress && compareRow.tokenAddress) {
+      if (compareSubscribedRef.current !== compareRow.id) {
+        const chain = compareRow.chain
+        send(buildPairSubscription({ pair: compareRow.pairAddress, token: compareRow.tokenAddress, chain }))
+        send(buildPairStatsSubscription({ pair: compareRow.pairAddress, token: compareRow.tokenAddress, chain }))
+        compareSubscribedRef.current = compareRow.id
+      }
+    }
+
+    return () => {
+      // Cleanup on dependency change or unmount
+      if (compareSubscribedRef.current) {
+        const prev = allRows.find(r => r.id === compareSubscribedRef.current)
+        if (prev?.pairAddress && prev.tokenAddress) {
+          const chain = prev.chain
+          send(buildPairUnsubscription({ pair: prev.pairAddress, token: prev.tokenAddress, chain }))
+          send(buildPairStatsUnsubscription({ pair: prev.pairAddress, token: prev.tokenAddress, chain }))
+        }
+        compareSubscribedRef.current = null
+      }
+    }
+  }, [open, compareRow?.id, allRows])
+
+  // Defer compare subscription until WebSocket opens if it wasn't open initially.
+  useEffect(() => {
+    if (!open || !compareRow?.pairAddress || !compareRow.tokenAddress) return
+    const ws: WebSocket | undefined = (typeof window !== 'undefined' ? (window as any).__APP_WS__ : undefined)
+    if (!ws) return
+    const doSubscribe = () => {
+      if (compareSubscribedRef.current === compareRow.id) return
+      try {
+        ws.send(JSON.stringify(buildPairSubscription({ pair: compareRow.pairAddress!, token: compareRow.tokenAddress!, chain: compareRow.chain })))
+        ws.send(JSON.stringify(buildPairStatsSubscription({ pair: compareRow.pairAddress!, token: compareRow.tokenAddress!, chain: compareRow.chain })))
+        compareSubscribedRef.current = compareRow.id
+      } catch { /* no-op */ }
+    }
+    if (ws.readyState === WebSocket.OPEN) {
+      doSubscribe()
+    } else if (ws.readyState === WebSocket.CONNECTING) {
+      const handler = () => { doSubscribe() }
+      try { ws.addEventListener('open', handler, { once: true }) } catch { /* no-op */ }
+      return () => { try { ws.removeEventListener('open', handler) } catch { /* no-op */ } }
+    }
+  }, [open, compareRow?.id])
 
   return (
     <div
@@ -227,75 +461,189 @@ export default function DetailModal({
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ fontWeight: 700 }}>Details</div>
-            {row?.pairAddress && row.tokenAddress && (
+            {row?.tokenAddress && (
               <UpdateRate
                 title="Live rate"
                 version={undefined}
-                filterKey={`${row.pairAddress}|${row.tokenAddress}|${toChainId(row.chain)}`}
+                filterKey={[baseTickKey!, basePairStatsKey!].filter(Boolean)}
               />
+            )}
+            {compareRow?.tokenAddress && (
+              <UpdateRate
+                title="Compare rate"
+                version={undefined}
+                filterKey={[compareTickKey!, comparePairStatsKey!].filter(Boolean)}
+              />
+            )}
+            {compareRow && (
+              <button
+                type="button"
+                onClick={() => { setReversed(r => !r); }}
+                style={{ background: 'transparent', border: '1px solid #4b5563', borderRadius: 4, padding: '4px 8px', color: 'inherit' }}
+                title="Swap display order"
+              >Swap</button>
             )}
           </div>
           <button type="button" onClick={onClose} style={{ background: 'transparent', color: 'inherit', border: '1px solid #4b5563', borderRadius: 4, padding: '4px 8px' }}>Close</button>
         </div>
-        {header}
-        {/* Combined multi-line sparkline */}
-        <div style={{ borderTop: '1px solid #374151', paddingTop: 12 }}>
-          <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Live history (relative scale per metric)</div>
-          <div style={{ position: 'relative', width: '100%', height: 140 }}>
-            <svg width="100%" height="140" viewBox={`0 0 600 140`} preserveAspectRatio="none">
-              <polyline points={`4,136 596,136`} stroke="#374151" strokeWidth="1" fill="none" />
-              {seriesKeys.map((k, i) => {
-                const vals = history[k]
-                const d = buildPath(vals, 600, 140)
-                if (!d) return null
-                return <path key={k} d={d} stroke={palette[i % palette.length]} strokeWidth={1.5} fill="none" />
-              })}
-            </svg>
+        {/* Compare selector */}
+        {open && row && (
+          <div style={{ marginBottom: 12, display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative' }}>
+              <label style={{ fontSize: 12 }} className="muted">Compare with</label><br/>
+              <input
+                type="text"
+                value={compareSearch}
+                placeholder={compareRow ? `${compareRow.tokenName}/${compareRow.tokenSymbol}` : 'Search token name or symbol'}
+                onFocus={() => { setShowCompareList(true) }}
+                onChange={(e) => { setCompareSearch(e.currentTarget.value); setShowCompareList(true) }}
+                style={{ background: '#111827', border: '1px solid #374151', borderRadius: 4, padding: '4px 8px', color: '#e5e7eb', minWidth: 220 }}
+              />
+              {compareRow && (
+                <button
+                  type="button"
+                  onClick={() => { setCompareId(null); setCompareSearch(''); setHistory2({ price: [], mcap: [], volume: [], buys: [], sells: [], liquidity: [] }); }}
+                  style={{ marginLeft: 8, background: 'transparent', border: '1px solid #4b5563', borderRadius: 4, padding: '4px 8px', color: 'inherit' }}
+                >Clear</button>
+              )}
+              {showCompareList && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 10000, background: '#1f2937', border: '1px solid #374151', borderRadius: 4, width: 360, maxHeight: 260, overflow: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.4)' }}>
+                  {filteredCompareOptions.length === 0 && <div className="muted" style={{ padding: 6, fontSize: 12 }}>No matches</div>}
+                  {filteredCompareOptions.map(opt => (
+                      <div
+                        key={opt.id}
+                        onMouseDown={(e) => { e.preventDefault(); }}
+                        onClick={() => { setCompareId(opt.id); setCompareSearch(`${opt.tokenName}/${opt.tokenSymbol}`); setShowCompareList(false) }}
+                        style={{ padding: '6px 8px', fontSize: 12, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', background: compareId === opt.id ? '#374151' : 'transparent' }}
+                      >
+                        <span>{opt.tokenName.toUpperCase()}/{opt.tokenSymbol} / {opt.chain}</span>
+                        <span className="muted">{opt.pairAddress && opt.tokenAddress ? '•' : ''}</span>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
+        {/* Chart sections */}
+        {(() => {
+          if (!row) return null
+          const baseSection = (
+            <ChartSection
+              key={row.id + '-base'}
+              title={`${row.tokenName} (${row.tokenSymbol}) – ${row.chain}`}
+              history={history as Record<string, number[]>}
+              palette={palette as Record<string, string>}
+              selectedMetric={selectedMetric}
+              seriesKeys={seriesKeys}
+              seriesLabels={seriesLabels as Record<string, string>}
+              focusOrder={focusOrderBase}
+              symbol={row.tokenSymbol}
+              buildPath={buildPath}
+              showMetricChooser
+              onChangeMetric={(m) => { setSelectedMetric(m as 'price' | 'mcap'); }}
+              metricOptions={[{ key: 'price', label: 'Price' }, { key: 'mcap', label: 'Market Cap' }]}
+              emptyMessage="Collecting base data…"
+            />)
+          const compareSection = compareRow ? (
+            <ChartSection
+              key={compareRow.id + '-compare'}
+              title={`${compareRow.tokenName} (${compareRow.tokenSymbol}) – ${compareRow.chain}`}
+              history={history2 as Record<string, number[]>}
+              palette={palette2 as Record<string, string>}
+              selectedMetric={selectedMetric}
+              seriesKeys={seriesKeys}
+              seriesLabels={seriesLabels as Record<string, string>}
+              focusOrder={focusOrderCompare}
+              symbol={compareRow.tokenSymbol}
+              buildPath={buildPath}
+              emptyMessage="Collecting compare data…"
+            />) : null
+
+          // Determine render order ensuring base always appears when no compare
+          const first = reversed && compareRow ? compareSection : baseSection
+          const second = compareRow ? (reversed ? baseSection : compareSection) : null
+
+          return (
+            <div>
+              {first}
+              {compareRow && diffs && (
+                <div style={{ marginTop: 12, padding: '8px 12px', background: 'rgba(31,41,55,0.6)', border: '1px solid #374151', borderRadius: 6, fontSize: 13 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>Differential (Base vs Compare)</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18 }}>
+                    {diffs.map(d => d && (
+                      <div key={d.k} style={{ minWidth: 160 }}>
+                        <div style={{ color: palette[d.k] }}>{seriesLabels[d.k]}</div>
+                        <div style={{ fontSize: 12 }}>
+                          {(() => {
+                            if (d.a == null || d.b == null) return '—'
+                            const isCurrency = d.k === 'price' || d.k === 'mcap' || d.k === 'liquidity'
+                            const prefixSymbol = isCurrency ? '$' : ''
+                            const fmtBase = (n: number) => d.k === 'price' ? n.toFixed(8) : Math.round(n).toLocaleString()
+                            const delta = d.delta ?? 0
+                            const pct = d.pct
+                            const ratio = d.ratio
+                            return (
+                              <span>
+                                <span>{prefixSymbol}{fmtBase(d.a)} vs {prefixSymbol}{fmtBase(d.b)} (</span>
+                                {/* Delta */}
+                                <NumberCell
+                                  value={delta}
+                                  noFade
+                                  formatter={(n) => {
+                                    const base = d.k === 'price' ? n.toFixed(8) : Math.round(n).toLocaleString()
+                                    return (n >= 0 ? '+' : '') + base
+                                  }}
+                                />
+                                {pct != null && (
+                                  <>
+                                    <span>, </span>
+                                    <NumberCell
+                                      value={pct}
+                                      noFade
+                                      formatter={(n) => (n >= 0 ? '+' : '') + n.toFixed(2) + '%'}
+                                    />
+                                  </>
+                                )}
+                                {ratio != null && (
+                                  <>
+                                    <span> ratio {ratio.toFixed(3)}</span>
+                                  </>
+                                )}
+                                <span>)</span>
+                              </span>
+                            )
+                          })()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {second}
+            </div>
+          )
+        })()}
         {/* Debug panel at the bottom */}
         {debugEnabled && row?.pairAddress && row.tokenAddress && (
           <div style={{ marginTop: 12, borderTop: '1px solid #374151', paddingTop: 12 }}>
             <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Debug updates (raw JSON)</div>
+            <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>
+              Base tick key: {baseTickKey || '—'} | Base stats key: {basePairStatsKey || '—'} | Price points: {history.price.length}
+              {compareRow && <><br/>Compare tick key: {compareTickKey || '—'} | Compare stats key: {comparePairStatsKey || '—'} | Price points: {history2.price.length}</>}
+            </div>
             <div ref={logRef} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', fontSize: 11, background: 'rgba(0,0,0,0.35)', border: '1px solid #374151', borderRadius: 6, padding: 8, maxHeight: 200, overflow: 'auto', whiteSpace: 'pre', lineHeight: 1.4 }}>
               {updatesLog.length === 0 ? (
                 <div className="muted">No updates yet…</div>
               ) : (
                 updatesLog.map((item) => (
                   <div key={item.id}>{item.text}</div>
-                ))
-              )}
+                )))
+              }
             </div>
           </div>
         )}
-        {/* Burn-related details */}
-        <div style={{ marginTop: 12, borderTop: '1px solid #374151', paddingTop: 12 }}>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>Burn Details</div>
-          <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-            <div><span className="muted">Total Supply:</span> {safeNumberFormat(row?.totalSupply)}</div>
-            <div><span className="muted">Burned Supply:</span> {safeNumberFormat(row?.burnedSupply)}</div>
-            <div><span className="muted">Percent Burned:</span> {typeof row?.percentBurned === 'number' && Number.isFinite(row.percentBurned) ? `${safeNumberFormat(row.percentBurned, 2)}%` : '—'}</div>
-            <div><span className="muted">Dead Address:</span> <span style={{ fontFamily: 'monospace' }}>{typeof row?.deadAddress === 'string' ? row.deadAddress : '—'}</span></div>
-            <div><span className="muted">Owner Address:</span> <span style={{ fontFamily: 'monospace' }}>{typeof row?.ownerAddress === 'string' ? row.ownerAddress : '—'}</span></div>
-            <div><span className="muted">Burned Status:</span> {row?.security?.burned === true ? 'Burned' : row?.security?.burned === false ? 'Not Burned' : 'Unknown'}</div>
-          </div>
-        </div>
       </div>
     </div>
   )
-}
-
-function formatAge(d: Date) {
-  try {
-    const ms = Date.now() - new Date(d).getTime()
-    const s = Math.max(0, Math.floor(ms / 1000))
-    const h = Math.floor(s / 3600)
-    const m = Math.floor((s % 3600) / 60)
-    const ss = s % 60
-    if (h > 0) return String(h) + 'h ' + String(m) + 'm'
-    if (m > 0) return String(m) + 'm ' + String(ss) + 's'
-    return String(ss) + 's'
-  } catch {
-    return ''
-  }
 }
