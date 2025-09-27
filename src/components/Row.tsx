@@ -336,10 +336,10 @@ const Row = memo(
             style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', alignItems: 'start', gap: 4 }}
           >
             <div style={{ textAlign: 'right' }}>
-              <NumberCell value={t.priceUsd} prefix="$" />
+              <NumberCell value={t.priceUsd} prefix="$" maxSigDigits={6} />
             </div>
             <div style={{ textAlign: 'right' }}>
-              <NumberCell value={t.mcap} prefix="$" />
+              <NumberCell value={t.mcap} prefix="$" maxSigDigits={6} />
             </div>
             {(() => {
               // Single sparkline of Price spanning both Price and MCap columns (no labels)
@@ -461,7 +461,7 @@ const Row = memo(
           </div>
         </td>
         <td style={{ textAlign: 'right' }}>
-          <NumberCell value={t.volumeUsd} />
+          <NumberCell value={t.volumeUsd} maxSigDigits={3} />
         </td>
         <td>
           <div
@@ -474,7 +474,7 @@ const Row = memo(
               }}
             >
               {t.priceChangePcs['5m'] >= 0 ? '+' : ''}
-              {t.priceChangePcs['5m'].toFixed(2)}%
+              {t.priceChangePcs['5m'].toFixed(1)}%
             </span>
             <span
               style={{
@@ -482,7 +482,7 @@ const Row = memo(
               }}
             >
               {t.priceChangePcs['1h'] >= 0 ? '+' : ''}
-              {t.priceChangePcs['1h'].toFixed(2)}%
+              {t.priceChangePcs['1h'].toFixed(1)}%
             </span>
             <span
               style={{
@@ -490,7 +490,7 @@ const Row = memo(
               }}
             >
               {t.priceChangePcs['6h'] >= 0 ? '+' : ''}
-              {t.priceChangePcs['6h'].toFixed(2)}%
+              {t.priceChangePcs['6h'].toFixed(1)}%
             </span>
             <span
               style={{
@@ -502,9 +502,9 @@ const Row = memo(
             </span>
           </div>
         </td>
-        <td>{formatAge(t.tokenCreatedTimestamp)}</td>
+        <td style={{ textAlign: 'right' }}>{formatAge(t.tokenCreatedTimestamp)}</td>
         <td>
-          <div className="muted" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <div className="muted" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
             <span
               title="Buys"
               style={{
@@ -539,6 +539,7 @@ const Row = memo(
                 lineHeight: 1,
               }}
             >
+              <span>{t.transactions.sells}</span>
               <svg
                 width="12"
                 height="12"
@@ -552,12 +553,11 @@ const Row = memo(
                 <path d="M12 5v13" />
                 <path d="M19 12l-7 7-7-7" />
               </svg>
-              <span>{t.transactions.sells}</span>
             </span>
           </div>
         </td>
         <td style={{ textAlign: 'right' }}>
-          <NumberCell value={t.liquidity.current} prefix="$" />
+          <NumberCell value={t.liquidity.current} prefix="$" maxSigDigits={3} />
         </td>
         {(() => {
           interface Timestamps {

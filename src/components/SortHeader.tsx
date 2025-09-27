@@ -18,9 +18,19 @@ type Props = {
   sortKey: SortKey
   sortDir: 'asc' | 'desc'
   onSort: (k: SortKey) => void
+  align?: 'left' | 'right'
 } & ThHTMLAttributes<HTMLTableCellElement>
 
-export default function SortHeader({ label, k, sortKey, sortDir, onSort, style, ...rest }: Props) {
+export default function SortHeader({
+  label,
+  k,
+  sortKey,
+  sortDir,
+  onSort,
+  style,
+  align = 'right',
+  ...rest
+}: Props) {
   const active = sortKey === k
   const upActive = active && sortDir === 'asc'
   const downActive = active && sortDir === 'desc'
@@ -32,19 +42,33 @@ export default function SortHeader({ label, k, sortKey, sortDir, onSort, style, 
       ? 'ascending'
       : 'descending'
     : 'none'
+  const textAlign: 'left' | 'right' = align === 'left' ? 'left' : 'right'
+  const itemsAlign: 'flex-start' | 'flex-end' = align === 'left' ? 'flex-start' : 'flex-end'
   return (
     <th
       onClick={() => {
         onSort(k)
       }}
       aria-sort={ariaSort}
-      style={{ cursor: 'pointer', ...style }}
+      style={{ cursor: 'pointer', textAlign, ...style }}
       {...rest}
     >
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: labelColor }}>
+      <span
+        style={{
+          display: 'inline-flex',
+          flexDirection: 'column',
+          alignItems: itemsAlign,
+          gap: 2,
+          lineHeight: 1.1,
+          color: labelColor,
+          textAlign,
+        }}
+      >
         <span>{label}</span>
-        <ArrowUp size={12} color={upColor} />
-        <ArrowDown size={12} color={downColor} />
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <ArrowUp size={12} color={upColor} />
+          <ArrowDown size={12} color={downColor} />
+        </span>
       </span>
     </th>
   )

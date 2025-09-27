@@ -586,14 +586,14 @@ export default function Table({
                   sortDir={sortDir}
                   onSort={onSort}
                   title="Token name and symbol. Click to sort alphabetically."
+                  align="left"
                 />
                 <SortHeader
-                  label="Exchange"
+                  label="Exch."
                   k="exchange"
                   sortKey={sortKey}
                   sortDir={sortDir}
                   onSort={onSort}
-                  style={{ width: 30, minWidth: 30, maxWidth: 30 }}
                   title="Exchange/DEX where the pair trades. Click to sort by exchange name."
                 />
                 <SortHeader
@@ -620,7 +620,10 @@ export default function Table({
                   onSort={onSort}
                   title="Trading volume in USD over the selected timeframe. Click to sort by volume."
                 />
-                <th title="Price change percentages over multiple windows: 5m, 1h, 6h, 24h.">
+                <th
+                  title="Price change percentages over multiple windows: 5m, 1h, 6h, 24h."
+                  style={{ textAlign: 'center' }}
+                >
                   5m 1h Chg
                   <br />
                   6h 24h Chg
@@ -634,7 +637,7 @@ export default function Table({
                   title="Time since token creation (younger at top when sorting descending)."
                 />
                 <SortHeader
-                  label="Buys/Sells"
+                  label="B/S"
                   k="tx"
                   sortKey={sortKey}
                   sortDir={sortDir}
@@ -658,7 +661,7 @@ export default function Table({
                   style={{ width: 60, minWidth: 50 }}
                   title="Freshness score: recency of the latest update across scanner, live trades (tick), and pair stats. Newer data ranks higher. Click to sort by recency."
                 />
-                <th title="Audit and safety quick checks (e.g., honeypot, verification).">Audit</th>
+                <th title="Audit and safety quick checks (e.g., honeypot, verification)." style={{ textAlign: 'center' }}>Audit</th>
               </tr>
             </thead>
             {enableVirtual ? (

@@ -8,6 +8,7 @@ export default function NumberCell({
   formatter,
   stableMs,
   noFade = false,
+  maxSigDigits = 4,
 }: {
   value: number | string
   prefix?: string
@@ -15,6 +16,7 @@ export default function NumberCell({
   formatter?: (n: number) => string
   stableMs?: number
   noFade?: boolean
+  maxSigDigits?: number
 }) {
   const num = typeof value === 'number' ? value : Number(value)
   const prevValRef = useRef<number | null>(null)
@@ -90,9 +92,9 @@ export default function NumberCell({
     if (formatter) {
       // Even if a custom formatter is provided, still cap visible precision by post-formatting
       const raw = formatter(num)
-      // Attempt to extract numeric portion to cap to 4 significant digits; if not numeric, use as-is
+      // Attempt to extract numeric portion to cap to configured significant digits; if not numeric, use as-is
       const nf = new Intl.NumberFormat('en-US', {
-        maximumSignificantDigits: 4,
+        maximumSignificantDigits: Math.max(1, Math.floor(maxSigDigits)),
         useGrouping: false,
       })
       const parsed = Number(raw.replace(/[^0-9eE+\-.]/g, ''))
@@ -103,7 +105,7 @@ export default function NumberCell({
       }
     } else {
       const nfNum = new Intl.NumberFormat('en-US', {
-        maximumSignificantDigits: 4,
+        maximumSignificantDigits: Math.max(1, Math.floor(maxSigDigits)),
         useGrouping: false,
       })
       const abbreviate = (n: number) => {
@@ -125,7 +127,8 @@ export default function NumberCell({
         if (divisor === 1) {
           // For very small numbers, switch to scientific notation to avoid excessively long decimals
           if (absNum > 0 && absNum < 1e-2) {
-            const sci = n.toExponential(3) // 4 significant digits total
+            const sig = Math.max(1, Math.floor(maxSigDigits))
+            const sci = n.toExponential(Math.max(0, sig - 1)) // sig digits total
             return sci.replace(/e\+?(-?\d+)/i, 'e$1')
           }
           return nfNum.format(n)
@@ -144,7 +147,7 @@ export default function NumberCell({
   }
 
   return (
-    <span className={appliedClassRef.current} title={title}>
+    <span className={appliedClassRef.current} title={title} style={{ whiteSpace: 'nowrap' }}>
       {prefix}
       {text}
       {suffix}

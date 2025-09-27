@@ -2,9 +2,13 @@
  * Shared formatting helpers used across components.
  *
  * formatAge: Convert a timestamp-like input into a compact relative age string.
- * - < 60 minutes → Xm
- * - < 24 hours   → Xh
- * - otherwise    → Xd
+ * Policy: render using ``/`/h/d/m/y with one decimal place (similar to K/M/B/T):
+ * - < 1 minute → X.Y`` (seconds)
+ * - < 1 hour   → X.Y`  (minutes)
+ * - < 1 day    → X.Yh  (hours)
+ * - < 30 days  → X.Yd  (days)
+ * - < 365 days → X.Ym  (months, 30-day months)
+ * - otherwise  → X.Yy  (years, 365-day years)
  *
  * Accepts Date | number (ms) | string (Date-parsable) for convenience.
  */
@@ -22,11 +26,40 @@ export function formatAge(input: Date | number | string): string {
     ts = new Date()
   }
   const now = Date.now()
-  const diff = Math.max(0, now - ts.getTime())
-  const mins = Math.floor(diff / 60000)
-  if (mins < 60) return String(mins) + 'm'
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return String(hrs) + 'h'
-  const days = Math.floor(hrs / 24)
-  return String(days) + 'd'
+  const diffMs = Math.max(0, now - ts.getTime())
+  const secondMs = 1000
+  const minuteMs = 60 * secondMs
+  const hourMs = 60 * minuteMs
+  const dayMs = 24 * hourMs
+  const monthMs = 30 * dayMs
+  const yearMs = 365 * dayMs
+
+  // Seconds
+  if (diffMs < minuteMs) {
+    const seconds = diffMs / secondMs
+    return seconds.toFixed(1) + '``'
+  }
+  // Minutes
+  if (diffMs < hourMs) {
+    const minutes = diffMs / minuteMs
+    return minutes.toFixed(1) + '`'
+  }
+  // Hours
+  if (diffMs < dayMs) {
+    const hours = diffMs / hourMs
+    return hours.toFixed(1) + 'h'
+  }
+  // Days (< 30d)
+  if (diffMs < monthMs) {
+    const days = diffMs / dayMs
+    return days.toFixed(1) + 'd'
+  }
+  // Months (< 365d)
+  if (diffMs < yearMs) {
+    const months = diffMs / monthMs
+    return months.toFixed(1) + 'm'
+  }
+  // Years
+  const years = diffMs / yearMs
+  return years.toFixed(1) + 'y'
 }
