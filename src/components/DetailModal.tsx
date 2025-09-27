@@ -387,7 +387,14 @@ export default function DetailModal({
     const max = Math.max(...vals)
     const min = Math.min(...vals)
     const range = Math.max(1e-6, max - min)
-    const xStep = n > 1 ? (w - pad * 2) / (n - 1) : 0
+    // Special-case a single point to draw a visible flat line across the chart
+    if (n === 1) {
+      const y = pad + (h - pad * 2) * (1 - (vals[0] - min) / range)
+      const x1 = pad
+      const x2 = w - pad
+      return `M ${x1},${y} L ${x2},${y}`
+    }
+    const xStep = (w - pad * 2) / (n - 1)
     const pts: string[] = []
     for (let i = 0; i < n; i++) {
       const x = pad + i * xStep
@@ -511,24 +518,30 @@ export default function DetailModal({
         liquidity?: number[]
       }
     }
+    const ensureTwo = (arr: number[] | undefined, fallback: number): number[] => {
+      const a = Array.isArray(arr) ? [...arr] : []
+      if (a.length >= 2) return a
+      if (a.length === 1) return [a[0], a[0]]
+      return [fallback, fallback]
+    }
     const h = anyLatest.history
-    if (h && Array.isArray(h.price) && Array.isArray(h.mcap)) {
+    if (h && (Array.isArray(h.price) || Array.isArray(h.mcap))) {
       return {
-        price: [...(h.price ?? [])],
-        mcap: [...(h.mcap ?? [])],
-        volume: [...(h.volume ?? [])],
-        buys: [...(h.buys ?? [])],
-        sells: [...(h.sells ?? [])],
-        liquidity: [...(h.liquidity ?? [])],
+        price: ensureTwo(h.price, latest.priceUsd),
+        mcap: ensureTwo(h.mcap, latest.mcap),
+        volume: ensureTwo(h.volume, latest.volumeUsd),
+        buys: ensureTwo(h.buys, latest.transactions.buys),
+        sells: ensureTwo(h.sells, latest.transactions.sells),
+        liquidity: ensureTwo(h.liquidity, latest.liquidity.current),
       }
     }
     return {
-      price: [latest.priceUsd],
-      mcap: [latest.mcap],
-      volume: [latest.volumeUsd],
-      buys: [latest.transactions.buys],
-      sells: [latest.transactions.sells],
-      liquidity: [latest.liquidity.current],
+      price: [latest.priceUsd, latest.priceUsd],
+      mcap: [latest.mcap, latest.mcap],
+      volume: [latest.volumeUsd, latest.volumeUsd],
+      buys: [latest.transactions.buys, latest.transactions.buys],
+      sells: [latest.transactions.sells, latest.transactions.sells],
+      liquidity: [latest.liquidity.current, latest.liquidity.current],
     }
   }, [])
 

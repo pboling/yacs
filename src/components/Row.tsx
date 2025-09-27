@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useEffect, useState } from 'react'
 import NumberCell from './NumberCell'
 import AuditIcons from './AuditIcons'
 import { Globe, MessageCircle, Send, ExternalLink, Eye, ChartNoAxesCombined } from 'lucide-react'
@@ -40,6 +40,22 @@ const Row = memo(
     setShowBurnTooltipIdx,
     registerRow,
   }: RowProps) {
+    // Global 1s tick to force sparkline to advance even without new data
+    const [_secTick, setSecTick] = useState(0)
+    useEffect(() => {
+      const handler = () => {
+        setSecTick((n) => n + 1)
+      }
+      try {
+        window.addEventListener('dex:tick', handler as EventListener)
+      } catch {}
+      return () => {
+        try {
+          window.removeEventListener('dex:tick', handler as EventListener)
+        } catch {}
+      }
+    }, [])
+
     const auditFlags = {
       verified: t.audit?.contractVerified,
       freezable: t.audit?.freezable,
@@ -165,16 +181,53 @@ const Row = memo(
             </div>
             {(() => {
               // Single sparkline of Price spanning both Price and MCap columns (no labels)
-              // Uses last up to 60 points from 1-hour rolling history if available
+              // Render a rolling 60-minute window that advances every minute.
+              // If there are no new data points, the line flatlines at the last known value.
               interface MaybeHistory {
-                history?: { price?: unknown }
+                history?: { ts?: unknown; price?: unknown }
               }
               const h = (t as unknown as MaybeHistory).history
-              const priceArrUnknown = h?.price
-              const priceArr = Array.isArray(priceArrUnknown) ? (priceArrUnknown as number[]) : null
-              const vals = priceArr && priceArr.length > 0 ? priceArr : [t.priceUsd, t.priceUsd]
-              const n = Math.min(60, vals.length)
-              const data = vals.slice(-n)
+              const tsUnknown = h?.ts
+              const pricesUnknown = h?.price
+              const tsArr = Array.isArray(tsUnknown) ? (tsUnknown as number[]) : []
+              const pricesArr = Array.isArray(pricesUnknown) ? (pricesUnknown as number[]) : []
+
+              const now = Date.now()
+              const MINUTE = 60_000
+              const endBucket = Math.floor(now / MINUTE) * MINUTE
+              const startBucket = endBucket - 59 * MINUTE
+
+              // Walk the history once and build a carry-forward series for each minute bucket
+              const data: number[] = []
+              let idx = 0
+              let lastVal: number | null = null
+
+              // Initialize lastVal with the latest known price before the startBucket
+              if (tsArr.length > 0 && pricesArr.length === tsArr.length) {
+                while (idx < tsArr.length && tsArr[idx] <= startBucket) {
+                  lastVal = pricesArr[idx]
+                  idx++
+                }
+              }
+              if (lastVal == null) lastVal = typeof t.priceUsd === 'number' ? t.priceUsd : 0
+
+              // For each minute bucket, advance idx while history timestamp <= bucket, updating lastVal
+              for (let bucket = startBucket; bucket <= endBucket; bucket += MINUTE) {
+                while (idx < tsArr.length && tsArr[idx] <= bucket) {
+                  lastVal = pricesArr[idx]
+                  idx++
+                }
+                data.push(lastVal)
+              }
+
+              // Ensure we have exactly 60 points
+              if (data.length !== 60) {
+                // Fallback: build a flat series from current price
+                const base = typeof t.priceUsd === 'number' ? t.priceUsd : 0
+                while (data.length < 60) data.unshift(base)
+                if (data.length > 60) data.splice(0, data.length - 60)
+              }
+
               const width = undefined // auto width via viewBox and CSS
               const height = 18 // ~1.5x line-height visual
               const pad = 2
@@ -193,6 +246,9 @@ const Row = memo(
               const d = pts.length ? 'M ' + pts.join(' L ') : ''
               const trendUp = data[len - 1] >= data[0]
               const color = trendUp ? 'var(--accent-up)' : 'var(--accent-down)'
+              // Fractional left-shift so the chart advances smoothly each second
+              const secsFrac = (now % MINUTE) / MINUTE
+              const offset = secsFrac * xStep
               return (
                 <div style={{ gridColumn: '1 / span 2' }}>
                   <button
@@ -226,7 +282,15 @@ const Row = memo(
                         strokeWidth={1}
                         fill="none"
                       />
-                      {d && <path d={d} stroke={color} strokeWidth={1.5} fill="none" />}
+                      {d && (
+                        <path
+                          d={d}
+                          stroke={color}
+                          strokeWidth={1.5}
+                          fill="none"
+                          transform={`translate(${-offset}, 0)`}
+                        />
+                      )}
                     </svg>
                   </button>
                 </div>
@@ -348,21 +412,6 @@ const Row = memo(
             >
               <Eye size={14} />
             </button>
-            {t.twitter && (
-              <a className="link" href={t.twitter} target="_blank" rel="noreferrer" title="Twitter">
-                <MessageCircle size={14} />
-              </a>
-            )}
-            {t.website && (
-              <a className="link" href={t.website} target="_blank" rel="noreferrer" title="Website">
-                <ExternalLink size={14} />
-              </a>
-            )}
-            {t.tgLink && (
-              <a className="link" href={t.tgLink} target="_blank" rel="noreferrer" title="Telegram">
-                <Send size={14} />
-              </a>
-            )}
           </div>
         </td>
       </tr>
