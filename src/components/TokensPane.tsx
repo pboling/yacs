@@ -100,7 +100,7 @@ export default function TokensPane({
     try {
       const raw = localStorage.getItem(DISABLED_LS_KEY)
       if (raw) {
-        const arr = JSON.parse(raw)
+        const arr: unknown = JSON.parse(raw)
         if (Array.isArray(arr)) disabledTokensRef.current = new Set(arr.map(String))
       }
     } catch {
@@ -599,8 +599,8 @@ export default function TokensPane({
     filters,
     dispatch,
     page,
-    title,
     bothEndsVisible,
+    computePairPayloadsSafe,
   ])
 
   // Load more when the scroll-trigger row (10 above the last) enters the viewport of the pane
