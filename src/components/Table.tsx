@@ -613,7 +613,7 @@ export default function Table({
                   title="Fully diluted or reported market cap in USD. Click to sort by market cap."
                 />
                 <SortHeader
-                  label="Volume"
+                  label="Vol"
                   k="volumeUsd"
                   sortKey={sortKey}
                   sortDir={sortDir}
@@ -624,9 +624,9 @@ export default function Table({
                   title="Price change percentages over multiple windows: 5m, 1h, 6h, 24h."
                   style={{ textAlign: 'center' }}
                 >
-                  5m 1h Chg
+                  5m 1h
                   <br />
-                  6h 24h Chg
+                  6h 24h
                 </th>
                 <SortHeader
                   label="Age"

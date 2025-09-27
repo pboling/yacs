@@ -41,6 +41,9 @@ export const initialState = {
     maxAgeHours: null,
     minMcap: 0,
     limit: 200,
+    tokenQuery: '',
+    includeStale: false,
+    includeDegraded: false,
   },
   wpegPrices: {}, // chain -> number
   version: 0, // monotonically increasing change counter for UI subscriptions

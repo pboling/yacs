@@ -63,6 +63,55 @@ export function computeFilteredCompareOptions({
 }
 
 /**
+ * Live-filter helper for tables: returns a Set of row ids that match the token query and freshness policy.
+ * Mirrors DetailModal rules but without the 100-item cap and without open/currentRow constraints.
+ * @param {Object} params
+ * @param {{id:string; tokenName?:string; tokenSymbol?:string; scannerAt?:number; tickAt?:number; pairStatsAt?:number;}[]} params.rows
+ * @param {string} [params.query]
+ * @param {boolean} [params.includeStale=false]
+ * @param {boolean} [params.includeDegraded=false]
+ * @returns {Set<string>} matching ids
+ */
+export function filterRowsByTokenQuery({ rows, query, includeStale = false, includeDegraded = false }) {
+  const list = Array.isArray(rows) ? rows : []
+  const uniq = uniqueById(list)
+  if (!query) {
+    // Only filter by freshness toggles when no query provided
+    const ids = new Set()
+    const ONE_HOUR_MS = 60 * 60 * 1000
+    const now = Date.now()
+    for (const r of uniq) {
+      const s = typeof r?.scannerAt === 'number' ? r.scannerAt : null
+      const t = typeof r?.tickAt === 'number' ? r.tickAt : null
+      const p = typeof r?.pairStatsAt === 'number' ? r.pairStatsAt : null
+      const any = !!(s || t || p)
+      const fresh = any && [s, t, p].some((v) => typeof v === 'number' && now - v < ONE_HOUR_MS)
+      const state = any ? (fresh ? 'fresh' : 'stale') : 'degraded'
+      if (state === 'fresh' || (state === 'stale' && includeStale) || (state === 'degraded' && includeDegraded)) {
+        ids.add(r.id)
+      }
+    }
+    return ids
+  }
+  const q = String(query).toLowerCase()
+  const safeIncludes = (s) => String(s || '').toLowerCase().includes(q)
+  const ids = new Set()
+  const ONE_HOUR_MS = 60 * 60 * 1000
+  const now = Date.now()
+  for (const r of uniq) {
+    const s = typeof r?.scannerAt === 'number' ? r.scannerAt : null
+    const t = typeof r?.tickAt === 'number' ? r.tickAt : null
+    const p = typeof r?.pairStatsAt === 'number' ? r.pairStatsAt : null
+    const any = !!(s || t || p)
+    const fresh = any && [s, t, p].some((v) => typeof v === 'number' && now - v < ONE_HOUR_MS)
+    const state = any ? (fresh ? 'fresh' : 'stale') : 'degraded'
+    if (!(state === 'fresh' || (state === 'stale' && includeStale) || (state === 'degraded' && includeDegraded))) continue
+    if (safeIncludes(r?.tokenName) || safeIncludes(r?.tokenSymbol)) ids.add(r.id)
+  }
+  return ids
+}
+
+/**
  * Return a new array with unique items by id. First occurrence wins to preserve stable ordering.
  * @template T extends { id: string }
  * @param {T[]} list

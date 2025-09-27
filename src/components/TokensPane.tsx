@@ -15,6 +15,7 @@ import type { GetScannerResultParams, ScannerResult } from '../test-task-types'
 import { toChainId } from '../utils/chain'
 import { buildPairKey } from '../utils/key_builder'
 import { dedupeByPairAddress } from '../utils/dedupeByPairAddress'
+import { filterRowsByTokenQuery } from '../utils/filteredCompareOptions.mjs'
 import {
   onSubscriptionLockChange,
   isSubscriptionLockActive,
@@ -75,6 +76,9 @@ export default function TokensPane({
     minMcap?: number
     excludeHoneypots?: boolean
     limit?: number
+    tokenQuery?: string
+    includeStale?: boolean
+    includeDegraded?: boolean
   }
   onChainCountsChange?: (counts: Record<string, number>) => void
   syncSortToUrl?: boolean
@@ -372,7 +376,7 @@ export default function TokensPane({
         ? null
         : Math.max(0, cf.maxAgeHours) * 3600_000
     const now = Date.now()
-    const base = collected.filter((t) => {
+    let base = collected.filter((t) => {
       if (selectedChains && !selectedChains.has(t.chain)) return false
       if (t.volumeUsd < minVol) return false
       if (t.mcap < minMcap) return false
@@ -387,6 +391,16 @@ export default function TokensPane({
       }
       return true
     })
+    // Apply token search filter (reuses DetailModal rules). Only applies when a query is present.
+    if (cf.tokenQuery && String(cf.tokenQuery).trim().length > 0) {
+      const allowed = filterRowsByTokenQuery({
+        rows: base,
+        query: String(cf.tokenQuery).trim(),
+        includeStale: !!cf.includeStale,
+        includeDegraded: !!cf.includeDegraded,
+      })
+      base = base.filter((t) => allowed.has(t.id))
+    }
     // Fallback: if page has no ids yet (e.g., before first WS/REST), show empty until data arrives
     const sorter = (key: SortKey, dir: Dir) => (a: TokenRow, b: TokenRow) => {
       const getVal = (t: TokenRow): number | string => {

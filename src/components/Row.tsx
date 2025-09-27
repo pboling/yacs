@@ -337,10 +337,10 @@ const Row = memo(
             style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', alignItems: 'start', gap: 4 }}
           >
             <div style={{ textAlign: 'right' }}>
-              <NumberCell value={t.priceUsd} prefix="$" maxSigDigits={6} />
+              <NumberCell value={t.priceUsd} prefix="$" maxSigDigits={4} />
             </div>
             <div style={{ textAlign: 'right' }}>
-              <NumberCell value={t.mcap} prefix="$" maxSigDigits={6} />
+              <NumberCell value={t.mcap} prefix="$" maxSigDigits={4} />
             </div>
             {(() => {
               // Single sparkline of Price spanning both Price and MCap columns (no labels)

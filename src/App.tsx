@@ -1427,8 +1427,8 @@ function App() {
           {/* Row 1: Chains with dynamic counts across both tables */}
           <div className="row">
             <div className="group">
-              <label>Chains</label>
               <div className="chains-list">
+                <label>Chains</label>
                 {(['ETH', 'SOL', 'BASE', 'BSC'] as const).map((c) => {
                   const checked = (state.filters.chains ?? ['ETH', 'SOL', 'BASE', 'BSC']).includes(
                     c,
@@ -1472,6 +1472,97 @@ function App() {
           </div>
           {/* Row 2: Other filters */}
           <div className="row">
+            <div className="group" id="filter-token-search">
+              <label>Token Search <span className="muted" style={{ marginLeft: 'auto', fontSize: 11 }}>
+                  <span style={{ color: 'var(--accent-up)' }}>(Fresh included)</span>
+                </span></label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  value={state.filters.tokenQuery ?? ''}
+                  placeholder={
+                    typeof state.filters.tokenQuery === 'string' && state.filters.tokenQuery
+                      ? state.filters.tokenQuery
+                      : 'Search token name or symbol'
+                  }
+                  onFocus={() => {
+                    try {
+                      emitFilterFocusStart()
+                    } catch {
+                      /* no-op */
+                    }
+                  }}
+                  onBlur={() => {
+                    blurVersionRef.current = (state as unknown as { version?: number }).version ?? 0
+                    pendingApplyAfterBlurRef.current = true
+                  }}
+                  onChange={(e) => {
+                    d({
+                      type: 'filters/set',
+                      payload: { tokenQuery: e.currentTarget.value },
+                    } as FiltersAction)
+                  }}
+                  style={{
+                    background: '#111827',
+                    border: '1px solid #374151',
+                    borderRadius: 4,
+                    padding: '4px 8px',
+                    color: '#e5e7eb',
+                    minWidth: 220,
+                  }}
+                />
+                {state.filters.tokenQuery ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      d({ type: 'filters/set', payload: { tokenQuery: '' } } as FiltersAction)
+                    }}
+                    style={{
+                      background: 'transparent',
+                      border: '1px solid #4b5563',
+                      borderRadius: 4,
+                      padding: '4px 8px',
+                      color: 'inherit',
+                    }}
+                    title="Clear token search"
+                  >
+                    Clear
+                  </button>
+                ) : null}
+                <label className="chk" style={{ fontSize: 12 }}>
+                  <input
+                    type="checkbox"
+                    checked={!!state.filters.includeStale}
+                    onChange={(e) => {
+                      d({
+                        type: 'filters/set',
+                        payload: { includeStale: e.currentTarget.checked },
+                      } as FiltersAction)
+                    }}
+                  />{' '}
+                  <span className="muted" style={{ marginLeft: 'auto', fontSize: 11 }}>
+                    <span style={{ color: '#e5e7eb' }}>Include stale</span>
+                </span>
+
+                </label>
+                <label className="chk" style={{ fontSize: 12 }}>
+                  <input
+                    type="checkbox"
+                    checked={!!state.filters.includeDegraded}
+                    onChange={(e) => {
+                      d({
+                        type: 'filters/set',
+                        payload: { includeDegraded: e.currentTarget.checked },
+                      } as FiltersAction)
+                    }}
+                  />{' '}
+                  <span className="muted" style={{ marginLeft: 'auto', fontSize: 11 }}>
+                    <span style={{ color: 'var(--accent-down)' }}>Include degraded</span>
+                </span>
+
+                </label>
+              </div>
+            </div>
             <div className="group" id="filter-limit-rows">
               <label>Limit Rows per Table (0 = N/A)</label>
               <input
@@ -1651,6 +1742,10 @@ function App() {
                   maxAgeHours?: number | null
                   minMcap?: number
                   excludeHoneypots?: boolean
+                  limit?: number
+                  tokenQuery?: string
+                  includeStale?: boolean
+                  includeDegraded?: boolean
                 }
               }
               onChainCountsChange={(counts) => {
@@ -1715,6 +1810,10 @@ function App() {
                   maxAgeHours?: number | null
                   minMcap?: number
                   excludeHoneypots?: boolean
+                  limit?: number
+                  tokenQuery?: string
+                  includeStale?: boolean
+                  includeDegraded?: boolean
                 }
               }
               onChainCountsChange={(counts) => {
