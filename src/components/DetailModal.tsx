@@ -184,6 +184,22 @@ export default function DetailModal({
 
   const [compareSearch, setCompareSearch] = useState('')
   const [showCompareList, setShowCompareList] = useState(false)
+  // Freshness filters for selection menus (fresh always included)
+  const [includeStale, setIncludeStale] = useState(false)
+  const [includeDegraded, setIncludeDegraded] = useState(false)
+  const ONE_HOUR_MS = 60 * 60 * 1000
+  const freshnessOf = useCallback((r: DetailModalRow): 'fresh' | 'stale' | 'degraded' => {
+    type Timestamps = { scannerAt?: unknown; tickAt?: unknown; pairStatsAt?: unknown }
+    const ts = r as unknown as Timestamps
+    const s = typeof ts.scannerAt === 'number' ? (ts.scannerAt as number) : null
+    const t = typeof ts.tickAt === 'number' ? (ts.tickAt as number) : null
+    const p = typeof ts.pairStatsAt === 'number' ? (ts.pairStatsAt as number) : null
+    const hasAny = [s, t, p].some((v) => v != null)
+    if (!hasAny) return 'degraded'
+    const now = Date.now()
+    const recent = [s, t, p].some((v) => typeof v === 'number' && now - v < ONE_HOUR_MS)
+    return recent ? 'fresh' : 'stale'
+  }, [ONE_HOUR_MS])
   const [baseSearch, setBaseSearch] = useState('')
   const [showBaseList, setShowBaseList] = useState(false)
   // Robust resolver for compare row to handle potential id casing or address-based mismatches
@@ -226,7 +242,9 @@ export default function DetailModal({
       primaryRow.pairAddress && primaryRow.tokenAddress
         ? buildPairKey(primaryRow.pairAddress, primaryRow.tokenAddress, primaryRow.chain)
         : null
-    const baseTick = primaryRow.tokenAddress ? buildTickKey(primaryRow.tokenAddress, primaryRow.chain) : null
+    const baseTick = primaryRow.tokenAddress
+      ? buildTickKey(primaryRow.tokenAddress, primaryRow.chain)
+      : null
     const cmpPairKey =
       compareRow?.pairAddress && compareRow?.tokenAddress
         ? buildPairKey(compareRow.pairAddress, compareRow.tokenAddress, compareRow.chain)
@@ -276,12 +294,16 @@ export default function DetailModal({
     allRows,
     currentRow: primaryRow ?? null,
     compareSearch,
+    includeStale,
+    includeDegraded,
   })
   const filteredBaseOptions = computeFilteredCompareOptions<DetailModalRow>({
     open,
     allRows,
     currentRow: null,
     compareSearch: baseSearch,
+    includeStale,
+    includeDegraded,
   })
 
   // Debug updates panel: capture raw JSON updates for this row
@@ -317,7 +339,7 @@ export default function DetailModal({
         /* no-op */
       }
     }
-  }, [open, primaryRow?.id, debugEnabled])
+  }, [open, primaryRow?.id, primaryRow?.chain, primaryRow?.pairAddress, primaryRow?.tokenAddress, debugEnabled])
 
   useEffect(() => {
     try {
@@ -428,7 +450,9 @@ export default function DetailModal({
     primaryRow?.pairAddress && primaryRow.tokenAddress
       ? buildPairKey(primaryRow.pairAddress, primaryRow.tokenAddress, primaryRow.chain)
       : null
-  const baseTickKey = primaryRow?.tokenAddress ? buildTickKey(primaryRow.tokenAddress, primaryRow.chain) : null
+  const baseTickKey = primaryRow?.tokenAddress
+    ? buildTickKey(primaryRow.tokenAddress, primaryRow.chain)
+    : null
   const comparePairStatsKey =
     compareRow?.pairAddress && compareRow.tokenAddress
       ? buildPairKey(compareRow.pairAddress, compareRow.tokenAddress, compareRow.chain)
@@ -465,12 +489,12 @@ export default function DetailModal({
     const h = anyLatest.history
     if (h && Array.isArray(h.price) && Array.isArray(h.mcap)) {
       return {
-        price: [...(h.price || [])],
-        mcap: [...(h.mcap || [])],
-        volume: [...(h.volume || [])],
-        buys: [...(h.buys || [])],
-        sells: [...(h.sells || [])],
-        liquidity: [...(h.liquidity || [])],
+        price: [...(h.price ?? [])],
+        mcap: [...(h.mcap ?? [])],
+        volume: [...(h.volume ?? [])],
+        buys: [...(h.buys ?? [])],
+        sells: [...(h.sells ?? [])],
+        liquidity: [...(h.liquidity ?? [])],
       }
     }
     return {
@@ -759,8 +783,22 @@ export default function DetailModal({
                   onClick={() => {
                     setBaseId(null)
                     setBaseSearch('')
-                    setHistory({ price: [], mcap: [], volume: [], buys: [], sells: [], liquidity: [] })
-                    setHistory2({ price: [], mcap: [], volume: [], buys: [], sells: [], liquidity: [] })
+                    setHistory({
+                      price: [],
+                      mcap: [],
+                      volume: [],
+                      buys: [],
+                      sells: [],
+                      liquidity: [],
+                    })
+                    setHistory2({
+                      price: [],
+                      mcap: [],
+                      volume: [],
+                      buys: [],
+                      sells: [],
+                      liquidity: [],
+                    })
                   }}
                   style={{
                     marginLeft: 8,
@@ -774,6 +812,33 @@ export default function DetailModal({
                   Clear
                 </button>
               )}
+              <div style={{ marginTop: 6, display: 'flex', gap: 12, alignItems: 'center' }}>
+                <label className="chk" style={{ fontSize: 12 }}>
+                  <input
+                    type="checkbox"
+                    checked={includeStale}
+                    onChange={(e) => {
+                      setIncludeStale(e.currentTarget.checked)
+                    }}
+                  />{' '}
+                  Include stale
+                </label>
+                <label className="chk" style={{ fontSize: 12 }}>
+                  <input
+                    type="checkbox"
+                    checked={includeDegraded}
+                    onChange={(e) => {
+                      setIncludeDegraded(e.currentTarget.checked)
+                    }}
+                  />{' '}
+                  Include degraded
+                </label>
+                <span className="muted" style={{ marginLeft: 'auto', fontSize: 11 }}>
+                  <span style={{ color: 'var(--accent-up)' }}>Fresh</span> •{' '}
+                  <span style={{ color: '#e5e7eb' }}>Stale</span> •{' '}
+                  <span style={{ color: 'var(--accent-down)' }}>Degraded</span>
+                </span>
+              </div>
               {showBaseList && (
                 <div
                   style={{
@@ -815,9 +880,16 @@ export default function DetailModal({
                         background: baseId === opt.id ? '#374151' : 'transparent',
                       }}
                     >
-                      <span>
-                        {opt.tokenName.toUpperCase()}/{opt.tokenSymbol} / {opt.chain}
-                      </span>
+                      {(() => {
+                        const f = freshnessOf(opt)
+                        const color =
+                          f === 'fresh' ? 'var(--accent-up)' : f === 'degraded' ? 'var(--accent-down)' : '#e5e7eb'
+                        return (
+                          <span style={{ color }}>
+                            {opt.tokenName.toUpperCase()}/{opt.tokenSymbol} / {opt.chain}
+                          </span>
+                        )
+                      })()}
                       <span className="muted">
                         {opt.pairAddress && opt.tokenAddress ? '•' : ''}
                       </span>
@@ -883,6 +955,33 @@ export default function DetailModal({
                   Clear
                 </button>
               )}
+              <div style={{ marginTop: 6, display: 'flex', gap: 12, alignItems: 'center' }}>
+                <label className="chk" style={{ fontSize: 12 }}>
+                  <input
+                    type="checkbox"
+                    checked={includeStale}
+                    onChange={(e) => {
+                      setIncludeStale(e.currentTarget.checked)
+                    }}
+                  />{' '}
+                  Include stale
+                </label>
+                <label className="chk" style={{ fontSize: 12 }}>
+                  <input
+                    type="checkbox"
+                    checked={includeDegraded}
+                    onChange={(e) => {
+                      setIncludeDegraded(e.currentTarget.checked)
+                    }}
+                  />{' '}
+                  Include degraded
+                </label>
+                <span className="muted" style={{ marginLeft: 'auto', fontSize: 11 }}>
+                  <span style={{ color: 'var(--accent-up)' }}>Fresh</span> •{' '}
+                  <span style={{ color: '#e5e7eb' }}>Stale</span> •{' '}
+                  <span style={{ color: 'var(--accent-down)' }}>Degraded</span>
+                </span>
+              </div>
               {showCompareList && (
                 <div
                   style={{
@@ -924,9 +1023,16 @@ export default function DetailModal({
                         background: compareId === opt.id ? '#374151' : 'transparent',
                       }}
                     >
-                      <span>
-                        {opt.tokenName.toUpperCase()}/{opt.tokenSymbol} / {opt.chain}
-                      </span>
+                      {(() => {
+                        const f = freshnessOf(opt)
+                        const color =
+                          f === 'fresh' ? 'var(--accent-up)' : f === 'degraded' ? 'var(--accent-down)' : '#e5e7eb'
+                        return (
+                          <span style={{ color }}>
+                            {opt.tokenName.toUpperCase()}/{opt.tokenSymbol} / {opt.chain}
+                          </span>
+                        )
+                      })()}
                       <span className="muted">
                         {opt.pairAddress && opt.tokenAddress ? '•' : ''}
                       </span>
@@ -940,11 +1046,11 @@ export default function DetailModal({
         {/* Chart sections */}
         {(() => {
           if (!primaryRow)
-                      return (
-                        <div className="muted" style={{ marginTop: 8, marginBottom: 8 }}>
-                          Select a base token to view details and charts.
-                        </div>
-                      )
+            return (
+              <div className="muted" style={{ marginTop: 8, marginBottom: 8 }}>
+                Select a base token to view details and charts.
+              </div>
+            )
           const baseSection = (
             <ChartSection
               key={primaryRow.id + '-base'}

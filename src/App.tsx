@@ -626,9 +626,10 @@ function App() {
               if (!action) {
                 console.error('WS: unhandled or malformed message', parsed)
                 try {
+                  type MaybeEvent = { event?: unknown }
                   const evName =
-                    typeof parsed === 'object' && parsed
-                      ? /** @type {any} */ (parsed as any).event
+                    typeof parsed === 'object' && parsed && 'event' in (parsed as object)
+                      ? (parsed as MaybeEvent).event
                       : undefined
                   logWsError('unhandled or malformed message: ' + String(evName ?? 'unknown'))
                 } catch {}
@@ -904,7 +905,7 @@ function App() {
     if (!(k in countsRef.current)) return
     countsRef.current[k] = (countsRef.current[k] ?? 0) + 1
     if (flushTimerRef.current == null) {
-      flushTimerRef.current = window.setTimeout(() => {
+      flushTimerRef.current ??= window.setTimeout(() => {
         try {
           setEventCounts({ ...countsRef.current })
         } finally {

@@ -26,6 +26,8 @@ test('excludes current row by id', () => {
     allRows: rows,
     currentRow: rows[1],
     compareSearch: '',
+    includeStale: true,
+    includeDegraded: true,
   })
   assert.equal(res.length, 2)
   assert.ok(res.every((r) => r.id !== '2'))
@@ -38,6 +40,8 @@ test('caps to top 100 when no search', () => {
     allRows: many,
     currentRow: null,
     compareSearch: '',
+    includeStale: true,
+    includeDegraded: true,
   })
   assert.equal(res.length, 100)
 })
@@ -48,6 +52,8 @@ test('filters by tokenName or tokenSymbol (case-insensitive)', () => {
     allRows: rows,
     currentRow: null,
     compareSearch: 'beta',
+    includeStale: true,
+    includeDegraded: true,
   })
   assert.equal(res1.length, 1)
   assert.equal(res1[0].id, '2')
@@ -57,6 +63,8 @@ test('filters by tokenName or tokenSymbol (case-insensitive)', () => {
     allRows: rows,
     currentRow: null,
     compareSearch: 'GAM',
+    includeStale: true,
+    includeDegraded: true,
   })
   assert.equal(res2.length, 1)
   assert.equal(res2[0].id, '3')

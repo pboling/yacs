@@ -77,6 +77,7 @@ export function tokensReducer(state = initialState, action) {
         ids.push(id)
         // preserve live price/mcap if already updated in state (prefer existing original-cased id)
         const existing = next.byId[id] || next.byId[idLower]
+        const now = Date.now()
         const merged = existing
           ? {
               ...tNew,
@@ -85,8 +86,12 @@ export function tokensReducer(state = initialState, action) {
               volumeUsd: existing.volumeUsd,
               transactions: existing.transactions,
               history: existing.history || __emptyHistory__(),
+              // Track per-source timestamps
+              scannerAt: now,
+              tickAt: existing.tickAt,
+              pairStatsAt: existing.pairStatsAt,
             }
-          : { ...tNew, history: __emptyHistory__() }
+          : { ...tNew, history: __emptyHistory__(), scannerAt: now }
         next.byId[id] = merged
         next.byId[idLower] = merged
         // store meta needed for ticks under both keys
@@ -116,6 +121,7 @@ export function tokensReducer(state = initialState, action) {
         const idLower = String(id || '').toLowerCase()
         // merge into byId preserving any live-updated fields if present
         const existing = next.byId[id] || next.byId[idLower]
+        const now = Date.now()
         const merged = existing
           ? {
               ...tNew,
@@ -124,8 +130,12 @@ export function tokensReducer(state = initialState, action) {
               volumeUsd: existing.volumeUsd,
               transactions: existing.transactions,
               history: existing.history || __emptyHistory__(),
+              // Track per-source timestamps
+              scannerAt: now,
+              tickAt: existing.tickAt,
+              pairStatsAt: existing.pairStatsAt,
             }
-          : { ...tNew, history: __emptyHistory__() }
+          : { ...tNew, history: __emptyHistory__(), scannerAt: now }
         next.byId[id] = merged
         next.byId[idLower] = merged
         const totalSupply = parseFloat(s.token1TotalSupplyFormatted || '0') || 0
@@ -205,7 +215,13 @@ export function tokensReducer(state = initialState, action) {
         hist.liquidity = hist.liquidity.slice(startIdx)
       }
 
-      const nextTok = { ...updated, history: hist }
+      const nextTok = {
+        ...updated,
+        history: hist,
+        tickAt: now,
+        scannerAt: token.scannerAt,
+        pairStatsAt: token.pairStatsAt,
+      }
 
       try {
         if (updated && typeof updated.priceUsd === 'number') {
@@ -272,7 +288,7 @@ export function tokensReducer(state = initialState, action) {
         locked: p.liquidityLocked ?? (token.security ? token.security.locked : undefined),
         burned: p.burned ?? (token.security ? token.security.burned : undefined),
       }
-      const nextTok = { ...token, audit, security, migrationPc }
+      const nextTok = { ...token, audit, security, migrationPc, pairStatsAt: Date.now() }
       if (!__REDUCER_SEEN__.has(action)) {
         __REDUCER_SEEN__.add(action)
         try {
