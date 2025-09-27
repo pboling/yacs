@@ -255,12 +255,13 @@ const Row = memo(
               {(() => {
                 const st = getRowStatus?.(t)
                 const tip = st?.tooltip ?? (st ? st.state : '')
+                // Use app accent variables for the indicator: up (subscribed), neutral (unsubscribed), down (disabled)
                 const dotColor =
                   st?.state === 'subscribed'
-                    ? '#10b981'
+                    ? 'var(--accent-up)'
                     : st?.state === 'disabled'
-                      ? '#6b7280'
-                      : '#f59e0b'
+                      ? 'var(--accent-down)'
+                      : 'var(--muted, #9CA3AF)'
                 return (
                   <span
                     title={tip}
