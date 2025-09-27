@@ -31,16 +31,10 @@ export interface DetailModalRow {
     linkTwitter?: string
     linkWebsite?: string
   }
-  security?: { renounced?: boolean; locked?: boolean; burned?: boolean }
+  security?: { renounced?: boolean; locked?: boolean }
   // Optional addresses to build WS correlation key for update-rate tracking
   tokenAddress?: string
   pairAddress?: string
-  // Burn-related fields
-  totalSupply?: number
-  burnedSupply?: number
-  percentBurned?: number
-  deadAddress?: string
-  ownerAddress?: string
 }
 
 export default function DetailModal({

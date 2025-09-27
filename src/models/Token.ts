@@ -41,19 +41,12 @@ export interface Token {
     linkWebsite?: string
     renounced?: boolean
     locked?: boolean
-    burned?: boolean
     dexPaid?: boolean
   }
-  security?: { renounced?: boolean; locked?: boolean; burned?: boolean }
+  security?: { renounced?: boolean; locked?: boolean }
   // Optional fields present in reducer mapping; used to form WS subscription payloads when rows render
   pairAddress?: string
   tokenAddress?: string
-  // Burn-related fields (when provided)
-  totalSupply?: number
-  burnedSupply?: number
-  percentBurned?: number
-  deadAddress?: string
-  ownerAddress?: string
 
   // New subscription tracking fields
   subscriptionState?: SubscriptionState

@@ -358,32 +358,6 @@ export function generateScannerResponse(params = {}) {
       webLink: null,
     }
 
-    // --- Burn-related fields (deterministic) ---
-    // Deterministic totalSupply between 1,000,000 and 1,000,000,000
-    const supplySeed = mixSeeds(seed, hashParams({ k: String(pairAddress) + '|supply' }))
-    const rndSupply = mulberry32(supplySeed)
-    const totalSupply = Math.floor(1_000_000 + rndSupply() * (1_000_000_000 - 1_000_000))
-    // Deterministic burnedSupply between 0 and totalSupply
-    const burnedSeed = mixSeeds(seed, hashParams({ k: String(pairAddress) + '|burned' }))
-    const rndBurned = mulberry32(burnedSeed)
-    const burnedSupply = Math.floor(rndBurned() * totalSupply)
-    const percentBurned = totalSupply > 0 ? (burnedSupply / totalSupply) * 100 : 0
-    const deadAddress = '0x000000000000000000000000000000000000dEaD'
-    // Deterministic ownerAddress: 20% chance to be dead address, otherwise random
-    const ownerSeed = mixSeeds(seed, hashParams({ k: String(pairAddress) + '|owner' }))
-    const rndOwner = mulberry32(ownerSeed)
-    const ownerAddress =
-      rndOwner() < 0.2
-        ? deadAddress
-        : `0x${Math.floor(rndOwner() * 1e16)
-            .toString(16)
-            .padStart(40, '0')}`
-    item.totalSupply = totalSupply
-    item.burnedSupply = burnedSupply
-    item.percentBurned = percentBurned
-    item.deadAddress = deadAddress
-    item.ownerAddress = ownerAddress
-
     // Deterministic social links with ~80% chance per link, derived from seed + token + coarse epoch
     try {
       const epochMs = 90 * 24 * 3600 * 1000 // 90 days to make updates very infrequent

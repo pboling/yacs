@@ -1,13 +1,4 @@
-import {
-  CheckCircle2,
-  XCircle,
-  CircleHelp,
-  ShieldCheck,
-  Snowflake,
-  Lock,
-  Flame,
-  Bug,
-} from 'lucide-react'
+import { CheckCircle2, XCircle, CircleHelp, ShieldCheck, Snowflake, Lock, Bug } from 'lucide-react'
 import React from 'react'
 
 export interface AuditFlags {
@@ -15,7 +6,6 @@ export interface AuditFlags {
   freezable?: boolean
   renounced?: boolean
   locked?: boolean
-  burned?: boolean
   honeypot?: boolean
 }
 
@@ -101,12 +91,6 @@ export default function AuditIcons({ flags }: { flags: AuditFlags }) {
         value={flags.locked}
         label="Liquidity Locked"
         trueIcon={<Lock size={size} />}
-        falseIcon={<XCircle size={size} />}
-      />
-      <BoolIcon
-        value={flags.burned}
-        label="Burned"
-        trueIcon={<Flame size={size} />}
         falseIcon={<XCircle size={size} />}
       />
       <BoolIcon

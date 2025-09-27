@@ -1,8 +1,7 @@
 import { memo, useEffect, useState } from 'react'
 import NumberCell from './NumberCell'
 import AuditIcons from './AuditIcons'
-import { Globe, MessageCircle, Send, ExternalLink, Eye, ChartNoAxesCombined } from 'lucide-react'
-import { BurnDetailsTooltip } from './BurnDetailsTooltip'
+import { Globe, Eye, ChartNoAxesCombined } from 'lucide-react'
 import { formatAge } from '../helpers/format'
 import type { Token as TokenRow } from '../models/Token'
 
@@ -16,8 +15,6 @@ export interface RowProps {
   ) => { state: 'subscribed' | 'unsubscribed' | 'disabled'; tooltip?: string } | undefined
   onOpenRowDetails?: (row: TokenRow) => void
   onToggleRowSubscription?: (row: TokenRow) => void
-  showBurnTooltipIdx: number | null
-  setShowBurnTooltipIdx: (v: number | null) => void
   registerRow: (el: HTMLTableRowElement | null, row: TokenRow) => void
 }
 
@@ -36,8 +33,6 @@ const Row = memo(
     getRowStatus,
     onOpenRowDetails,
     onToggleRowSubscription,
-    showBurnTooltipIdx,
-    setShowBurnTooltipIdx,
     registerRow,
   }: RowProps) {
     // Global 1s tick to force sparkline to advance even without new data
@@ -61,7 +56,6 @@ const Row = memo(
       freezable: t.audit?.freezable,
       renounced: t.audit?.renounced ?? t.security?.renounced,
       locked: t.audit?.locked ?? t.security?.locked,
-      burned: t.audit?.burned ?? t.security?.burned,
       honeypot: t.audit?.honeypot,
     }
     return (
@@ -385,26 +379,6 @@ const Row = memo(
         <td>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <AuditIcons flags={auditFlags} />
-            {t.burnDetails && (
-              <div
-                onMouseEnter={() => {
-                  setShowBurnTooltipIdx(idx)
-                }}
-                onMouseLeave={() => {
-                  setShowBurnTooltipIdx(null)
-                }}
-                style={{ position: 'relative' }}
-              >
-                <span className="muted" style={{ fontSize: 12, cursor: 'help' }}>
-                  Burn
-                </span>
-                {showBurnTooltipIdx === idx && (
-                  <div style={{ position: 'absolute', zIndex: 10, top: '120%', right: 0 }}>
-                    <BurnDetailsTooltip details={t.burnDetails} />
-                  </div>
-                )}
-              </div>
-            )}
             <button
               type="button"
               title="Toggle subscription for this row"
@@ -426,7 +400,6 @@ const Row = memo(
     prev.getRowStatus === next.getRowStatus &&
     prev.onOpenRowDetails === next.onOpenRowDetails &&
     prev.onToggleRowSubscription === next.onToggleRowSubscription &&
-    prev.showBurnTooltipIdx === next.showBurnTooltipIdx &&
     prev.registerRow === next.registerRow,
 )
 
