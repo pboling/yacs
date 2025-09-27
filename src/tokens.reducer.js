@@ -113,26 +113,45 @@ export function tokensReducer(state = initialState, action) {
         const next = {
           ...state,
           byId: { ...state.byId },
+          meta: { ...state.meta },
           pages: { ...state.pages },
         }
-        // Map and store each token by id
-        for (const token of scannerPairs) {
-          if (token && token.id) {
-            next.byId[token.id] = token
-          }
+        const ids = []
+        for (const tNew of Array.isArray(scannerPairs) ? scannerPairs : []) {
+          const id = tNew.id
+          const idLower = String(id || '').toLowerCase()
+          ids.push(id)
+          const existing = next.byId[id] || next.byId[idLower]
+          const now = Date.now()
+          const merged = existing
+            ? {
+                ...tNew,
+                priceUsd: existing.priceUsd,
+                mcap: existing.mcap,
+                volumeUsd: existing.volumeUsd,
+                transactions: existing.transactions,
+                history: existing.history || __emptyHistory__(),
+                scannerAt: now,
+                tickAt: existing.tickAt,
+                pairStatsAt: existing.pairStatsAt,
+              }
+            : { ...tNew, history: __emptyHistory__(), scannerAt: now }
+          next.byId[id] = merged
+          next.byId[idLower] = merged
+          // meta.totalSupply is optional in mapped token; keep existing if present
+          const existingMeta = next.meta[id] || next.meta[idLower] || {}
+          next.meta[id] = existingMeta
+          next.meta[idLower] = existingMeta
         }
-        // Store the order of ids for this page
-        next.pages[page] = scannerPairs.map((token) => token.id).filter(Boolean)
-        next.version = (state.version || 0) + 1
-        // Debug log: print number of tokens and page IDs
+        next.pages[page] = ids
         try {
-          console.log('[tokensReducer] scanner/pairs result:', {
+          console.info('REDUCER: pages updated', {
             page,
-            byIdCount: Object.keys(next.byId).length,
-            pageIds: next.pages[page],
+            idsLen: Array.isArray(ids) ? ids.length : 0,
+            sample: Array.isArray(ids) ? ids.slice(0, 3) : [],
           })
         } catch {}
-        return next
+        return { ...next, version: (state.version || 0) + 1 }
       }
       case 'scanner/append': {
         const { page, scannerPairs } = action.payload

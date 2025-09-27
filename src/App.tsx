@@ -689,238 +689,70 @@ function App() {
             } catch {}
           }
           ws.onmessage = (ev) => {
-            try {
-              const parsed = JSON.parse(
-                typeof ev.data === 'string' ? ev.data : String(ev.data),
-              ) as unknown
-              const event =
-                parsed && typeof parsed === 'object'
-                  ? (parsed as { event?: unknown }).event
-                  : undefined
-              try {
-                logWsInfo('event ' + String(event))
-              } catch {}
-              try {
-                bumpEventCount(event)
-              } catch {}
-              const data =
-                parsed && typeof parsed === 'object'
-                  ? (parsed as { data?: unknown }).data
-                  : undefined
-              try {
-                if (import.meta.env.DEV) {
-                  msgLogCountRef.current += 1
-                  if (msgLogCountRef.current % 20 === 0) {
-                    console.log('WS: message event (sampled)', event)
-                  }
-                }
-              } catch {
-                /* noop */
+            // Defer all heavy work to avoid blocking the main thread
+            const defer = (cb: () => void) => {
+              if (window.requestIdleCallback) {
+                window.requestIdleCallback(cb, { timeout: 100 })
+              } else {
+                setTimeout(cb, 0)
               }
-              // Basic validation per expected event types; fail loud in console on bad shapes
+            }
+            const start = performance.now()
+            defer(() => {
+              const parseStart = performance.now()
+              let parsed: any
+              try {
+                parsed = JSON.parse(typeof ev.data === 'string' ? ev.data : String(ev.data))
+              } catch (err) {
+                console.error('WS: failed to parse message', err)
+                return
+              }
+              const parseEnd = performance.now()
+              const event = parsed && typeof parsed === 'object' ? parsed.event : undefined
+              const data = parsed && typeof parsed === 'object' ? parsed.data : undefined
+              // Validation
+              const validationStart = performance.now()
               if (event === 'scanner-pairs') {
-                const pairs =
-                  data && typeof data === 'object'
-                    ? (data as { pairs?: unknown[] }).pairs
-                    : undefined
+                const pairs = data && typeof data === 'object' ? data.pairs : undefined
                 if (!Array.isArray(pairs)) {
                   console.error('WS: invalid scanner-pairs payload: missing pairs array', parsed)
-                  try {
-                    logWsError('invalid scanner-pairs payload')
-                  } catch {}
                   return
                 }
               } else if (event === 'tick') {
-                const ok =
-                  data &&
-                  typeof data === 'object' &&
-                  (data as { pair?: unknown; swaps?: unknown }).pair &&
-                  Array.isArray((data as { swaps?: unknown[] }).swaps)
+                const ok = data && typeof data === 'object' && data.pair && Array.isArray(data.swaps)
                 if (!ok) {
                   console.error('WS: invalid tick payload: expected { pair, swaps[] }', parsed)
-                  try {
-                    logWsError('invalid tick payload')
-                  } catch {}
                   return
                 }
               } else if (event === 'pair-stats') {
-                const ok =
-                  data &&
-                  typeof data === 'object' &&
-                  (data as { pair?: { pairAddress?: unknown } }).pair &&
-                  typeof (data as { pair: { pairAddress?: unknown } }).pair.pairAddress === 'string'
+                const ok = data && typeof data === 'object' && data.pair && typeof data.pair.pairAddress === 'string'
                 if (!ok) {
                   console.error('WS: invalid pair-stats payload: expected pair.pairAddress', parsed)
-                  try {
-                    logWsError('invalid pair-stats payload')
-                  } catch {}
                   return
                 }
               }
-
-              // Map to action; if unhandled, log for visibility
+              const validationEnd = performance.now()
+              // Mapping
+              const mapStart = performance.now()
               const action = mapIncomingMessageToActionSafe(parsed)
+              const mapEnd = performance.now()
               if (!action) {
                 console.error('WS: unhandled or malformed message', parsed)
-                try {
-                  interface MaybeEvent {
-                    event?: unknown
-                  }
-                  const evName =
-                    typeof parsed === 'object' && parsed && 'event' in parsed
-                      ? (parsed as MaybeEvent).event
-                      : undefined
-                  const safeEv =
-                    evName == null
-                      ? 'unknown'
-                      : typeof evName === 'string'
-                        ? evName
-                        : typeof evName === 'number' || typeof evName === 'boolean'
-                          ? String(evName)
-                          : typeof evName === 'bigint' || typeof evName === 'symbol'
-                            ? String(evName)
-                            : typeof evName === 'function'
-                              ? `[fn ${evName.name || 'anonymous'}]`
-                              : Array.isArray(evName) || typeof evName === 'object'
-                                ? JSON.stringify(evName)
-                                : 'unknown'
-                  logWsError('unhandled or malformed message: ' + safeEv)
-                } catch {}
                 return
               }
-              try {
-                if (import.meta.env.DEV) {
-                  msgLogCountRef.current += 1
-                  if (msgLogCountRef.current % 20 === 0) {
-                    console.log('WS: dispatching action (sampled)', {
-                      type: (action as { type: string }).type,
-                    })
-                  }
-                }
-              } catch {
-                /* no-op */
+              // Dispatch
+              const dispatchStart = performance.now()
+              d(action)
+              const dispatchEnd = performance.now()
+              // Timing logs
+              if (import.meta.env.DEV) {
+                console.log('[WS timing] total:', (dispatchEnd - start).toFixed(2), 'ms',
+                  'parse:', (parseEnd - parseStart).toFixed(2),
+                  'validation:', (validationEnd - validationStart).toFixed(2),
+                  'map:', (mapEnd - mapStart).toFixed(2),
+                  'dispatch:', (dispatchEnd - dispatchStart).toFixed(2))
               }
-              // Defer dispatch to break up long tasks and allow paint
-              setTimeout(() => {
-                d(action)
-              }, 0)
-              // Track readiness of main WS scanner streams per pane
-              try {
-                if (event === 'scanner-pairs') {
-                  const pgVal = (data as { page?: unknown }).page
-                  const pageNum =
-                    typeof pgVal === 'number' ? pgVal : Number((data as { page?: string }).page)
-                  if (pageNum === TRENDING_PAGE) {
-                    setWsScannerReady((prev) =>
-                      prev.trending ? prev : { ...prev, trending: true },
-                    )
-                  } else if (pageNum === NEW_PAGE) {
-                    setWsScannerReady((prev) => (prev.newer ? prev : { ...prev, newer: true }))
-                  }
-                }
-              } catch {
-                /* no-op */
-              }
-
-              // Count update events for live rate (tick and pair-stats) only for visible keys
-              try {
-                if (event === 'tick') {
-                  const dd = data as { pair?: { pair?: string; token?: string; chain?: string } }
-                  const p =
-                    (dd as { pair?: { pair?: string; token?: string; chain?: string } }).pair ?? {}
-                  const token = p.token ?? ''
-                  const chain = p.chain ?? ''
-                  if (token && chain) {
-                    const key = buildTickKey(token, chain)
-                    // Emit per-key update for subscribers (modal, topbar, etc.)
-                    try {
-                      emitUpdate({ key, type: 'tick', data })
-                    } catch {
-                      /* no-op */
-                    }
-                    if (getCount(key) > 0) {
-                      updatesCounterRef.current += 1
-                    }
-                  }
-                } else if (event === 'pair-stats') {
-                  // Resolve key from current state as pair-stats may omit token/chain
-                  const pairAddress = (data as { pair: { pairAddress: string } }).pair.pairAddress
-                  if (pairAddress) {
-                    const idLower = pairAddress.toLowerCase()
-                    const byId =
-                      (state as unknown as { byId?: Record<string, TokenRow | undefined> }).byId ??
-                      {}
-                    const row = byId[idLower] ?? byId[pairAddress]
-                    if (row?.tokenAddress) {
-                      const chainName = row.chain
-                      const key = buildPairKey(pairAddress, row.tokenAddress, chainName)
-                      // Emit per-key update
-                      try {
-                        emitUpdate({ key, type: 'pair-stats', data })
-                      } catch {
-                        /* no-op */
-                      }
-                      if (getCount(key) > 0) {
-                        updatesCounterRef.current += 1
-                      }
-                    }
-                  }
-                }
-              } catch {
-                /* no-op */
-              }
-
-              // Helpful diagnostics: log compact payload details
-              if (event === 'pair-stats') {
-                try {
-                  const p = (
-                    data as {
-                      pair?: {
-                        pairAddress?: string
-                        token1IsHoneypot?: boolean
-                        isVerified?: boolean
-                      }
-                    }
-                  ).pair
-                  console.log('WS: pair-stats data', {
-                    pairAddress: p?.pairAddress,
-                    hp: p?.token1IsHoneypot,
-                    verified: p?.isVerified,
-                  })
-                } catch {
-                  /* no-op */
-                }
-              } else if (event === 'tick') {
-                try {
-                  const dd = data as {
-                    pair?: { pair?: string }
-                    swaps?: { isOutlier?: boolean; priceToken1Usd?: string | number }[]
-                  }
-                  const latest = Array.isArray(dd.swaps)
-                    ? dd.swaps.filter((s) => !s.isOutlier).pop()
-                    : undefined
-                  const latestPrice = latest
-                    ? typeof latest.priceToken1Usd === 'number'
-                      ? latest.priceToken1Usd
-                      : parseFloat(latest.priceToken1Usd ?? 'NaN')
-                    : undefined
-                  console.log('WS: tick data summary', {
-                    pair: dd.pair?.pair,
-                    swaps: Array.isArray(dd.swaps) ? dd.swaps.length : undefined,
-                    latestPrice,
-                  })
-                } catch {
-                  /* no-op */
-                }
-              }
-
-              // Note: we no longer auto-subscribe to all pairs here.
-              // Pair and pair-stats subscriptions are now gated by viewport
-              // visibility inside TokensPane to reduce WS traffic.
-            } catch (err) {
-              const safe = err instanceof Error ? err.message : String(err)
-              console.error('WS: failed to process message', safe)
-            }
+            })
           }
           ws.onerror = () => {
             try {
@@ -1171,16 +1003,14 @@ function App() {
   // Early boot diagnostics — log current theme and page keys when state/theme changes
   useEffect(() => {
     try {
-      const pages = (state as unknown as { pages?: Partial<Record<number, string[]>> }).pages ?? {}
       console.info('App: mount', {
         theme,
         bypassBoot: false,
-        pagesKeys: Object.keys(pages),
       })
     } catch {
       /* no-op */
     }
-  }, [state, theme])
+  }, [theme])
 
   // Global error diagnostics to catch silent failures after REST success
   useEffect(() => {
@@ -1238,12 +1068,13 @@ function App() {
   // This avoids the app getting stuck on the boot overlay when the backend does not
   // emit scanner-pairs over WebSocket, while REST has already populated the store.
   useEffect(() => {
+    if (appReady) return; // Only run if spinner is still showing
     try {
-      const pages = (state as unknown as { pages?: Partial<Record<number, string[]>> }).pages ?? {}
-      const trendingArr = (pages as Record<number, string[] | undefined>)[TRENDING_PAGE]
-      const newArr = (pages as Record<number, string[] | undefined>)[NEW_PAGE]
-      const hasTrending = Array.isArray(trendingArr)
-      const hasNew = Array.isArray(newArr)
+      const pages = (state as unknown as { pages?: Partial<Record<number, string[]>> }).pages ?? {};
+      const trendingArr = (pages as Record<number, string[] | undefined>)[TRENDING_PAGE];
+      const newArr = (pages as Record<number, string[] | undefined>)[NEW_PAGE];
+      const hasTrending = Array.isArray(trendingArr);
+      const hasNew = Array.isArray(newArr);
       console.info('App: pages-scan', {
         TRENDING_PAGE,
         NEW_PAGE,
@@ -1251,17 +1082,17 @@ function App() {
         hasNew,
         trendingLen: Array.isArray(trendingArr) ? trendingArr.length : undefined,
         newLen: Array.isArray(newArr) ? newArr.length : undefined,
-      })
+      });
       if (hasTrending || hasNew) {
         setWsScannerReady((prev) => ({
           trending: prev.trending || hasTrending,
           newer: prev.newer || hasNew,
-        }))
+        }));
       }
     } catch (err) {
-      logCatch('App: boot readiness pages scan failed', err)
+      logCatch('App: boot readiness pages scan failed', err);
     }
-  }, [state, TRENDING_PAGE, NEW_PAGE])
+  }, [appReady, state])
   // Allow E2E/automation to bypass the boot splash to avoid spinner-related flakiness
   const bypassBoot = useMemo(() => {
     try {
@@ -1497,14 +1328,19 @@ function App() {
 
   // Fetch initial token data from REST API and dispatch to reducer
   useEffect(() => {
+    console.log('[App.tsx] Initial fetch effect running')
     // Use sessionStorage to prevent duplicate fetches across remounts
+    const isDev = import.meta.env.DEV
     if (typeof window !== 'undefined' && window.sessionStorage) {
       if (window.sessionStorage.getItem('DEX_SCANNER_INITIAL_FETCHED')) {
         console.log('[App.tsx] Initial fetch guard: already set, skipping fetch')
-        return
+        if (!isDev) return
+        // In dev, ignore the guard and always fetch
+        console.log('[App.tsx] DEV mode: ignoring sessionStorage guard')
+      } else {
+        console.log('[App.tsx] Initial fetch guard: setting now')
+        window.sessionStorage.setItem('DEX_SCANNER_INITIAL_FETCHED', '1')
       }
-      console.log('[App.tsx] Initial fetch guard: setting now')
-      window.sessionStorage.setItem('DEX_SCANNER_INITIAL_FETCHED', '1')
     } else {
       console.log('[App.tsx] sessionStorage not available, cannot set guard')
     }
@@ -1513,13 +1349,12 @@ function App() {
       try {
         console.log('[App.tsx] fetchScanner: Trending Tokens (effect)')
         const trendingRes = await fetchScanner({ ...TRENDING_TOKENS_FILTERS, page: 1, __source: 'App.tsx useEffect Trending' })
+        console.log('[App.tsx] fetchScanner: Trending Tokens result', trendingRes)
         if (!cancelled) {
+          console.log('[App.tsx] dispatching scanner/pairs for Trending', trendingRes.tokens)
           d({
             type: 'scanner/pairs',
-            payload: {
-              page: TRENDING_PAGE,
-              scannerPairs: trendingRes.tokens,
-            },
+            payload: { page: TRENDING_PAGE, scannerPairs: trendingRes.tokens },
           })
         }
       } catch (err) {
@@ -1528,13 +1363,12 @@ function App() {
       try {
         console.log('[App.tsx] fetchScanner: New Tokens (effect)')
         const newRes = await fetchScanner({ ...NEW_TOKENS_FILTERS, page: 1, __source: 'App.tsx useEffect New' })
+        console.log('[App.tsx] fetchScanner: New Tokens result', newRes)
         if (!cancelled) {
+          console.log('[App.tsx] dispatching scanner/pairs for New', newRes.tokens)
           d({
             type: 'scanner/pairs',
-            payload: {
-              page: NEW_PAGE,
-              scannerPairs: newRes.tokens,
-            },
+            payload: { page: NEW_PAGE, scannerPairs: newRes.tokens },
           })
         }
       } catch (err) {
