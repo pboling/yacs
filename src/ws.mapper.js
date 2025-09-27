@@ -90,6 +90,9 @@ export function buildPairStatsUnsubscription({ pair, token, chain }) {
   return { event: 'unsubscribe-pair-stats', data: { pair, token, chain: c } }
 }
 
+// Global experiment flag: disable all WebSocket unsubscriptions (no-op send)
+export const UNSUBSCRIPTIONS_DISABLED = true
+
 // Thin send helpers to emit paired messages for a given pair/token/chain
 // Each function attempts both sends but isolates failures so one failing message
 // does not prevent the other from being delivered.
@@ -130,6 +133,13 @@ export function sendSubscribe(ws, { pair, token, chain }) {
   }
 }
 export function sendUnsubscribe(ws, { pair, token, chain }) {
+  if (UNSUBSCRIPTIONS_DISABLED) {
+    try {
+      const key = String(pair) + '|' + String(token) + '|' + String(chain)
+      __wsLog('info', '[disabled] unsubscribe suppressed ' + key)
+    } catch {}
+    return
+  }
   const key = String(pair) + '|' + String(token) + '|' + String(chain)
   try {
     ws &&

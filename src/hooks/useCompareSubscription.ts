@@ -6,6 +6,7 @@ import {
   buildPairStatsUnsubscription,
   buildPairSubscription,
   buildPairStatsSubscription,
+  UNSUBSCRIPTIONS_DISABLED,
 } from '../ws.mapper.js'
 
 export interface MinimalCompareRow {
@@ -95,6 +96,10 @@ export function useCompareSubscription({
   useEffect(() => {
     // Cleanup helper
     const unsubscribe = () => {
+      if (UNSUBSCRIPTIONS_DISABLED) {
+        subscribedIdRef.current = null
+        return
+      }
       const ws = wsRef.current
       if (abortRef.current) {
         try {

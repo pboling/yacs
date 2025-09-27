@@ -306,10 +306,13 @@ export default function TokensPane({
           (token) => token && typeof token.id === 'string' && token.id.length === 42,
         )
         if (addressLikeIds.length > 0) {
-          console.warn('[TokensPane:' + title + '] token with id of address length:', addressLikeIds[0])
+          console.warn(
+            '[TokensPane:' + title + '] token with id of address length:',
+            addressLikeIds[0],
+          )
         }
         // Deduplicate by pairAddress (case-insensitive) before computing payloads/dispatching
-        const dedupedList = dedupeByPairAddress(tokens as ScannerResult[])
+        const dedupedList = dedupeByPairAddress(tokens)
         console.log('[TokensPane:' + title + '] dispatching scanner/pairs:', {
           page,
           scannerPairs: dedupedList,

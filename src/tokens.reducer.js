@@ -113,23 +113,50 @@ export function tokensReducer(state = initialState, action) {
         if (!changed && JSON.stringify(nextPages) === JSON.stringify(state.pages)) {
           return state
         }
-        return { ...state, byId: nextById, meta: nextMeta, pages: nextPages, version: (state.version || 0) + 1 }
+        return {
+          ...state,
+          byId: nextById,
+          meta: nextMeta,
+          pages: nextPages,
+          version: (state.version || 0) + 1,
+        }
       }
       case 'scanner/pairs': {
         const { page, scannerPairs } = action.payload
-        const { nextById, nextMeta, nextPages, changed } = processTokens({ tokens: scannerPairs, state, page })
+        const { nextById, nextMeta, nextPages, changed } = processTokens({
+          tokens: scannerPairs,
+          state,
+          page,
+        })
         if (!changed && JSON.stringify(nextPages) === JSON.stringify(state.pages)) {
           return state
         }
-        return { ...state, byId: nextById, meta: nextMeta, pages: nextPages, version: (state.version || 0) + 1 }
+        return {
+          ...state,
+          byId: nextById,
+          meta: nextMeta,
+          pages: nextPages,
+          version: (state.version || 0) + 1,
+        }
       }
       case 'scanner/append': {
         const { page, scannerPairs } = action.payload
-        const { nextById, nextMeta, nextPages, changed } = processTokens({ tokens: scannerPairs, state, page, mapFn: mapScannerResultToToken })
+        const { nextById, nextMeta, nextPages, changed } = processTokens({
+          tokens: scannerPairs,
+          state,
+          page,
+          mapFn: mapScannerResultToToken,
+        })
         if (!changed && JSON.stringify(nextPages) === JSON.stringify(state.pages)) {
           return state
         }
-        return { ...state, byId: nextById, meta: nextMeta, pages: nextPages, version: (state.version || 0) + 1 }
+        return {
+          ...state,
+          byId: nextById,
+          meta: nextMeta,
+          pages: nextPages,
+          version: (state.version || 0) + 1,
+        }
       }
       case 'pair/tick': {
         const { pair, swaps } = action.payload

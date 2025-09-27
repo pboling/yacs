@@ -45,6 +45,7 @@ import { toChainId } from './utils/chain'
 import { buildPairKey, buildTickKey } from './utils/key_builder'
 import { logCatch } from './utils/debug.mjs'
 import { emitUpdate } from './updates.bus'
+import { UNSUBSCRIPTIONS_DISABLED } from './ws.mapper.js'
 
 // Theme allow-list and cookie helpers
 const THEME_ALLOW = ['cherry-sour', 'rocket-lake', 'legendary'] as const
@@ -867,7 +868,12 @@ function App() {
       }
       // Attempt to unsubscribe from scanner filters before closing (only outside dev)
       try {
-        if (!import.meta.env.DEV && currentWs && currentWs.readyState === WebSocket.OPEN) {
+        if (
+          !UNSUBSCRIPTIONS_DISABLED &&
+          !import.meta.env.DEV &&
+          currentWs &&
+          currentWs.readyState === WebSocket.OPEN
+        ) {
           currentWs.send(
             JSON.stringify(
               buildScannerUnsubscriptionSafe({ ...trendingFilters, page: TRENDING_PAGE }),
@@ -1337,8 +1343,10 @@ function App() {
     }
     // Cancel scanner streams for both tables while modal is focused, then subscribe to the selected token
     try {
-      wsSend(buildScannerUnsubscriptionSafe({ ...trendingFilters, page: TRENDING_PAGE }))
-      wsSend(buildScannerUnsubscriptionSafe({ ...newFilters, page: NEW_PAGE }))
+      if (!UNSUBSCRIPTIONS_DISABLED) {
+        wsSend(buildScannerUnsubscriptionSafe({ ...trendingFilters, page: TRENDING_PAGE }))
+        wsSend(buildScannerUnsubscriptionSafe({ ...newFilters, page: NEW_PAGE }))
+      }
     } catch {
       /* no-op */
     }
@@ -1347,8 +1355,10 @@ function App() {
     if (pair && token) {
       const chain = toChainId(row.chain)
       // Ensure any existing subs for this pair are cleared, then add normal subs for the modal
-      wsSend(buildPairUnsubscription({ pair, token, chain }))
-      wsSend(buildPairStatsUnsubscription({ pair, token, chain }))
+      if (!UNSUBSCRIPTIONS_DISABLED) {
+        wsSend(buildPairUnsubscription({ pair, token, chain }))
+        wsSend(buildPairStatsUnsubscription({ pair, token, chain }))
+      }
       wsSend(buildPairSubscriptionSafe({ pair, token, chain }))
       wsSend(buildPairStatsSubscriptionSafe({ pair, token, chain }))
     }
@@ -1380,8 +1390,10 @@ function App() {
       const token = row.tokenAddress ?? ''
       if (pair && token) {
         const chain = toChainId(row.chain)
-        wsSend(buildPairUnsubscription({ pair, token, chain }))
-        wsSend(buildPairStatsUnsubscription({ pair, token, chain }))
+        if (!UNSUBSCRIPTIONS_DISABLED) {
+          wsSend(buildPairUnsubscription({ pair, token, chain }))
+          wsSend(buildPairStatsUnsubscription({ pair, token, chain }))
+        }
       }
     }
   }
