@@ -30,7 +30,7 @@ export default function WsConsole() {
       ;(
         window as unknown as { __WS_CONSOLE_LOG__?: (k: string, t: string) => void }
       ).__WS_CONSOLE_LOG__ = (kind: string, text: string) => {
-        const k = String(kind)
+        const k = kind
         if (k === 'error') logWsError(text)
         else if (k === 'success') logWsSuccess(text)
         else logWsInfo(text)
