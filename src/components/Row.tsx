@@ -391,7 +391,7 @@ const Row = memo(
               }
 
               const width = undefined // auto width via viewBox and CSS
-              const height = 18 // ~1.5x line-height visual
+              const height = 34 // ~1.5x line-height visual
               const pad = 2
               const max = Math.max(...data)
               const min = Math.min(...data)
