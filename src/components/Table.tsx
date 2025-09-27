@@ -585,6 +585,7 @@ export default function Table({
                   sortKey={sortKey}
                   sortDir={sortDir}
                   onSort={onSort}
+                  title="Token name and symbol. Click to sort alphabetically."
                 />
                 <SortHeader
                   label="Exchange"
@@ -593,6 +594,7 @@ export default function Table({
                   sortDir={sortDir}
                   onSort={onSort}
                   style={{ width: 30, minWidth: 30, maxWidth: 30 }}
+                  title="Exchange/DEX where the pair trades. Click to sort by exchange name."
                 />
                 <SortHeader
                   label="Price"
@@ -600,6 +602,7 @@ export default function Table({
                   sortKey={sortKey}
                   sortDir={sortDir}
                   onSort={onSort}
+                  title="Latest token price in USD (from live ticks/pair stats). Click to sort by price."
                 />
                 <SortHeader
                   label="MCap"
@@ -607,6 +610,7 @@ export default function Table({
                   sortKey={sortKey}
                   sortDir={sortDir}
                   onSort={onSort}
+                  title="Fully diluted or reported market cap in USD. Click to sort by market cap."
                 />
                 <SortHeader
                   label="Volume"
@@ -614,8 +618,9 @@ export default function Table({
                   sortKey={sortKey}
                   sortDir={sortDir}
                   onSort={onSort}
+                  title="Trading volume in USD over the selected timeframe. Click to sort by volume."
                 />
-                <th>
+                <th title="Price change percentages over multiple windows: 5m, 1h, 6h, 24h.">
                   5m 1h Chg
                   <br />
                   6h 24h Chg
@@ -626,6 +631,7 @@ export default function Table({
                   sortKey={sortKey}
                   sortDir={sortDir}
                   onSort={onSort}
+                  title="Time since token creation (younger at top when sorting descending)."
                 />
                 <SortHeader
                   label="Buys/Sells"
@@ -633,6 +639,7 @@ export default function Table({
                   sortKey={sortKey}
                   sortDir={sortDir}
                   onSort={onSort}
+                  title="Total recent transactions: buys + sells. Click to sort by activity."
                 />
                 <SortHeader
                   label="Liquidity"
@@ -640,6 +647,7 @@ export default function Table({
                   sortKey={sortKey}
                   sortDir={sortDir}
                   onSort={onSort}
+                  title="Current liquidity (USD) in the main pool. Click to sort by liquidity."
                 />
                 <SortHeader
                   label="Fresh"
@@ -648,8 +656,9 @@ export default function Table({
                   sortDir={sortDir}
                   onSort={onSort}
                   style={{ width: 60, minWidth: 50 }}
+                  title="Freshness score: recency of the latest update across scanner, live trades (tick), and pair stats. Newer data ranks higher. Click to sort by recency."
                 />
-                <th>Audit</th>
+                <th title="Audit and safety quick checks (e.g., honeypot, verification).">Audit</th>
               </tr>
             </thead>
             {enableVirtual ? (
