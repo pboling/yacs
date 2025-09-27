@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import { computePairPayloads } from '../src/ws.subs.js'
 
-test('ws.subs: computePairPayloads emits both chain id and name variants and deduplicates', () => {
+test('ws.subs: computePairPayloads emits SupportedChainName chain variants and deduplicates', () => {
   const items = [
     {
       pairAddress: '0xPAIR1',
@@ -39,22 +39,17 @@ test('ws.subs: computePairPayloads emits both chain id and name variants and ded
   ]
 
   const out = computePairPayloads(items)
-  // For each valid row we expect two variants (id and name) => total 4 rows * 2 = 8 variants
   const keys = out.map((o) => `${o.pair}|${o.token}|${o.chain}`)
 
-  // Ensure both variants exist per row
-  assert.ok(keys.includes('0xPAIR1|0xTOKEN1|1'))
+  // Ensure only SupportedChainName exists per row
   assert.ok(keys.includes('0xPAIR1|0xTOKEN1|ETH'))
-  assert.ok(keys.includes('0xPAIR2|0xTOKEN2|56'))
   assert.ok(keys.includes('0xPAIR2|0xTOKEN2|BSC'))
-  assert.ok(keys.includes('0xPAIR3|0xTOKEN3|8453'))
   assert.ok(keys.includes('0xPAIR3|0xTOKEN3|BASE'))
-  assert.ok(keys.includes('0xPAIR4|0xTOKEN4|900'))
   assert.ok(keys.includes('0xPAIR4|0xTOKEN4|SOL'))
 
-  // Dedupe: the duplicate of pair1 should not create extra entries beyond the two variants
+  // Dedupe: the duplicate of pair1 should not create extra entries beyond a single variant
   const pair1Variants = keys.filter((k) => k.startsWith('0xPAIR1|0xTOKEN1|'))
-  assert.equal(pair1Variants.length, 2)
+  assert.equal(pair1Variants.length, 1)
 
   // No invalid entries should leak
   assert.equal(

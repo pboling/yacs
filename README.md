@@ -73,6 +73,7 @@ Note on CORS: The dev proxy avoids the need for a CORS extension during developm
 This project builds to a static site in dist/ and can be deployed without a server to GitHub Pages, Vercel, or Netlify. The app uses the public API by default in production (API base: https://api-rs.dexcelerate.com). If you need to point to a different API, set the environment variable VITE_API_BASE at build time.
 
 Common steps
+
 - Build: npm run build (or pnpm run build)
 - Preview locally: npm run preview
 - Output directory: dist
@@ -83,12 +84,14 @@ Common steps
 
 There are two common GitHub Pages modes. Choose one and follow the matching steps.
 
-1) User/Org Pages (https://<user>.github.io) — base path is '/'
+1. User/Org Pages (https://<user>.github.io) — base path is '/'
+
 - No Vite base change needed.
 - Build: npm run build
 - Push dist/ to a gh-pages branch or use the Pages workflow (recommended).
 
-2) Project Pages (https://<user>.github.io/<REPO>) — needs a non-root base
+2. Project Pages (https://<user>.github.io/<REPO>) — needs a non-root base
+
 - Build with an explicit base so asset URLs are correct:
   - npm run build -- --base=/<REPO_NAME>/
   - Example: npm run build -- --base=/dexcelerate-fe-test/
@@ -97,6 +100,7 @@ There are two common GitHub Pages modes. Choose one and follow the matching step
 SPA fallback (optional): If you later add client-side routing, Pages should serve index.html on unknown paths. Easiest is to upload a 404.html that is a copy of index.html in the published artifact. Many GitHub Pages actions support this automatically; otherwise, copy dist/index.html to dist/404.html before upload.
 
 Example GitHub Actions workflow (project pages)
+
 - Create .github/workflows/pages.yml with a workflow akin to:
   - on: push: branches: [main]
   - jobs.build: checkout → setup-node@v4 → npm ci → npm run build -- --base=/<REPO>/ → actions/upload-pages-artifact@v3 (path: dist)
@@ -114,7 +118,7 @@ Example GitHub Actions workflow (project pages)
 
 vercel.json example for SPA fallback (only if/when you add routing)
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+"rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
 
 ### Netlify
@@ -124,10 +128,10 @@ vercel.json example for SPA fallback (only if/when you add routing)
 - Publish Directory: dist
 - Environment Variables (optional):
   - VITE_API_BASE=https://api-rs.dexcelerate.com (or your own API)
-- SPA fallback (only if/when you add routing): add a _redirects file to publish a catch-all to /index.html.
+- SPA fallback (only if/when you add routing): add a \_redirects file to publish a catch-all to /index.html.
 
-_redirects
-/* /index.html 200
+\_redirects
+/\* /index.html 200
 
 That’s it. Once deployed, your static build will fetch data from the public API and open a WebSocket to the public endpoint from the browser, with no server needed.
 

@@ -28,7 +28,7 @@ const OUT_ALLOWED_ROOMS = new Set([
   'subscribe-pair-stats',
   'unsubscribe-pair-stats',
 ])
-const IN_ALLOWED_EVENTS = new Set(['scanner-pairs', 'tick', 'pair-stats', 'wpeg-prices'])
+const IN_ALLOWED_EVENTS = new Set(['scanner-pairs', 'tick', 'pair-stats'])
 
 export function isAllowedOutgoingEvent(event) {
   return OUT_ALLOWED_ROOMS.has(String(event))
@@ -113,12 +113,15 @@ export function mapIncomingMessageToAction(msg) {
   if (!isAllowedIncomingEvent(msg.event)) return null
   switch (msg.event) {
     case 'scanner-pairs':
-      // full dataset replacement for a page (supports both data.scannerPairs and data.pairs)
+      // Conform to test-task-types: { data: { filter, results: { pairs: [...] } } }
       return {
         type: 'scanner/pairs',
         payload: {
-          page: msg.data.page ?? 1,
-          scannerPairs: (msg.data && (msg.data.scannerPairs ?? msg.data.pairs)) || [],
+          page: (msg.data && msg.data.filter && msg.data.filter.page) || 1,
+          scannerPairs:
+            msg.data && msg.data.results && Array.isArray(msg.data.results.pairs)
+              ? msg.data.results.pairs
+              : [],
         },
       }
     case 'tick': {
@@ -131,12 +134,6 @@ export function mapIncomingMessageToAction(msg) {
     }
     case 'pair-stats':
       return { type: 'pair/stats', payload: { data: msg.data } }
-    case 'wpeg-prices': {
-      const d = (msg && typeof msg === 'object' ? msg.data : null) || {}
-      const prices =
-        d && typeof d === 'object' && d.prices && typeof d.prices === 'object' ? d.prices : {}
-      return { type: 'wpeg/prices', payload: { prices } }
-    }
     // case 'pair-patch': {
     //   // Generic per-pair partial update to merge arbitrary fields into an existing row
     //   return { type: 'pair/patch', payload: { data: msg.data } }

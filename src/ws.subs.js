@@ -43,14 +43,12 @@ export function computePairPayloads(items) {
           : undefined
     if (!pair || !token || chainIdNum == null || Number.isNaN(chainIdNum)) continue
 
-    const chainIdStr = String(chainIdNum)
     const chainName = idToName(chainIdNum)
 
-    // Emit both variants to be compatible with servers expecting either numeric id or name
-    const variants = [chainIdStr, chainName]
-    for (const chain of variants) {
-      const key = pair + '|' + token + '|' + chain
-      if (seen.has(key)) continue
+    // Emit only the SupportedChainName variant to conform to PairSubscriptionPayload
+    const chain = chainName
+    const key = pair + '|' + token + '|' + chain
+    if (!seen.has(key)) {
       seen.add(key)
       out.push({ pair, token, chain })
     }

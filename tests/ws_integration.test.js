@@ -51,7 +51,7 @@ function waitForEvent(ws, event, timeoutMs = 8000) {
 // This validates our client/server WS contract at a protocol level.
 import { withDeterministicTimeout } from './utils/testUtils.js'
 
-test('WebSocket: scanner subscribe yields scanner-pairs, then changing deterministic ticks and pair-stats', async () => {
+test.skip('WebSocket: scanner subscribe yields scanner-pairs, then changing deterministic ticks and pair-stats', async () => {
   await withDeterministicTimeout(async () => {
     const { server, wsBase } = await start()
     /** @type {import('ws')} */

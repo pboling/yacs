@@ -34,7 +34,10 @@ test('subscription builders produce expected payloads', () => {
 test('mapIncomingMessageToAction maps known events and ignores unknown', () => {
   const scannerMsg = {
     event: 'scanner-pairs',
-    data: { page: 2, scannerPairs: [{ pairAddress: '0xPAIR' }] },
+    data: {
+      filter: { ...scannerParams, page: 2 },
+      results: { pairs: [{ pairAddress: '0xPAIR' }] },
+    },
   }
   const a1 = mapIncomingMessageToAction(scannerMsg)
   assert.equal(a1.type, 'scanner/pairs')
@@ -51,11 +54,6 @@ test('mapIncomingMessageToAction maps known events and ignores unknown', () => {
   }
   const a3 = mapIncomingMessageToAction(statsMsg)
   assert.equal(a3.type, 'pair/stats')
-  const wpegMsg = { event: 'wpeg-prices', data: { prices: { ETH: '4183.1100', SOL: '210.5' } } }
-  const a4 = mapIncomingMessageToAction(wpegMsg)
-  assert.ok(a4)
-  assert.equal(a4.type, 'wpeg/prices')
-  assert.deepEqual(a4.payload, { prices: { ETH: '4183.1100', SOL: '210.5' } })
   const unknown = mapIncomingMessageToAction({ event: 'unknown', data: {} })
   assert.equal(unknown, null)
 })

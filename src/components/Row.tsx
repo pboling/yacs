@@ -173,7 +173,7 @@ const Row = memo(
         <td>
           <div className="muted" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <span title="Buys">
-              {/* eslint-disable-next-line react-dom/no-unknown-property */}
+              {}
               {/* Colors come from CSS variables */}
               <svg
                 width="12"
