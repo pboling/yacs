@@ -122,10 +122,10 @@ const Row = memo(
           <Globe size={14} />
         </td>
         <td style={{ textAlign: 'right' }}>
-          <NumberCell value={t.priceUsd} />
+          <NumberCell value={t.priceUsd} prefix="$" />
         </td>
         <td style={{ textAlign: 'right' }}>
-          <NumberCell value={t.mcap} />
+          <NumberCell value={t.mcap} prefix="$" />
         </td>
         <td style={{ textAlign: 'right' }}>
           <NumberCell value={t.volumeUsd} />
@@ -209,7 +209,7 @@ const Row = memo(
           </div>
         </td>
         <td style={{ textAlign: 'right' }}>
-          <NumberCell value={t.liquidity.current} />
+          <NumberCell value={t.liquidity.current} prefix="$" />
         </td>
         <td>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
