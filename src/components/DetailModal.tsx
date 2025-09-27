@@ -187,27 +187,24 @@ export default function DetailModal({
   const [baseSearch, setBaseSearch] = useState('')
   const [showBaseList, setShowBaseList] = useState(false)
   // Robust resolver for compare row to handle potential id casing or address-based mismatches
-  const resolveCompareRow = useCallback(
-    (id: string | null): DetailModalRow | null => {
-      if (!id) return null
-      // Primary: consumer-provided resolver
-      const direct = getRowById(id)
-      if (direct) return direct
-      // Fallbacks within provided rows
-      const lower = id.toLowerCase()
-      const byId = allRows.find((r) => r.id === id) ?? null
-      if (byId) return byId
-      const byIdLower = allRows.find((r) => r.id?.toLowerCase?.() === lower) ?? null
-      if (byIdLower) return byIdLower
-      // Address-based fallbacks (pairAddress or tokenAddress sometimes used as ids)
-      const byPair = allRows.find((r) => r.pairAddress?.toLowerCase?.() === lower) ?? null
-      if (byPair) return byPair
-      const byToken = allRows.find((r) => r.tokenAddress?.toLowerCase?.() === lower) ?? null
-      if (byToken) return byToken
-      return null
-    },
-    [allRows, getRowById],
-  )
+  function resolveCompareRow(id: string | null): DetailModalRow | null {
+    if (!id) return null
+    // Primary: consumer-provided resolver
+    const direct = getRowById(id)
+    if (direct) return direct
+    // Fallbacks within provided rows
+    const lower = id.toLowerCase()
+    const byId = allRows.find((r) => r.id === id) ?? null
+    if (byId) return byId
+    const byIdLower = allRows.find((r) => r.id?.toLowerCase?.() === lower) ?? null
+    if (byIdLower) return byIdLower
+    // Address-based fallbacks (pairAddress or tokenAddress sometimes used as ids)
+    const byPair = allRows.find((r) => r.pairAddress?.toLowerCase?.() === lower) ?? null
+    if (byPair) return byPair
+    const byToken = allRows.find((r) => r.tokenAddress?.toLowerCase?.() === lower) ?? null
+    if (byToken) return byToken
+    return null
+  }
   const compareRow = resolveCompareRow(compareId)
   useEffect(() => {
     /* removed setting latestCompareRow */
