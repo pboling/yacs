@@ -309,7 +309,10 @@ export default function TokensPane({
         const res = await fetchScannerTyped({ ...filters, page: 1 })
         if (cancelled) return
         console.info(`[TokensPane:${title}] fetchScanner ✓ returned`, {
-          count: Array.isArray(res?.tokens) ? res.tokens.length : 'n/a',
+          count: (() => {
+            const maybe = (res as unknown as { tokens?: unknown[] } | null)?.tokens
+            return Array.isArray(maybe) ? maybe.length : 'n/a'
+          })(),
         })
         const raw = res.raw as unknown
         // API response shape source of truth: tests/fixtures/scanner.*.json
@@ -518,7 +521,7 @@ export default function TokensPane({
       })
     } catch {}
     return finalRows
-  }, [state.byId, state.pages, page, sort, clientFilters, visibleCount])
+  }, [state.byId, state.pages, page, sort, clientFilters, visibleCount, title])
 
   const paneIdRef = useRef<string>('')
   useEffect(() => {

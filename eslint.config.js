@@ -14,7 +14,7 @@ const browserNodeGlobals = { ...globals.browser, ...globals.node }
 export default defineConfig([
   // Global linter options
   { linterOptions: { reportUnusedDisableDirectives: true } },
-  globalIgnores(['dist', 'types/**/*.d.ts', 'INSTRUCTIONS.md']),
+  globalIgnores(['dist', 'types/**/*.d.ts', 'INSTRUCTIONS.md', 'tests/**']),
   // Base config for plain JS/JSX files (keep lightweight)
   {
     files: ['**/*.{js,jsx}'],

@@ -1,2 +1,2 @@
-# Exclude the original task instructions from automatic formatting
-INSTRUCTIONS.md
+# Ignore all test files
+/tests/

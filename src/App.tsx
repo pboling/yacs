@@ -1057,7 +1057,12 @@ function App() {
   // Normalize varying server event name styles to our canonical keys
   const normalizeEventName = (ev: unknown): WsEventName | null => {
     try {
-      const s = String(ev ?? '').toLowerCase()
+      let s: string
+      if (typeof ev === 'string') s = ev
+      else if (typeof ev === 'number' || typeof ev === 'boolean') s = String(ev)
+      else if (typeof ev === 'symbol') s = ev.toString()
+      else s = ''
+      s = s.toLowerCase()
       const collapsed = s.replace(/[^a-z0-9]/g, '') // remove dashes/underscores/spaces
       switch (collapsed) {
         case 'scannerpairs':
@@ -1084,7 +1089,7 @@ function App() {
     countsRef.current[k] = (countsRef.current[k] ?? 0) + 1
     // Coalesce flushes to avoid excessive setState under high throughput
     if (flushTimerRef.current == null) {
-      flushTimerRef.current = window.setTimeout(() => {
+      flushTimerRef.current ??= window.setTimeout(() => {
         try {
           setEventCounts({ ...countsRef.current })
         } finally {
@@ -1163,7 +1168,7 @@ function App() {
     trending: false,
     newer: false,
   })
-  // Early boot diagnostics
+  // Early boot diagnostics — log current theme and page keys when state/theme changes
   useEffect(() => {
     try {
       const pages = (state as unknown as { pages?: Partial<Record<number, string[]>> }).pages ?? {}
@@ -1175,7 +1180,10 @@ function App() {
     } catch {
       /* no-op */
     }
-    // Global error diagnostics to catch silent failures after REST success
+  }, [state, theme])
+
+  // Global error diagnostics to catch silent failures after REST success
+  useEffect(() => {
     const onError = (ev: ErrorEvent) => {
       try {
         console.error('App: global error', {
@@ -1188,8 +1196,26 @@ function App() {
     }
     const onRejection = (ev: PromiseRejectionEvent) => {
       try {
-        const reason = ev?.reason
-        const msg = reason?.message ? reason.message : String(reason)
+        const reason: unknown = ev.reason
+        let msg: string
+        if (
+          typeof reason === 'object' &&
+          reason !== null &&
+          'message' in reason &&
+          typeof (reason as { message: unknown }).message === 'string'
+        ) {
+          msg = (reason as { message: string }).message
+        } else if (typeof reason === 'string') {
+          msg = reason
+        } else if (
+          typeof reason === 'number' ||
+          typeof reason === 'boolean' ||
+          typeof reason === 'symbol'
+        ) {
+          msg = String(reason)
+        } else {
+          msg = 'unknown'
+        }
         console.error('App: global unhandledrejection', { message: msg })
       } catch {}
     }
@@ -1197,14 +1223,14 @@ function App() {
       window.addEventListener('error', onError)
     } catch {}
     try {
-      window.addEventListener('unhandledrejection', onRejection as any)
+      window.addEventListener('unhandledrejection', onRejection)
     } catch {}
     return () => {
       try {
         window.removeEventListener('error', onError)
       } catch {}
       try {
-        window.removeEventListener('unhandledrejection', onRejection as any)
+        window.removeEventListener('unhandledrejection', onRejection)
       } catch {}
     }
   }, [])
@@ -1848,26 +1874,34 @@ function App() {
                 }
               }
               dispatch={
-                ((action) => {
+                ((action: { type?: unknown; payload?: unknown }) => {
                   try {
-                    const t = action?.type || 'unknown'
+                    const t = typeof action?.type === 'string' ? (action.type as string) : 'unknown'
                     if (
                       t === 'scanner/pairs' ||
                       t === 'scanner/append' ||
                       t === 'scanner/pairsTokens'
                     ) {
-                      const p = action.payload || {}
-                      const count = Array.isArray(p.scannerPairs)
-                        ? p.scannerPairs.length
-                        : Array.isArray(p.tokens)
-                          ? p.tokens.length
+                      const pObj =
+                        action && typeof action.payload === 'object' && action.payload !== null
+                          ? (action.payload as { scannerPairs?: unknown; tokens?: unknown; page?: unknown })
+                          : {}
+                      const count = Array.isArray(pObj.scannerPairs)
+                        ? pObj.scannerPairs.length
+                        : Array.isArray(pObj.tokens)
+                          ? pObj.tokens.length
                           : 'n/a'
-                      console.info('DISPATCH:', t, { page: p.page, count })
+                      const pageVal =
+                        typeof (pObj as { page?: unknown }).page === 'number' ||
+                        typeof (pObj as { page?: unknown }).page === 'string'
+                          ? ((pObj as { page?: number | string }).page as number | string)
+                          : undefined
+                      console.info('DISPATCH:', t, { page: pageVal, count })
                     }
                   } catch {
                     /* no-op */
                   }
-                  ;(dispatch as unknown as React.Dispatch<Action>)(action as Action)
+                  ;(dispatch as unknown as React.Dispatch<Action>)(action as unknown as Action)
                 }) as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>
               }
               defaultSort={initialSort ?? { key: 'tokenName', dir: 'asc' }}
@@ -1936,26 +1970,34 @@ function App() {
                 }
               }
               dispatch={
-                ((action) => {
+                ((action: { type?: unknown; payload?: unknown }) => {
                   try {
-                    const t = action?.type || 'unknown'
+                    const t = typeof action?.type === 'string' ? (action.type as string) : 'unknown'
                     if (
                       t === 'scanner/pairs' ||
                       t === 'scanner/append' ||
                       t === 'scanner/pairsTokens'
                     ) {
-                      const p = action.payload || {}
-                      const count = Array.isArray(p.scannerPairs)
-                        ? p.scannerPairs.length
-                        : Array.isArray(p.tokens)
-                          ? p.tokens.length
+                      const pObj =
+                        action && typeof action.payload === 'object' && action.payload !== null
+                          ? (action.payload as { scannerPairs?: unknown; tokens?: unknown; page?: unknown })
+                          : {}
+                      const count = Array.isArray(pObj.scannerPairs)
+                        ? pObj.scannerPairs.length
+                        : Array.isArray(pObj.tokens)
+                          ? pObj.tokens.length
                           : 'n/a'
-                      console.info('DISPATCH:', t, { page: p.page, count })
+                      const pageVal =
+                        typeof (pObj as { page?: unknown }).page === 'number' ||
+                        typeof (pObj as { page?: unknown }).page === 'string'
+                          ? ((pObj as { page?: number | string }).page as number | string)
+                          : undefined
+                      console.info('DISPATCH:', t, { page: pageVal, count })
                     }
                   } catch {
                     /* no-op */
                   }
-                  ;(dispatch as unknown as React.Dispatch<Action>)(action as Action)
+                  ;(dispatch as unknown as React.Dispatch<Action>)(action as unknown as Action)
                 }) as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>
               }
               defaultSort={initialSort ?? { key: 'age', dir: 'desc' }}
