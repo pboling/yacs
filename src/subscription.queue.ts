@@ -3,8 +3,9 @@
 // Operates on keys in the `pair|token|chain` format.
 // Maintains a FIFO queue of inactive-subscribed tokens and rotates on tick.
 // Quotas:
-// - Default (no throttle set): if inactive loaded < 100 → subscribe all inactive
-//   else → subscribe first 100 + ceil(1/10 of the remaining inactive)
+// - Default (no throttle set): dynamic heuristic using a configurable base limit
+//   base = getDefaultInactiveBaseLimit() (defaults to 0). If totalInactive <= base → subscribe all inactive,
+//   else → subscribe base + ceil(1/10 of the remaining inactive).
 // - When a throttle is set (max total subscriptions), inactive quota becomes:
 //   min(inactiveUniverse.length, max(0, throttleMax - visible.size))
 //
@@ -59,7 +60,7 @@ function computeQuota(totalInactive: number) {
     const allowedInactive = Math.max(0, throttleMax - visible.size)
     return Math.min(totalInactive, allowedInactive)
   }
-  // Default heuristic quota (legacy behavior), but with dynamic base limit from global state
+  // Default heuristic quota using a dynamic base limit from global state
   const base = Math.max(0, getDefaultInactiveBaseLimit())
   if (totalInactive <= base) return totalInactive
   const remaining = totalInactive - base

@@ -10,7 +10,7 @@ function getStore() {
   const g = /** @type {any} */ (globalThis)
   if (!g.__SUB_LIMIT__) {
     g.__SUB_LIMIT__ = {
-      base: 100, // default legacy behavior
+      base: 0,
       listeners: new Set(),
     }
   }
