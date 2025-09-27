@@ -46,6 +46,25 @@ export function isAllowedIncomingEvent(event) {
   return IN_ALLOWED_EVENTS.has(String(event))
 }
 
+// Normalize chain to the symbol expected by WS API (ETH, BSC, BASE, SOL)
+function toChainName(input) {
+  const v = input == null ? '' : String(input).trim()
+  const up = v.toUpperCase()
+  if (up === 'ETH' || up === 'BSC' || up === 'BASE' || up === 'SOL') return up
+  switch (Number(v)) {
+    case 1:
+      return 'ETH'
+    case 56:
+      return 'BSC'
+    case 8453:
+      return 'BASE'
+    case 900:
+      return 'SOL'
+    default:
+      return up || 'ETH'
+  }
+}
+
 export function buildScannerSubscription(params) {
   return { event: 'scanner-filter', data: { ...params } }
 }
@@ -54,17 +73,21 @@ export function buildScannerUnsubscription(params) {
 }
 
 export function buildPairSubscription({ pair, token, chain }) {
-  return { event: 'subscribe-pair', data: { pair, token, chain } }
+  const c = toChainName(chain)
+  return { event: 'subscribe-pair', data: { pair, token, chain: c } }
 }
 export function buildPairUnsubscription({ pair, token, chain }) {
-  return { event: 'unsubscribe-pair', data: { pair, token, chain } }
+  const c = toChainName(chain)
+  return { event: 'unsubscribe-pair', data: { pair, token, chain: c } }
 }
 
 export function buildPairStatsSubscription({ pair, token, chain }) {
-  return { event: 'subscribe-pair-stats', data: { pair, token, chain } }
+  const c = toChainName(chain)
+  return { event: 'subscribe-pair-stats', data: { pair, token, chain: c } }
 }
 export function buildPairStatsUnsubscription({ pair, token, chain }) {
-  return { event: 'unsubscribe-pair-stats', data: { pair, token, chain } }
+  const c = toChainName(chain)
+  return { event: 'unsubscribe-pair-stats', data: { pair, token, chain: c } }
 }
 
 // Thin send helpers to emit paired messages for a given pair/token/chain

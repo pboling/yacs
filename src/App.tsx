@@ -25,6 +25,8 @@ import {
   buildScannerUnsubscription,
   buildPairSubscription,
   buildPairStatsSubscription,
+  buildPairUnsubscription,
+  buildPairStatsUnsubscription,
   mapIncomingMessageToAction,
   isAllowedOutgoingEvent,
 } from './ws.mapper.js'
@@ -1112,8 +1114,8 @@ function App() {
     if (pair && token) {
       const chain = toChainId(row.chain)
       // Ensure any existing subs for this pair are cleared, then add normal subs for the modal
-      wsSend({ event: 'unsubscribe-pair', data: { pair, token, chain } })
-      wsSend({ event: 'unsubscribe-pair-stats', data: { pair, token, chain } })
+      wsSend(buildPairUnsubscription({ pair, token, chain }))
+      wsSend(buildPairStatsUnsubscription({ pair, token, chain }))
       wsSend(buildPairSubscriptionSafe({ pair, token, chain }))
       wsSend(buildPairStatsSubscriptionSafe({ pair, token, chain }))
     }
@@ -1144,8 +1146,8 @@ function App() {
       const token = row.tokenAddress ?? ''
       if (pair && token) {
         const chain = toChainId(row.chain)
-        wsSend({ event: 'unsubscribe-pair', data: { pair, token, chain } })
-        wsSend({ event: 'unsubscribe-pair-stats', data: { pair, token, chain } })
+        wsSend(buildPairUnsubscription({ pair, token, chain }))
+        wsSend(buildPairStatsUnsubscription({ pair, token, chain }))
       }
     }
   }
@@ -1209,7 +1211,9 @@ function App() {
           eventCounts={eventCounts}
           subCount={subCount}
           consoleVisible={consoleVisible}
-          onToggleConsole={() => setConsoleVisible((v) => !v)}
+          onToggleConsole={() => {
+            setConsoleVisible((v) => !v)
+          }}
         />
         {/* Filters Bar */}
         <div className="filters">
