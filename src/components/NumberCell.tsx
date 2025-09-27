@@ -73,37 +73,78 @@ export default function NumberCell({
     }
   }, [desiredClass, stableMs, noFade])
 
-  // Format number with abbreviation logic (K/M/B/T) unless custom formatter provided
+  // Format number with abbreviation logic (K/M/B/T) and cap precision
   let text: string
+  let title: string | undefined
   if (Number.isFinite(num)) {
+    const absNum = Math.abs(num)
+
+    // Tooltip: full number up to 15 significant digits (no grouping)
+    const fullFmt = new Intl.NumberFormat('en-US', {
+      maximumSignificantDigits: 15,
+      useGrouping: false,
+    })
+    const fullStr = fullFmt.format(num)
+    title = `${prefix}${fullStr}${suffix}`
+
     if (formatter) {
-      text = formatter(num)
-    } else {
-      const absNum = Math.abs(num)
-      const abbreviate = (n: number) => {
-        const fmt = (v: number) => {
-          const s = v.toFixed(2)
-          return s.replace(/\.0+$/, '').replace(/(\.[0-9]*?)0+$/, '$1')
-        }
-        if (absNum >= 1_000_000_000_000) return fmt(n / 1_000_000_000_000) + 'T'
-        if (absNum >= 1_000_000_000) return fmt(n / 1_000_000_000) + 'B'
-        if (absNum >= 1_000_000) return fmt(n / 1_000_000) + 'M'
-        if (absNum >= 1_000) return fmt(n / 1_000) + 'K'
-        return String(n)
-      }
-      // Price-style formatting: keep up to 8 decimals if < 1
-      if (absNum < 1 && absNum > 0) {
-        text = num.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')
+      // Even if a custom formatter is provided, still cap visible precision by post-formatting
+      const raw = formatter(num)
+      // Attempt to extract numeric portion to cap to 4 significant digits; if not numeric, use as-is
+      const nf = new Intl.NumberFormat('en-US', {
+        maximumSignificantDigits: 4,
+        useGrouping: false,
+      })
+      const parsed = Number(raw.replace(/[^0-9eE+\-.]/g, ''))
+      if (Number.isFinite(parsed)) {
+        text = raw.replace(/([0-9eE+\-.]+)/, nf.format(parsed))
       } else {
-        text = abbreviate(num)
+        text = raw
       }
+    } else {
+      const nfNum = new Intl.NumberFormat('en-US', {
+        maximumSignificantDigits: 4,
+        useGrouping: false,
+      })
+      const abbreviate = (n: number) => {
+        let divisor = 1
+        let suffixLocal = ''
+        if (absNum >= 1_000_000_000_000) {
+          divisor = 1_000_000_000_000
+          suffixLocal = 'T'
+        } else if (absNum >= 1_000_000_000) {
+          divisor = 1_000_000_000
+          suffixLocal = 'B'
+        } else if (absNum >= 1_000_000) {
+          divisor = 1_000_000
+          suffixLocal = 'M'
+        } else if (absNum >= 1_000) {
+          divisor = 1_000
+          suffixLocal = 'K'
+        }
+        if (divisor === 1) {
+          // For very small numbers, switch to scientific notation to avoid excessively long decimals
+          if (absNum > 0 && absNum < 1e-2) {
+            const sci = n.toExponential(3) // 4 significant digits total
+            return sci.replace(/e\+?(-?\d+)/i, 'e$1')
+          }
+          return nfNum.format(n)
+        }
+        const scaled = n / divisor
+        // Format scaled number to 4 significant digits and strip trailing zeros after decimal
+        let s = nfNum.format(scaled)
+        s = s.replace(/(\.[0-9]*?)0+$/, '$1').replace(/\.$/, '')
+        return s + suffixLocal
+      }
+      text = abbreviate(num)
     }
   } else {
     text = String(value)
+    title = undefined
   }
 
   return (
-    <span className={appliedClassRef.current}>
+    <span className={appliedClassRef.current} title={title}>
       {prefix}
       {text}
       {suffix}
