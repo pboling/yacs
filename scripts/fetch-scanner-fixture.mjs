@@ -100,7 +100,7 @@ async function main() {
       console.error('\nEndpoint appears unreachable. You can:')
       console.error('  - Use default public API (no action needed)')
       console.error(
-        '  - Or pass a reachable URL: node scripts/fetch-scanner-fixture.mjs https://api.example/scanner?...',
+        '  - Or pass a reachable URL: node scripts/fetch-scanner-fixture.mjs https://api.example/scanner?…',
       )
       console.error(
         '  - Or set SCANNER_URL env: SCANNER_URL=https://host[:port]/scanner?chain=ETH&page=1\n',

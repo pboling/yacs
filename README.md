@@ -547,7 +547,7 @@ You will have to use a no-cors extension from the Chrome web store during develo
 ## Development server expectations (no fallbacks)
 
 - The Vite dev server always proxies REST and WS to a local backend at http://localhost:3001.
-  - REST: fetch('/scanner?...') → proxies to http://localhost:3001/scanner
+  - REST: fetch('/scanner?…') → proxies to http://localhost:3001/scanner
   - WS: new WebSocket('ws://localhost:5173/ws') → proxies to ws://localhost:3001/ws
 - There are no automatic REST fallbacks in development. If the backend is not running, requests will fail and errors will surface in the console/logs. This is intentional to validate primary functionality.
 - Start both servers together during development/testing with:
