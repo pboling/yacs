@@ -12,8 +12,7 @@ import { markVisible, markHidden } from '../visibility.bus.js'
 import { SubscriptionQueue } from '../subscription.queue'
 import { formatAge } from '../helpers/format'
 import type { GetScannerResultParams, ScannerResult } from '../test-task-types'
-import { toChainId } from '../utils/chain'
-import { buildPairKey } from '../utils/key_builder'
+import { buildPairKey, buildTickKey } from '../utils/key_builder'
 import { dedupeByPairAddress } from '../utils/dedupeByPairAddress'
 import { filterRowsByTokenQuery } from '../utils/filteredCompareOptions.mjs'
 import { logCatch, debugLog } from '../utils/debug.mjs'
@@ -125,8 +124,8 @@ export default function TokensPane({
   const disabledKeyFor = (row: TokenRow): string | null => {
     const token = row.tokenAddress
     if (!token) return null
-    const chain = toChainId(row.chain)
-    return `${token.toLowerCase()}|${chain}`
+    // Build token|chain key using centralized normalization
+    return buildTickKey(token.toLowerCase(), row.chain)
   }
 
   const wsRef = useRef<WebSocket | null>(null)
@@ -578,7 +577,7 @@ export default function TokensPane({
         const pair = row.pairAddress
         const token = row.tokenAddress
         if (!pair || !token) continue
-        const key = buildPairKey(pair, token, row.chain)
+        const key = buildPairKey(pair, token.toLowerCase(), row.chain)
         currentKeys.add(key)
       }
       const prev = prevRenderedKeysRef.current
@@ -850,8 +849,7 @@ export default function TokensPane({
     const pair = row.pairAddress
     const token = row.tokenAddress
     if (!pair || !token) return
-    const chain = toChainId(row.chain)
-    const key = buildPairKey(pair, token, chain)
+    const key = buildPairKey(pair, token.toLowerCase(), row.chain)
     const disabledKey = disabledKeyFor(row)
     // If this token is disabled, ensure it's not tracked as visible and unsubscribe if needed
     if (disabledKey && disabledTokensRef.current.has(disabledKey)) {
@@ -861,7 +859,7 @@ export default function TokensPane({
           const { next } = markHidden(key)
           const ws = wsRef.current
           if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
-            sendUnsubscribe(ws, { pair, token, chain })
+            sendUnsubscribe(ws, { pair, token, chain: row.chain })
           }
         } catch {}
       }
@@ -887,7 +885,7 @@ export default function TokensPane({
         } catch {}
         if (prev === 0 && ws && ws.readyState === WebSocket.OPEN) {
           try {
-            sendSubscribe(ws, { pair, token, chain })
+            sendSubscribe(ws, { pair, token, chain: row.chain })
           } catch {}
         }
       }
@@ -956,7 +954,7 @@ export default function TokensPane({
       for (const r of sourceRows) {
         const pair = r.pairAddress ?? ''
         const tokenAddr = (r.tokenAddress ?? '').toLowerCase()
-        const chain = toChainId(r.chain)
+        const chain = r.chain
         if (!pair || !tokenAddr || !chain) continue
         keysSet.add(buildPairKey(pair, tokenAddr, chain))
       }
@@ -965,7 +963,7 @@ export default function TokensPane({
     } catch {}
   }, [rows])
 
-  // Periodic tick for inactive rolling subscriptions
+  // Periodic tick for invisible rolling subscriptions
   useEffect(() => {
     let timer: number | null = null
     const run = () => {
@@ -1035,7 +1033,7 @@ export default function TokensPane({
           const ws = wsRef.current
           const pair = row.pairAddress ?? ''
           const tokenAddr = (row.tokenAddress ?? '').toLowerCase()
-          const id = toChainId(row.chain)
+          const id = row.chain
           if (pair && tokenAddr) {
             const keyNum = buildPairKey(pair, tokenAddr, id)
             try {
@@ -1079,7 +1077,7 @@ export default function TokensPane({
         try {
           const pair = row.pairAddress ?? ''
           const tokenAddr = (row.tokenAddress ?? '').toLowerCase()
-          const id = toChainId(row.chain)
+          const id = row.chain
           if (pair && tokenAddr) {
             const keyNum = buildPairKey(pair, tokenAddr, id)
             try {
@@ -1160,7 +1158,7 @@ export default function TokensPane({
           const pair = row.pairAddress ?? ''
           const token = row.tokenAddress ?? ''
           if (!pair || !token) return undefined
-          const key = buildPairKey(pair, token, row.chain)
+          const key = buildPairKey(pair, token.toLowerCase(), row.chain)
           const dKey = disabledKeyFor(row)
           if (dKey && disabledTokensRef.current.has(dKey)) {
             const ts = lastUpdatedRef.current.get(key)
@@ -1185,12 +1183,11 @@ export default function TokensPane({
             const pair = row.pairAddress ?? ''
             const token = row.tokenAddress ?? ''
             if (!pair || !token) continue
-            const chain = toChainId(row.chain)
-            const key = buildPairKey(pair, token, chain)
+            const key = buildPairKey(pair, token.toLowerCase(), row.chain)
             // Respect modal lock: only subscribe allowed keys when lock is active
             if (lockActiveRef.current && !lockAllowedRef.current.has(key)) continue
             // Skip disabled tokens
-            const dKey = `${token.toLowerCase()}|${chain}`
+            const dKey = buildTickKey(token.toLowerCase(), row.chain)
             if (disabledTokensRef.current.has(dKey)) continue
             nextVisible.push(key)
           }

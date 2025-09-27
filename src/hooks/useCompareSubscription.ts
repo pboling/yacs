@@ -1,6 +1,7 @@
 // filepath: /home/pboling/WebstormProjects/dexcelerate-fe-test/src/hooks/useCompareSubscription.ts
 import { useEffect, useRef, useState } from 'react'
 import { onUpdate } from '../updates.bus'
+import { buildPairKey, buildTickKey } from '../utils/key_builder'
 import {
   buildPairUnsubscription,
   buildPairStatsUnsubscription,
@@ -174,9 +175,8 @@ export function useCompareSubscription({
         unsubscribe()
         if (compareRow.pairAddress && compareRow.tokenAddress) {
           abortRef.current = new AbortController()
-          const variants = new Set<string>([compareRow.chain, toChainId(compareRow.chain)])
-          for (const chainVariant of variants) {
-            if (abortRef.current.signal.aborted) break
+          const chainVariant = compareRow.chain
+          if (!abortRef.current.signal.aborted) {
             try {
               ws.send(
                 JSON.stringify(
@@ -237,27 +237,16 @@ export function useCompareSubscription({
   // Listen for onUpdate events for the compare row; mark subscription complete when first update arrives
   useEffect(() => {
     if (!open || !compareRow || !canLiveStream) return
-    const chainId = toChainId(compareRow.chain)
-    const chainName = compareRow.chain
-    const pairStatsKeyNumeric =
+    const pairKey =
       compareRow.pairAddress && compareRow.tokenAddress
-        ? `${compareRow.pairAddress}|${compareRow.tokenAddress}|${chainId}`
+        ? buildPairKey(compareRow.pairAddress, compareRow.tokenAddress, compareRow.chain)
         : null
-    const pairStatsKeyName =
-      compareRow.pairAddress && compareRow.tokenAddress
-        ? `${compareRow.pairAddress}|${compareRow.tokenAddress}|${chainName}`
-        : null
-    const tickKeyNumeric = compareRow.tokenAddress ? `${compareRow.tokenAddress}|${chainId}` : null
-    const tickKeyName = compareRow.tokenAddress ? `${compareRow.tokenAddress}|${chainName}` : null
+    const tickKey = compareRow.tokenAddress
+      ? buildTickKey(compareRow.tokenAddress, compareRow.chain)
+      : null
 
     const off = onUpdate((e) => {
-      if (
-        e.key !== pairStatsKeyNumeric &&
-        e.key !== pairStatsKeyName &&
-        e.key !== tickKeyNumeric &&
-        e.key !== tickKeyName
-      )
-        return
+      if (e.key !== pairKey && e.key !== tickKey) return
       const latest = getRowById(compareRow.id)
       if (latest) {
         applyCompareSnapshot(compareRow.id)

@@ -211,10 +211,10 @@ export const SubscriptionQueue = {
   },
   getVisibleCount() {
     try {
-      console.log('[SubscriptionQueue] getVisibleCount:', visible.size, Array.from(visible));
-      return visible.size;
+      console.log('[SubscriptionQueue] getVisibleCount:', visible.size, Array.from(visible))
+      return visible.size
     } catch {
-      return 0;
+      return 0
     }
   },
   getInvisCount() {
@@ -232,7 +232,7 @@ export const SubscriptionQueue = {
         } catch {}
       }
     }
-    console.log('[SubscriptionQueue] updateUniverse: incoming keys', next);
+    console.log('[SubscriptionQueue] updateUniverse: incoming keys', next)
     // Unsubscribe any queued/visible keys that are no longer in the universe
     const nextSet = new Set(next)
     for (const key of [...invisibleQueue]) {
@@ -267,13 +267,29 @@ export const SubscriptionQueue = {
       removeFromQueue(key)
       // Debug log
       try {
-        console.log('[SubscriptionQueue] setVisible: added', key, 'visible.size:', visible.size, Array.from(visible), 'source:', source);
+        console.log(
+          '[SubscriptionQueue] setVisible: added',
+          key,
+          'visible.size:',
+          visible.size,
+          Array.from(visible),
+          'source:',
+          source,
+        )
       } catch {}
     } else {
       visible.delete(key)
       // Debug log
       try {
-        console.log('[SubscriptionQueue] setVisible: removed', key, 'visible.size:', visible.size, Array.from(visible), 'source:', source);
+        console.log(
+          '[SubscriptionQueue] setVisible: removed',
+          key,
+          'visible.size:',
+          visible.size,
+          Array.from(visible),
+          'source:',
+          source,
+        )
       } catch {}
     }
   },

@@ -41,7 +41,6 @@ import { SubscriptionQueue } from './subscription.queue'
 import { setDefaultInvisibleBaseLimit } from './subscription.limit.bus.js'
 import { engageSubscriptionLock, releaseSubscriptionLock } from './subscription.lock.bus.js'
 import { onSubscriptionLockChange, isSubscriptionLockActive } from './subscription.lock.bus.js'
-import { toChainId } from './utils/chain'
 import { buildPairKey, buildTickKey } from './utils/key_builder'
 import { logCatch } from './utils/debug.mjs'
 import { emitUpdate } from './updates.bus'
@@ -1444,7 +1443,7 @@ function App() {
       const pair = row.pairAddress ?? ''
       const token = row.tokenAddress ?? ''
       if (pair && token) {
-        const chain = toChainId(row.chain)
+        const chain = row.chain
         engageSubscriptionLock(buildPairKey(pair, token, chain))
       } else {
         engageSubscriptionLock()
@@ -1464,7 +1463,7 @@ function App() {
     const pair = row.pairAddress ?? ''
     const token = row.tokenAddress ?? ''
     if (pair && token) {
-      const chain = toChainId(row.chain)
+      const chain = row.chain
       // Ensure any existing subs for this pair are cleared, then add normal subs for the modal
       if (!UNSUBSCRIPTIONS_DISABLED) {
         wsSend(buildPairUnsubscription({ pair, token, chain }))
@@ -1500,7 +1499,7 @@ function App() {
       const pair = row.pairAddress ?? ''
       const token = row.tokenAddress ?? ''
       if (pair && token) {
-        const chain = toChainId(row.chain)
+        const chain = row.chain
         if (!UNSUBSCRIPTIONS_DISABLED) {
           wsSend(buildPairUnsubscription({ pair, token, chain }))
           wsSend(buildPairStatsUnsubscription({ pair, token, chain }))
