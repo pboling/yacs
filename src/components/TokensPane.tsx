@@ -249,22 +249,10 @@ export default function TokensPane({
     }
     didInitRef.current = true
 
-    // Immediately initialize the page with an empty dataset so App boot readiness can flip
-    try {
-      console.info(`[TokensPane:${title}] init: dispatch empty page to initialize state`)
-      dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: [] } })
-      console.info(
-        `[TokensPane:${title}] init: dispatched scanner/pairs with 0 items for page ${String(page)}`,
-      )
-    } catch (err) {
-      logCatch(`[TokensPane:${title}] init: early empty dispatch failed`, err)
-    }
-
-    // If the client filters specify no chains selected at mount, skip initial fetch.
+    // Only dispatch empty page and skip fetch if chains are empty at mount
     const chainsProvidedEmpty =
       Array.isArray(clientFilters?.chains) && clientFilters.chains.length === 0
     if (chainsProvidedEmpty) {
-      // Initialize the page with an empty dataset so App can flip readiness flags
       try {
         dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: [] } })
       } catch (err) {
@@ -276,7 +264,7 @@ export default function TokensPane({
         /* frozen: nothing to cleanup */
       }
     }
-
+    // Otherwise, always fetch and dispatch real data
     // Failsafe: clear loading if init doesn't complete in time to avoid stuck spinner
     let timeoutId: number | null = null
     const armFailsafe = () => {
@@ -296,7 +284,6 @@ export default function TokensPane({
         /* no-op */
       }
     }
-
     const run = async () => {
       setLoading(true)
       setError(null)
@@ -308,51 +295,29 @@ export default function TokensPane({
         })
         const res = await fetchScannerTyped({ ...filters, page: 1 })
         if (cancelled) return
-        console.info(`[TokensPane:${title}] fetchScanner ✓ returned`, {
-          count: (() => {
-            const maybe = (res as unknown as { tokens?: unknown[] } | null)?.tokens
-            return Array.isArray(maybe) ? maybe.length : 'n/a'
-          })(),
-        })
         const raw = res.raw as unknown
-        // API response shape source of truth: tests/fixtures/scanner.*.json
-        // Expect { pairs: [...] }
-        const list =
-          raw && typeof raw === 'object' && Array.isArray((raw as { pairs?: unknown[] }).pairs)
-            ? (raw as { pairs: unknown[] }).pairs
-            : []
-        if (list.length === 0) {
-          console.warn(
-            `[TokensPane:${title}] /scanner returned 0 items or missing pairs[]; proceeding with empty list`,
-          )
+        const tokens = Array.isArray(res.tokens) ? res.tokens : []
+        console.log('[TokensPane:' + title + '] mapped tokens from fetchScanner:', tokens)
+        // Check for missing ids
+        const missingIds = tokens.filter((token) => !token || !token.id)
+        if (missingIds.length > 0) {
+          console.warn('[TokensPane:' + title + '] tokens with missing id:', missingIds)
         }
-        console.log(
-          '[TokensPane:' + title + '] /scanner returned ' + String(list.length) + ' items',
-        )
         // Deduplicate by pairAddress (case-insensitive) before computing payloads/dispatching
-        const dedupedList = dedupeByPairAddress(list as ScannerResult[])
-        if (dedupedList.length !== list.length) {
-          console.log(
-            '[TokensPane:' +
-              title +
-              '] deduped initial list: ' +
-              String(list.length - dedupedList.length) +
-              ' duplicates removed',
-          )
-        }
-        // IMPORTANT: Dispatch to reducer BEFORE any heavy/optional computations.
-        // Prefer dispatching pre-mapped tokens to avoid remapping and potential exceptions.
-        try {
-          // Dispatch raw pairs only using the canonical reducer path.
-          dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: dedupedList } })
-          console.info(`[TokensPane:${title}] dispatched scanner/pairs`, {
-            page,
-            count: dedupedList.length,
-          })
-        } catch (err) {
-          logCatch(`[TokensPane:${title}] dispatch failed`, err)
-        }
-
+        const dedupedList = dedupeByPairAddress(tokens as ScannerResult[])
+        console.log('[TokensPane:' + title + '] dispatching scanner/pairs:', { page, scannerPairs: dedupedList })
+        dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: dedupedList } })
+        setLoading(false)
+        // Debug: print first few tokens and their id values
+        console.log(
+          '[TokensPane:' + title + '] mapped tokens sample:',
+          dedupedList.slice(0, 5).map((t) => ({
+            id: t.id,
+            pairAddress: t.pairAddress,
+            token1Address: t.token1Address,
+            tokenName: t.tokenName,
+          })),
+        )
         // Best-effort: compute subscription payloads and update universe after dispatch.
         try {
           const payloads = computePairPayloadsSafe(dedupedList)
@@ -1099,6 +1064,8 @@ export default function TokensPane({
       /* no-op */
     }
   }, [])
+
+  console.log('TokensPane mounted:', title)
 
   return (
     <div>

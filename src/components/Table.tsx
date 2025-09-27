@@ -516,6 +516,8 @@ export default function Table({
     } catch {}
   }, [])
 
+  console.log('[Table] rows prop:', rows)
+
   return (
     <section>
       <div

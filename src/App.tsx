@@ -1495,6 +1495,49 @@ function App() {
     }
   }
 
+  // Fetch initial token data from REST API and dispatch to reducer
+  useEffect(() => {
+    let cancelled = false
+    async function fetchInitialData() {
+      try {
+        // Trending tokens
+        const trendingRes = await fetchScanner({ ...TRENDING_TOKENS_FILTERS, page: 1 })
+        if (!cancelled) {
+          d({
+            type: 'scanner/pairs',
+            payload: {
+              page: TRENDING_PAGE,
+              scannerPairs: trendingRes.tokens,
+            },
+          })
+          console.log('[App] Initial REST fetch: Trending', trendingRes.tokens.length)
+        }
+      } catch (err) {
+        console.error('[App] Initial REST fetch failed: Trending', err)
+      }
+      try {
+        // New tokens
+        const newRes = await fetchScanner({ ...NEW_TOKENS_FILTERS, page: 1 })
+        if (!cancelled) {
+          d({
+            type: 'scanner/pairs',
+            payload: {
+              page: NEW_PAGE,
+              scannerPairs: newRes.tokens,
+            },
+          })
+          console.log('[App] Initial REST fetch: New', newRes.tokens.length)
+        }
+      } catch (err) {
+        console.error('[App] Initial REST fetch failed: New', err)
+      }
+    }
+    fetchInitialData()
+    return () => {
+      cancelled = true
+    }
+  }, [d, TRENDING_PAGE, NEW_PAGE])
+
   return (
     <div style={{ position: 'relative' }}>
       {!appReady && (
@@ -1840,6 +1883,14 @@ function App() {
           </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          {/* Log state before rendering tables */}
+          {(() => {
+            try {
+              console.log('App: state.byId keys', Object.keys(state.byId))
+              console.log('App: state.pages', state.pages)
+            } catch {}
+            return null
+          })()}
           <ErrorBoundary
             fallback={
               <section>
@@ -1858,6 +1909,15 @@ function App() {
               </section>
             }
           >
+            {/* Log computed rows for Trending */}
+            {(() => {
+              try {
+                const ids = state.pages[TRENDING_PAGE] || []
+                const rows = ids.map((id) => state.byId[id]).filter(Boolean)
+                console.log('App: Trending rows', rows.length, rows.map(r => r?.id))
+              } catch {}
+              return null
+            })()}
             <TokensPane
               title="Trending Tokens"
               onOpenRowDetails={openDetails}
@@ -1876,7 +1936,7 @@ function App() {
               dispatch={
                 ((action: { type?: unknown; payload?: unknown }) => {
                   try {
-                    const t = typeof action?.type === 'string' ? (action.type as string) : 'unknown'
+                    const t = typeof action?.type === 'string' ? action.type : 'unknown'
                     if (
                       t === 'scanner/pairs' ||
                       t === 'scanner/append' ||
@@ -1884,7 +1944,11 @@ function App() {
                     ) {
                       const pObj =
                         action && typeof action.payload === 'object' && action.payload !== null
-                          ? (action.payload as { scannerPairs?: unknown; tokens?: unknown; page?: unknown })
+                          ? (action.payload as {
+                              scannerPairs?: unknown
+                              tokens?: unknown
+                              page?: unknown
+                            })
                           : {}
                       const count = Array.isArray(pObj.scannerPairs)
                         ? pObj.scannerPairs.length
@@ -1894,7 +1958,7 @@ function App() {
                       const pageVal =
                         typeof (pObj as { page?: unknown }).page === 'number' ||
                         typeof (pObj as { page?: unknown }).page === 'string'
-                          ? ((pObj as { page?: number | string }).page as number | string)
+                          ? (pObj as { page?: number | string }).page!
                           : undefined
                       console.info('DISPATCH:', t, { page: pageVal, count })
                     }
@@ -1914,26 +1978,8 @@ function App() {
                   excludeHoneypots?: boolean
                   limit?: number
                   tokenQuery?: string
-                  includeStale?: boolean
-                  includeDegraded?: boolean
                 }
               }
-              onChainCountsChange={(counts) => {
-                const out: Record<string, number> = {}
-                for (const c of CHAINS) out[c] = counts[c] ?? 0
-                // Avoid setState if unchanged to prevent unnecessary rerenders
-                setTrendingCounts((prev) => {
-                  let same = true
-                  for (const k of CHAINS) {
-                    if ((prev[k] ?? 0) !== (out[k] ?? 0)) {
-                      same = false
-                      break
-                    }
-                  }
-                  return same ? prev : out
-                })
-              }}
-              syncSortToUrl
             />
           </ErrorBoundary>
           <ErrorBoundary
@@ -1954,6 +2000,15 @@ function App() {
               </section>
             }
           >
+            {/* Log computed rows for New */}
+            {(() => {
+              try {
+                const ids = state.pages[NEW_PAGE] || []
+                const rows = ids.map((id) => state.byId[id]).filter(Boolean)
+                console.log('App: New rows', rows.length, rows.map(r => r?.id))
+              } catch {}
+              return null
+            })()}
             <TokensPane
               title="New Tokens"
               onOpenRowDetails={openDetails}
@@ -1972,7 +2027,7 @@ function App() {
               dispatch={
                 ((action: { type?: unknown; payload?: unknown }) => {
                   try {
-                    const t = typeof action?.type === 'string' ? (action.type as string) : 'unknown'
+                    const t = typeof action?.type === 'string' ? action.type : 'unknown'
                     if (
                       t === 'scanner/pairs' ||
                       t === 'scanner/append' ||
@@ -1980,7 +2035,11 @@ function App() {
                     ) {
                       const pObj =
                         action && typeof action.payload === 'object' && action.payload !== null
-                          ? (action.payload as { scannerPairs?: unknown; tokens?: unknown; page?: unknown })
+                          ? (action.payload as {
+                              scannerPairs?: unknown
+                              tokens?: unknown
+                              page?: unknown
+                            })
                           : {}
                       const count = Array.isArray(pObj.scannerPairs)
                         ? pObj.scannerPairs.length
@@ -1990,7 +2049,7 @@ function App() {
                       const pageVal =
                         typeof (pObj as { page?: unknown }).page === 'number' ||
                         typeof (pObj as { page?: unknown }).page === 'string'
-                          ? ((pObj as { page?: number | string }).page as number | string)
+                          ? (pObj as { page?: number | string }).page!
                           : undefined
                       console.info('DISPATCH:', t, { page: pageVal, count })
                     }
@@ -2000,7 +2059,7 @@ function App() {
                   ;(dispatch as unknown as React.Dispatch<Action>)(action as unknown as Action)
                 }) as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>
               }
-              defaultSort={initialSort ?? { key: 'age', dir: 'desc' }}
+              defaultSort={initialSort ?? { key: 'tokenName', dir: 'asc' }}
               clientFilters={
                 state.filters as unknown as {
                   chains?: string[]
@@ -2010,25 +2069,8 @@ function App() {
                   excludeHoneypots?: boolean
                   limit?: number
                   tokenQuery?: string
-                  includeStale?: boolean
-                  includeDegraded?: boolean
                 }
               }
-              onChainCountsChange={(counts) => {
-                const out: Record<string, number> = {}
-                for (const c of CHAINS) out[c] = counts[c] ?? 0
-                // Avoid setState if unchanged to prevent unnecessary rerenders
-                setNewCounts((prev) => {
-                  let same = true
-                  for (const k of CHAINS) {
-                    if ((prev[k] ?? 0) !== (out[k] ?? 0)) {
-                      same = false
-                      break
-                    }
-                  }
-                  return same ? prev : out
-                })
-              }}
             />
           </ErrorBoundary>
         </div>
