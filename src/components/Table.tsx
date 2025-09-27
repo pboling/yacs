@@ -217,13 +217,13 @@ export default function Table({
   const theadRef = useRef<HTMLTableSectionElement | null>(null)
   const tfootRef = useRef<HTMLTableSectionElement | null>(null)
 
-  // Feature flag: enable virtualization only when ?virtual=true is in the URL
+  // Feature flag: enable virtualization by default unless ?virtual=false is in the URL
   const enableVirtual = useMemo(() => {
     try {
       const sp = new URLSearchParams(window.location.search)
       return sp.get('virtual') === 'true'
     } catch {
-      return false
+      return true
     }
   }, [])
 
