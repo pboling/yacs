@@ -19,6 +19,15 @@
 // This approach allows developers to leverage the benefits of static typing for reliable code.
 // The flexibility of JavaScript allows creating mock objects and test data.
 
+// Optional logger sink: in browser, a global hook can be provided by the UI console.
+// In tests/Node, this is a no-op.
+function __wsLog(kind, text) {
+  try {
+    const g = globalThis && globalThis.__WS_CONSOLE_LOG__
+    if (typeof g === 'function') g(kind, text)
+  } catch {}
+}
+
 // Feature-gated allow-lists
 const OUT_ALLOWED_ROOMS = new Set([
   'scanner-filter',
@@ -28,7 +37,7 @@ const OUT_ALLOWED_ROOMS = new Set([
   'subscribe-pair-stats',
   'unsubscribe-pair-stats',
 ])
-const IN_ALLOWED_EVENTS = new Set(['scanner-pairs', 'tick', 'pair-stats'])
+const IN_ALLOWED_EVENTS = new Set(['scanner-pairs', 'tick', 'pair-stats', 'wpeg-prices'])
 
 export function isAllowedOutgoingEvent(event) {
   return OUT_ALLOWED_ROOMS.has(String(event))
@@ -62,46 +71,74 @@ export function buildPairStatsUnsubscription({ pair, token, chain }) {
 // Each function attempts both sends but isolates failures so one failing message
 // does not prevent the other from being delivered.
 export function sendSubscribe(ws, { pair, token, chain }) {
+  const key = String(pair) + '|' + String(token) + '|' + String(chain)
   try {
     ws &&
       ws.readyState === 1 &&
       isAllowedOutgoingEvent('subscribe-pair') &&
-      ws.send(JSON.stringify(buildPairSubscription({ pair, token, chain })))
+      (ws.send(JSON.stringify(buildPairSubscription({ pair, token, chain }))),
+      __wsLog('success', 'subscribe-pair sent ' + key))
   } catch (err) {
     try {
       console.error('[ws.sendSubscribe] subscribe-pair failed', err)
+      __wsLog(
+        'error',
+        'subscribe-pair failed ' + key + ' — ' + String(err && err.message ? err.message : err),
+      )
     } catch {}
   }
   try {
     ws &&
       ws.readyState === 1 &&
       isAllowedOutgoingEvent('subscribe-pair-stats') &&
-      ws.send(JSON.stringify(buildPairStatsSubscription({ pair, token, chain })))
+      (ws.send(JSON.stringify(buildPairStatsSubscription({ pair, token, chain }))),
+      __wsLog('success', 'subscribe-pair-stats sent ' + key))
   } catch (err) {
     try {
       console.error('[ws.sendSubscribe] subscribe-pair-stats failed', err)
+      __wsLog(
+        'error',
+        'subscribe-pair-stats failed ' +
+          key +
+          ' — ' +
+          String(err && err.message ? err.message : err),
+      )
     } catch {}
   }
 }
 export function sendUnsubscribe(ws, { pair, token, chain }) {
+  const key = String(pair) + '|' + String(token) + '|' + String(chain)
   try {
     ws &&
       ws.readyState === 1 &&
       isAllowedOutgoingEvent('unsubscribe-pair') &&
-      ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
+      (ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain }))),
+      __wsLog('info', 'unsubscribe-pair sent ' + key))
   } catch (err) {
     try {
       console.error('[ws.sendUnsubscribe] unsubscribe-pair failed', err)
+      __wsLog(
+        'error',
+        'unsubscribe-pair failed ' + key + ' — ' + String(err && err.message ? err.message : err),
+      )
     } catch {}
   }
   try {
     ws &&
       ws.readyState === 1 &&
       isAllowedOutgoingEvent('unsubscribe-pair-stats') &&
-      ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+      (ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain }))),
+      __wsLog('info', 'unsubscribe-pair-stats sent ' + key))
   } catch (err) {
     try {
       console.error('[ws.sendUnsubscribe] unsubscribe-pair-stats failed', err)
+      __wsLog(
+        'error',
+        'unsubscribe-pair-stats failed ' +
+          key +
+          ' — ' +
+          String(err && err.message ? err.message : err),
+      )
     } catch {}
   }
 }
@@ -134,6 +171,12 @@ export function mapIncomingMessageToAction(msg) {
     }
     case 'pair-stats':
       return { type: 'pair/stats', payload: { data: msg.data } }
+    case 'wpeg-prices': {
+      const d = (msg && typeof msg === 'object' ? msg.data : null) || {}
+      const prices =
+        d && typeof d === 'object' && d.prices && typeof d.prices === 'object' ? d.prices : {}
+      return { type: 'wpeg/prices', payload: { prices } }
+    }
     // case 'pair-patch': {
     //   // Generic per-pair partial update to merge arbitrary fields into an existing row
     //   return { type: 'pair/patch', payload: { data: msg.data } }

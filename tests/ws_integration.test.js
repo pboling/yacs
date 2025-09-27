@@ -4,10 +4,11 @@ import http from 'node:http'
 import { once } from 'node:events'
 import WebSocket from 'ws'
 
-import { createApp } from '../server/scanner.server.js'
-import { attachWsServer } from '../server/ws.server.js'
-
+// NOTE: server imports are intentionally dynamic inside start() to avoid resolution
+// when the test is skipped and the server files are not present.
 async function start() {
+  const { createApp } = await import('../server/scanner.server.js')
+  const { attachWsServer } = await import('../server/ws.server.js')
   // Accelerate WS timing during tests so we don't wait seconds between ticks
   process.env.TEST_FAST = '1'
 

@@ -440,6 +440,16 @@ ws.send(
    - Preserve existing price/mcap data when receiving scanner-pairs updates
    - If a pair no longer exists in the scanner-pairs for it's respective page number, remove it from the table
 
+#### Production-only WebSocket event: wpeg-prices
+
+- The production server emits an additional event `wpeg-prices` with the shape:
+  - `{ event: 'wpeg-prices', data: { prices: { [chain: string]: number | string } } }`
+- Purpose: broadcasts base-asset price hints per chain (e.g., ETH, SOL, BASE, BSC) used for supplemental UI calculations.
+- Client handling: This app maps it to a reducer action `{ type: 'wpeg/prices', payload: { prices } }` and stores it under `state.wpegPrices`.
+- Notes:
+  - This event is not part of the minimal test-task types but is present in production; the client should accept it without errors.
+  - In development and tests, it may be absent; the app works without it.
+
 #### WebSocket Message Types to Handle
 
 All incoming WebSocket message types are defined in `test-task-types.ts`. See `IncomingWebSocketMessage` for the complete union type.

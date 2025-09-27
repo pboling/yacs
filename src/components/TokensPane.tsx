@@ -798,7 +798,7 @@ export default function TokensPane({
       try {
         SubscriptionQueue.tick(wsRef.current ?? null)
       } catch {}
-      timer = window.setTimeout(run, 2000)
+      timer = window.setTimeout(run, 10000)
     }
     run()
     return () => {

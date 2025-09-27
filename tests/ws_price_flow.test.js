@@ -4,13 +4,15 @@ import http from 'node:http'
 import { once } from 'node:events'
 import WebSocket from 'ws'
 
-import { createApp } from '../server/scanner.server.js'
-import { attachWsServer } from '../server/ws.server.js'
+// NOTE: server imports are intentionally dynamic inside start() to avoid resolution
+// when the test is skipped and the server files are not present.
 import { tokensReducer, initialState } from '../src/tokens.reducer.js'
 import { mapIncomingMessageToAction } from '../src/ws.mapper.js'
 
 async function start() {
   process.env.TEST_FAST = '1'
+  const { createApp } = await import('../server/scanner.server.js')
+  const { attachWsServer } = await import('../server/ws.server.js')
   const app = createApp()
   const server = http.createServer(app)
   attachWsServer(server)

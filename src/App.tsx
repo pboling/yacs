@@ -65,6 +65,8 @@ function writeThemeCookie(v: ThemeName) {
 }
 
 import UpdateRate from './components/UpdateRate'
+import WsConsole from './components/WsConsole'
+import { logWsInfo, logWsSuccess, logWsError } from './ws.console.bus.js'
 function TopBar({
   title,
   version,
@@ -168,6 +170,17 @@ function TopBar({
             Locked
           </span>
         )}
+      </div>
+      <div
+        style={{
+          marginLeft: 'auto',
+          minWidth: 280,
+          flex: 1,
+          display: 'flex',
+          width: '100%',
+        }}
+      >
+        <WsConsole />
       </div>
     </div>
   )
@@ -433,6 +446,7 @@ function App() {
           }, 2000)
 
           ws.onopen = () => {
+            logWsSuccess('WebSocket open ' + url)
             opened = true
             if (openTimeout) {
               clearTimeout(openTimeout)
@@ -454,7 +468,23 @@ function App() {
                 buildScannerSubscriptionSafe({ ...trendingFilters, page: TRENDING_PAGE }),
               ),
             )
+            logWsInfo('scanner-filter sent (Trending) page ' + String(TRENDING_PAGE))
             ws.send(JSON.stringify(buildScannerSubscriptionSafe({ ...newFilters, page: NEW_PAGE })))
+            logWsInfo('scanner-filter sent (New) page ' + String(NEW_PAGE))
+          }
+          ws.onerror = (ev) => {
+            try {
+              // @ts-expect-error WebSocketEvent typing minimal here
+              const errMsg = (ev as unknown as { message?: unknown })?.message
+              const safeMsg = typeof errMsg === 'string' ? errMsg : ''
+              logWsError('WebSocket error ' + safeMsg)
+            } catch {}
+          }
+          ws.onclose = (ev) => {
+            try {
+              const code = ev?.code ?? 0
+              logWsInfo('WebSocket closed code ' + String(code))
+            } catch {}
           }
           ws.onmessage = (ev) => {
             try {
@@ -465,6 +495,9 @@ function App() {
                 parsed && typeof parsed === 'object'
                   ? (parsed as { event?: unknown }).event
                   : undefined
+              try {
+                logWsInfo('event ' + String(event))
+              } catch {}
               const data =
                 parsed && typeof parsed === 'object'
                   ? (parsed as { data?: unknown }).data
@@ -487,6 +520,9 @@ function App() {
                     : undefined
                 if (!Array.isArray(pairs)) {
                   console.error('WS: invalid scanner-pairs payload: missing pairs array', parsed)
+                  try {
+                    logWsError('invalid scanner-pairs payload')
+                  } catch {}
                   return
                 }
               } else if (event === 'tick') {
@@ -497,6 +533,9 @@ function App() {
                   Array.isArray((data as { swaps?: unknown[] }).swaps)
                 if (!ok) {
                   console.error('WS: invalid tick payload: expected { pair, swaps[] }', parsed)
+                  try {
+                    logWsError('invalid tick payload')
+                  } catch {}
                   return
                 }
               } else if (event === 'pair-stats') {
@@ -507,6 +546,9 @@ function App() {
                   typeof (data as { pair: { pairAddress?: unknown } }).pair.pairAddress === 'string'
                 if (!ok) {
                   console.error('WS: invalid pair-stats payload: expected pair.pairAddress', parsed)
+                  try {
+                    logWsError('invalid pair-stats payload')
+                  } catch {}
                   return
                 }
               }
@@ -515,6 +557,13 @@ function App() {
               const action = mapIncomingMessageToActionSafe(parsed)
               if (!action) {
                 console.error('WS: unhandled or malformed message', parsed)
+                try {
+                  const evName =
+                    typeof parsed === 'object' && parsed
+                      ? /** @type {any} */ (parsed as any).event
+                      : undefined
+                  logWsError('unhandled or malformed message: ' + String(evName ?? 'unknown'))
+                } catch {}
                 return
               }
               try {
@@ -800,14 +849,14 @@ function App() {
       const hasNew = Array.isArray((pages as Record<number, string[] | undefined>)[NEW_PAGE])
       if (hasTrending || hasNew) {
         setWsScannerReady((prev) => ({
-          trending: prev.trending || !!hasTrending,
-          newer: prev.newer || !!hasNew,
+          trending: prev.trending || hasTrending,
+          newer: prev.newer || hasNew,
         }))
       }
     } catch {
       /* no-op */
     }
-  }, [state.pages, TRENDING_PAGE, NEW_PAGE])
+  }, [state, TRENDING_PAGE, NEW_PAGE])
   // Allow E2E/automation to bypass the boot splash to avoid spinner-related flakiness
   const bypassBoot = useMemo(() => {
     try {
@@ -1043,7 +1092,7 @@ function App() {
               }}
             />
             <div className="muted" style={{ fontSize: 14 }}>
-              Starting backend and loading data…
+              Loading data…
             </div>
           </div>
         </div>
