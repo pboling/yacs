@@ -117,23 +117,6 @@ function TopBar({
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <h1 style={{ margin: 0 }}>{title}</h1>
         <UpdateRate version={import.meta.env.DEV ? version : undefined} />
-        {lockActive && (
-          <span
-            style={{
-              fontSize: 11,
-              padding: '2px 6px',
-              border: '1px solid #4b5563',
-              borderRadius: 12,
-              background: 'rgba(255,255,255,0.06)',
-              letterSpacing: 0.5,
-            }}
-            title="Subscription lock active (modal focus)"
-          >
-            Locked
-          </span>
-        )}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <span
           className="muted"
           title="Active subscriptions across all panes"
@@ -170,6 +153,21 @@ function TopBar({
             <option value="legendary">Legendary (Yellow and Purple)</option>
           </select>
         </label>
+        {lockActive && (
+          <span
+            style={{
+              fontSize: 11,
+              padding: '2px 6px',
+              border: '1px solid #4b5563',
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.06)',
+              letterSpacing: 0.5,
+            }}
+            title="Subscription lock active (modal focus)"
+          >
+            Locked
+          </span>
+        )}
       </div>
     </div>
   )
