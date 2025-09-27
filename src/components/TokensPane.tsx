@@ -16,7 +16,7 @@ import { toChainId } from '../utils/chain'
 import { buildPairKey } from '../utils/key_builder'
 import { dedupeByPairAddress } from '../utils/dedupeByPairAddress'
 import { filterRowsByTokenQuery } from '../utils/filteredCompareOptions.mjs'
-import { logCatch } from '../utils/debug.mjs'
+import { logCatch, debugLog } from '../utils/debug.mjs'
 import {
   onSubscriptionLockChange,
   isSubscriptionLockActive,
@@ -493,7 +493,7 @@ export default function TokensPane({
     const cap = Math.min(visibleCount, limit)
     const finalRows = sorted.slice(0, Number.isFinite(cap) ? cap : visibleCount)
     try {
-      console.info(`[TokensPane:${title}] rows derived`, {
+      debugLog(`[TokensPane:${title}] rows derived`, {
         page,
         ids: listed.length,
         collected: collected.length,
@@ -604,7 +604,7 @@ export default function TokensPane({
       sp.set('dir', sort.dir)
       const nextSearch = `?${sp.toString()}`
       const cur = window.location.pathname + window.location.search
-      const next = window.location.pathname + nextSearch
+      const next = window.pathname + nextSearch
       // Avoid redundant history updates which can cause dev-server page flashes
       if (next !== cur) {
         window.history.replaceState(null, '', next)

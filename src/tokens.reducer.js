@@ -56,146 +56,80 @@ export const initialState = {
 
 const __REDUCER_SEEN__ = new WeakSet()
 
+function mergeToken(existing, tNew, now) {
+  if (!existing) return { ...tNew, history: __emptyHistory__(), scannerAt: now }
+  return {
+    ...tNew,
+    priceUsd: existing.priceUsd,
+    mcap: existing.mcap,
+    volumeUsd: existing.volumeUsd,
+    transactions: existing.transactions,
+    history: existing.history || __emptyHistory__(),
+    scannerAt: now,
+    tickAt: existing.tickAt,
+    pairStatsAt: existing.pairStatsAt,
+  }
+}
+
+function processTokens({ tokens, state, page, mapFn }) {
+  const nextById = { ...state.byId }
+  const nextMeta = { ...state.meta }
+  const ids = []
+  let changed = false
+  for (const tRaw of Array.isArray(tokens) ? tokens : []) {
+    const tNew = mapFn ? mapFn(tRaw) : tRaw
+    const id = tNew.id
+    const idLower = String(id || '').toLowerCase()
+    ids.push(id)
+    const existing = nextById[id] || nextById[idLower]
+    const now = Date.now()
+    const merged = mergeToken(existing, tNew, now)
+    if (JSON.stringify(merged) !== JSON.stringify(existing)) changed = true
+    nextById[id] = merged
+    nextById[idLower] = merged
+    // meta handling
+    if (tRaw.token1TotalSupplyFormatted !== undefined) {
+      const totalSupply = parseFloat(tRaw.token1TotalSupplyFormatted || '0') || 0
+      const newMeta = { ...(nextMeta[id] || nextMeta[idLower] || {}), totalSupply }
+      nextMeta[id] = newMeta
+      nextMeta[idLower] = newMeta
+    } else {
+      const existingMeta = nextMeta[id] || nextMeta[idLower] || {}
+      nextMeta[id] = existingMeta
+      nextMeta[idLower] = existingMeta
+    }
+  }
+  const nextPages = { ...state.pages, [page]: ids }
+  return { nextById, nextMeta, nextPages, changed }
+}
+
 export function tokensReducer(state = initialState, action) {
   console.log('tokensReducer executed', { type: action.type })
   const result = (() => {
     switch (action.type) {
       case 'scanner/pairsTokens': {
-        // Ingest pre-mapped TokenData[] directly (bypass per-item mapping)
         const { page, tokens } = action.payload
-        const next = {
-          ...state,
-          byId: { ...state.byId },
-          meta: { ...state.meta },
-          pages: { ...state.pages },
+        const { nextById, nextMeta, nextPages, changed } = processTokens({ tokens, state, page })
+        if (!changed && JSON.stringify(nextPages) === JSON.stringify(state.pages)) {
+          return state
         }
-        const ids = []
-        for (const tNew of Array.isArray(tokens) ? tokens : []) {
-          const id = tNew.id
-          const idLower = String(id || '').toLowerCase()
-          ids.push(id)
-          const existing = next.byId[id] || next.byId[idLower]
-          const now = Date.now()
-          const merged = existing
-            ? {
-                ...tNew,
-                priceUsd: existing.priceUsd,
-                mcap: existing.mcap,
-                volumeUsd: existing.volumeUsd,
-                transactions: existing.transactions,
-                history: existing.history || __emptyHistory__(),
-                scannerAt: now,
-                tickAt: existing.tickAt,
-                pairStatsAt: existing.pairStatsAt,
-              }
-            : { ...tNew, history: __emptyHistory__(), scannerAt: now }
-          next.byId[id] = merged
-          next.byId[idLower] = merged
-          // meta.totalSupply is optional in mapped token; keep existing if present
-          const existingMeta = next.meta[id] || next.meta[idLower] || {}
-          next.meta[id] = existingMeta
-          next.meta[idLower] = existingMeta
-        }
-        next.pages[page] = ids
-        try {
-          console.info('REDUCER: pages updated', {
-            page,
-            idsLen: Array.isArray(ids) ? ids.length : 0,
-            sample: Array.isArray(ids) ? ids.slice(0, 3) : [],
-          })
-        } catch {}
-        return { ...next, version: (state.version || 0) + 1 }
+        return { ...state, byId: nextById, meta: nextMeta, pages: nextPages, version: (state.version || 0) + 1 }
       }
       case 'scanner/pairs': {
-        // Ingest raw scannerPairs[] for a page
         const { page, scannerPairs } = action.payload
-        console.log('[tokensReducer] scanner/pairs payload:', {
-          page,
-          scannerPairsLen: Array.isArray(scannerPairs) ? scannerPairs.length : 0,
-        })
-        const next = {
-          ...state,
-          byId: { ...state.byId },
-          meta: { ...state.meta },
-          pages: { ...state.pages },
+        const { nextById, nextMeta, nextPages, changed } = processTokens({ tokens: scannerPairs, state, page })
+        if (!changed && JSON.stringify(nextPages) === JSON.stringify(state.pages)) {
+          return state
         }
-        const ids = []
-        for (const tNew of Array.isArray(scannerPairs) ? scannerPairs : []) {
-          const id = tNew.id
-          const idLower = String(id || '').toLowerCase()
-          ids.push(id)
-          const existing = next.byId[id] || next.byId[idLower]
-          const now = Date.now()
-          const merged = existing
-            ? {
-                ...tNew,
-                priceUsd: existing.priceUsd,
-                mcap: existing.mcap,
-                volumeUsd: existing.volumeUsd,
-                transactions: existing.transactions,
-                history: existing.history || __emptyHistory__(),
-                scannerAt: now,
-                tickAt: existing.tickAt,
-                pairStatsAt: existing.pairStatsAt,
-              }
-            : { ...tNew, history: __emptyHistory__(), scannerAt: now }
-          next.byId[id] = merged
-          next.byId[idLower] = merged
-          // meta.totalSupply is optional in mapped token; keep existing if present
-          const existingMeta = next.meta[id] || next.meta[idLower] || {}
-          next.meta[id] = existingMeta
-          next.meta[idLower] = existingMeta
-        }
-        next.pages[page] = ids
-        try {
-          console.info('REDUCER: pages updated', {
-            page,
-            idsLen: Array.isArray(ids) ? ids.length : 0,
-            sample: Array.isArray(ids) ? ids.slice(0, 3) : [],
-          })
-        } catch {}
-        return { ...next, version: (state.version || 0) + 1 }
+        return { ...state, byId: nextById, meta: nextMeta, pages: nextPages, version: (state.version || 0) + 1 }
       }
       case 'scanner/append': {
         const { page, scannerPairs } = action.payload
-        const next = {
-          ...state,
-          byId: { ...state.byId },
-          meta: { ...state.meta },
-          pages: { ...state.pages },
+        const { nextById, nextMeta, nextPages, changed } = processTokens({ tokens: scannerPairs, state, page, mapFn: mapScannerResultToToken })
+        if (!changed && JSON.stringify(nextPages) === JSON.stringify(state.pages)) {
+          return state
         }
-        const ids = Array.isArray(next.pages[page]) ? [...next.pages[page]] : []
-        for (const s of scannerPairs) {
-          const tNew = mapScannerResultToToken(s)
-          const id = tNew.id
-          const idLower = String(id || '').toLowerCase()
-          // merge into byId preserving any live-updated fields if present
-          const existing = next.byId[id] || next.byId[idLower]
-          const now = Date.now()
-          const merged = existing
-            ? {
-                ...tNew,
-                priceUsd: existing.priceUsd,
-                mcap: existing.mcap,
-                volumeUsd: existing.volumeUsd,
-                transactions: existing.transactions,
-                history: existing.history || __emptyHistory__(),
-                // Track per-source timestamps
-                scannerAt: now,
-                tickAt: existing.tickAt,
-                pairStatsAt: existing.pairStatsAt,
-              }
-            : { ...tNew, history: __emptyHistory__(), scannerAt: now }
-          next.byId[id] = merged
-          next.byId[idLower] = merged
-          const totalSupply = parseFloat(s.token1TotalSupplyFormatted || '0') || 0
-          const newMeta = { ...(next.meta[id] || next.meta[idLower] || {}), totalSupply }
-          next.meta[id] = newMeta
-          next.meta[idLower] = newMeta
-          if (!ids.includes(id)) ids.push(id)
-        }
-        next.pages[page] = ids
-        return { ...next, version: (state.version || 0) + 1 }
+        return { ...state, byId: nextById, meta: nextMeta, pages: nextPages, version: (state.version || 0) + 1 }
       }
       case 'pair/tick': {
         const { pair, swaps } = action.payload
@@ -292,6 +226,10 @@ export function tokensReducer(state = initialState, action) {
         } catch {
           /* no-op */
         }
+        // After computing nextTok, compare with existing token
+        if (JSON.stringify(nextTok) === JSON.stringify(token)) {
+          return state
+        }
         return {
           ...state,
           byId: { ...state.byId, [id]: nextTok, [idOrig]: nextTok },
@@ -340,15 +278,9 @@ export function tokensReducer(state = initialState, action) {
           burned: p.burned ?? (token.security ? token.security.burned : undefined),
         }
         const nextTok = { ...token, audit, security, migrationPc, pairStatsAt: Date.now() }
-        if (!__REDUCER_SEEN__.has(action)) {
-          __REDUCER_SEEN__.add(action)
-          try {
-            __debugLog__('REDUCER: pair/stats applied', {
-              id: idOrig,
-              audit: { contractVerified: audit.contractVerified, honeypot: audit.honeypot },
-              migrationPc,
-            })
-          } catch {}
+        // After computing nextTok, compare with existing token
+        if (JSON.stringify(nextTok) === JSON.stringify(token)) {
+          return state
         }
         return {
           ...state,
