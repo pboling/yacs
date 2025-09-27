@@ -1497,11 +1497,22 @@ function App() {
 
   // Fetch initial token data from REST API and dispatch to reducer
   useEffect(() => {
+    // Use sessionStorage to prevent duplicate fetches across remounts
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      if (window.sessionStorage.getItem('DEX_SCANNER_INITIAL_FETCHED')) {
+        console.log('[App.tsx] Initial fetch guard: already set, skipping fetch')
+        return
+      }
+      console.log('[App.tsx] Initial fetch guard: setting now')
+      window.sessionStorage.setItem('DEX_SCANNER_INITIAL_FETCHED', '1')
+    } else {
+      console.log('[App.tsx] sessionStorage not available, cannot set guard')
+    }
     let cancelled = false
     async function fetchInitialData() {
       try {
-        // Trending tokens
-        const trendingRes = await fetchScanner({ ...TRENDING_TOKENS_FILTERS, page: 1 })
+        console.log('[App.tsx] fetchScanner: Trending Tokens (effect)')
+        const trendingRes = await fetchScanner({ ...TRENDING_TOKENS_FILTERS, page: 1, __source: 'App.tsx useEffect Trending' })
         if (!cancelled) {
           d({
             type: 'scanner/pairs',
@@ -1510,14 +1521,13 @@ function App() {
               scannerPairs: trendingRes.tokens,
             },
           })
-          console.log('[App] Initial REST fetch: Trending', trendingRes.tokens.length)
         }
       } catch (err) {
         console.error('[App] Initial REST fetch failed: Trending', err)
       }
       try {
-        // New tokens
-        const newRes = await fetchScanner({ ...NEW_TOKENS_FILTERS, page: 1 })
+        console.log('[App.tsx] fetchScanner: New Tokens (effect)')
+        const newRes = await fetchScanner({ ...NEW_TOKENS_FILTERS, page: 1, __source: 'App.tsx useEffect New' })
         if (!cancelled) {
           d({
             type: 'scanner/pairs',
@@ -1526,7 +1536,6 @@ function App() {
               scannerPairs: newRes.tokens,
             },
           })
-          console.log('[App] Initial REST fetch: New', newRes.tokens.length)
         }
       } catch (err) {
         console.error('[App] Initial REST fetch failed: New', err)
@@ -1883,14 +1892,7 @@ function App() {
           </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          {/* Log state before rendering tables */}
-          {(() => {
-            try {
-              console.log('App: state.byId keys', Object.keys(state.byId))
-              console.log('App: state.pages', state.pages)
-            } catch {}
-            return null
-          })()}
+          {/* Cleanup: Remove log tracing for state and rows */}
           <ErrorBoundary
             fallback={
               <section>
@@ -1909,15 +1911,6 @@ function App() {
               </section>
             }
           >
-            {/* Log computed rows for Trending */}
-            {(() => {
-              try {
-                const ids = state.pages[TRENDING_PAGE] || []
-                const rows = ids.map((id) => state.byId[id]).filter(Boolean)
-                console.log('App: Trending rows', rows.length, rows.map(r => r?.id))
-              } catch {}
-              return null
-            })()}
             <TokensPane
               title="Trending Tokens"
               onOpenRowDetails={openDetails}
@@ -1935,36 +1928,6 @@ function App() {
               }
               dispatch={
                 ((action: { type?: unknown; payload?: unknown }) => {
-                  try {
-                    const t = typeof action?.type === 'string' ? action.type : 'unknown'
-                    if (
-                      t === 'scanner/pairs' ||
-                      t === 'scanner/append' ||
-                      t === 'scanner/pairsTokens'
-                    ) {
-                      const pObj =
-                        action && typeof action.payload === 'object' && action.payload !== null
-                          ? (action.payload as {
-                              scannerPairs?: unknown
-                              tokens?: unknown
-                              page?: unknown
-                            })
-                          : {}
-                      const count = Array.isArray(pObj.scannerPairs)
-                        ? pObj.scannerPairs.length
-                        : Array.isArray(pObj.tokens)
-                          ? pObj.tokens.length
-                          : 'n/a'
-                      const pageVal =
-                        typeof (pObj as { page?: unknown }).page === 'number' ||
-                        typeof (pObj as { page?: unknown }).page === 'string'
-                          ? (pObj as { page?: number | string }).page!
-                          : undefined
-                      console.info('DISPATCH:', t, { page: pageVal, count })
-                    }
-                  } catch {
-                    /* no-op */
-                  }
                   ;(dispatch as unknown as React.Dispatch<Action>)(action as unknown as Action)
                 }) as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>
               }
@@ -2000,15 +1963,6 @@ function App() {
               </section>
             }
           >
-            {/* Log computed rows for New */}
-            {(() => {
-              try {
-                const ids = state.pages[NEW_PAGE] || []
-                const rows = ids.map((id) => state.byId[id]).filter(Boolean)
-                console.log('App: New rows', rows.length, rows.map(r => r?.id))
-              } catch {}
-              return null
-            })()}
             <TokensPane
               title="New Tokens"
               onOpenRowDetails={openDetails}
@@ -2026,36 +1980,6 @@ function App() {
               }
               dispatch={
                 ((action: { type?: unknown; payload?: unknown }) => {
-                  try {
-                    const t = typeof action?.type === 'string' ? action.type : 'unknown'
-                    if (
-                      t === 'scanner/pairs' ||
-                      t === 'scanner/append' ||
-                      t === 'scanner/pairsTokens'
-                    ) {
-                      const pObj =
-                        action && typeof action.payload === 'object' && action.payload !== null
-                          ? (action.payload as {
-                              scannerPairs?: unknown
-                              tokens?: unknown
-                              page?: unknown
-                            })
-                          : {}
-                      const count = Array.isArray(pObj.scannerPairs)
-                        ? pObj.scannerPairs.length
-                        : Array.isArray(pObj.tokens)
-                          ? pObj.tokens.length
-                          : 'n/a'
-                      const pageVal =
-                        typeof (pObj as { page?: unknown }).page === 'number' ||
-                        typeof (pObj as { page?: unknown }).page === 'string'
-                          ? (pObj as { page?: number | string }).page!
-                          : undefined
-                      console.info('DISPATCH:', t, { page: pageVal, count })
-                    }
-                  } catch {
-                    /* no-op */
-                  }
                   ;(dispatch as unknown as React.Dispatch<Action>)(action as unknown as Action)
                 }) as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>
               }

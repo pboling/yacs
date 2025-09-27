@@ -254,6 +254,11 @@ export default function TokensPane({
       Array.isArray(clientFilters?.chains) && clientFilters.chains.length === 0
     if (chainsProvidedEmpty) {
       try {
+        // --- ACTION TYPE CLARIFICATION ---
+        // We dispatch 'scanner/pairs' here when chains are empty or on error, and the payload is an empty array or raw results.
+        // This allows the reducer to clear/reset the page or handle unmapped data.
+        // Use 'scanner/pairs' for raw or empty payloads, and 'scanner/pairsTokens' for mapped tokens.
+        // ----------------------------------
         dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: [] } })
       } catch (err) {
         logCatch(`[TokensPane:${title}] init: dispatch empty pairs on empty chains failed`, err)
@@ -305,8 +310,14 @@ export default function TokensPane({
         }
         // Deduplicate by pairAddress (case-insensitive) before computing payloads/dispatching
         const dedupedList = dedupeByPairAddress(tokens as ScannerResult[])
-        console.log('[TokensPane:' + title + '] dispatching scanner/pairs:', { page, scannerPairs: dedupedList })
-        dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: dedupedList } })
+        console.log('[TokensPane:' + title + '] dispatching scanner/pairsTokens:', { page, tokens: dedupedList })
+        // --- ACTION TYPE CLARIFICATION ---
+        // We dispatch 'scanner/pairsTokens' here because fetchScanner returns tokens already mapped to TokenData shape.
+        // This bypasses per-item mapping in the reducer and is more efficient for large datasets.
+        // Use 'scanner/pairsTokens' whenever you have mapped tokens from fetchScanner.
+        // If you have raw scanner results (unmapped), use 'scanner/pairs' instead and let the reducer map them.
+        // ----------------------------------
+        dispatch({ type: 'scanner/pairsTokens', payload: { page, tokens: dedupedList } })
         setLoading(false)
         // Debug: print first few tokens and their id values
         console.log(
@@ -351,6 +362,11 @@ export default function TokensPane({
         console.error('[TokensPane:' + title + '] fetch failed', e)
         // Mark page as initialized with no rows so App overlay can clear
         try {
+          // --- ACTION TYPE CLARIFICATION ---
+          // We dispatch 'scanner/pairs' here when chains are empty or on error, and the payload is an empty array or raw results.
+          // This allows the reducer to clear/reset the page or handle unmapped data.
+          // Use 'scanner/pairs' for raw or empty payloads, and 'scanner/pairsTokens' for mapped tokens.
+          // ----------------------------------
           dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: [] } })
         } catch {
           /* no-op */

@@ -65,6 +65,15 @@ export function mapScannerPage(apiResponse) {
   return items.map(mapScannerResultToToken)
 }
 
+/*
+  --- ACTION TYPE CLARIFICATION FOR DOWNSTREAM ---
+  fetchScanner returns tokens already mapped to TokenData shape (via mapScannerPage).
+  When dispatching these results to the reducer, use 'scanner/pairsTokens' with payload { page, tokens }.
+  If you have raw API results (unmapped), use 'scanner/pairs' and let the reducer map them.
+  This distinction ensures efficient data flow and avoids redundant mapping.
+  ------------------------------------------------
+*/
+
 // Fetch scanner page and return mapped TokenData[] and raw payload
 /**
  * Fetch a scanner page and map it to TokenData[] with the raw payload.
@@ -83,6 +92,9 @@ export async function fetchScanner(params, opts = {}) {
 
   const url = `${baseUrl}/scanner?${qp.toString()}`
   const startedAt = Date.now()
+  if (params && params.__source) {
+    console.info(`[scanner] source: ${params.__source}`)
+  }
   try {
     console.info('[scanner] → GET', url)
     const res = await fetchImpl(url, { headers: { accept: 'application/json' } })

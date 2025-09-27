@@ -12,6 +12,11 @@
   - 'pair/tick'    — apply real-time swaps to a token (price, mcap, volume, tx counters)
   - 'pair/stats'   — update audit/meta info from pair-stats events
   - 'filters/set'  — update local filter flags
+
+  Action types clarification:
+  - 'scanner/pairs': Most common action for ingesting scanner data. Payload: { page, scannerPairs }. Expects an array of raw scanner results (unmapped or minimally mapped). The reducer will map these to TokenData as needed. Used throughout the app for both initial loads and updates.
+  - 'scanner/pairsTokens': Used when the tokens are already mapped to TokenData before dispatch. Payload: { page, tokens }. This bypasses per-item mapping in the reducer. Used in scenarios where mapping is done outside the reducer for performance or architectural reasons.
+  Both actions update byId and pages. The main difference is whether mapping is done before or inside the reducer. Use scanner/pairs for raw API results, and scanner/pairsTokens for pre-mapped tokens.
 */
 // Pure tokens reducer to manage scanner pages, ticks, and pair-stats
 import { mapScannerResultToToken, applyTickToToken } from './tdd.runtime.js'
@@ -52,7 +57,7 @@ export const initialState = {
 const __REDUCER_SEEN__ = new WeakSet()
 
 export function tokensReducer(state = initialState, action) {
-  console.log('tokensReducer executed')
+  console.log('tokensReducer executed', { type: action.type })
   const result = (() => {
     switch (action.type) {
       case 'scanner/pairsTokens': {
@@ -104,7 +109,7 @@ export function tokensReducer(state = initialState, action) {
       case 'scanner/pairs': {
         // Ingest raw scannerPairs[] for a page
         const { page, scannerPairs } = action.payload
-        console.log('[tokensReducer] scanner/pairs payload:', { page, scannerPairs })
+        console.log('[tokensReducer] scanner/pairs payload:', { page, scannerPairsLen: Array.isArray(scannerPairs) ? scannerPairs.length : 0 })
         const next = {
           ...state,
           byId: { ...state.byId },
