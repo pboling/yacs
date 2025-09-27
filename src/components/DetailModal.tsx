@@ -187,19 +187,37 @@ export default function DetailModal({
   // Freshness filters for selection menus (fresh always included)
   const [includeStale, setIncludeStale] = useState(false)
   const [includeDegraded, setIncludeDegraded] = useState(false)
+
+  // Reset transient selector state when modal opens or when base row changes
+  useEffect(() => {
+    if (!open) return
+    // Clear any stale search text from prior modal sessions to avoid accidental filtering
+    setBaseSearch('')
+    setCompareSearch('')
+    // Start with menus closed
+    setShowBaseList(false)
+    setShowCompareList(false)
+  }, [open, row?.id])
   const ONE_HOUR_MS = 60 * 60 * 1000
-  const freshnessOf = useCallback((r: DetailModalRow): 'fresh' | 'stale' | 'degraded' => {
-    type Timestamps = { scannerAt?: unknown; tickAt?: unknown; pairStatsAt?: unknown }
-    const ts = r as unknown as Timestamps
-    const s = typeof ts.scannerAt === 'number' ? (ts.scannerAt as number) : null
-    const t = typeof ts.tickAt === 'number' ? (ts.tickAt as number) : null
-    const p = typeof ts.pairStatsAt === 'number' ? (ts.pairStatsAt as number) : null
-    const hasAny = [s, t, p].some((v) => v != null)
-    if (!hasAny) return 'degraded'
-    const now = Date.now()
-    const recent = [s, t, p].some((v) => typeof v === 'number' && now - v < ONE_HOUR_MS)
-    return recent ? 'fresh' : 'stale'
-  }, [ONE_HOUR_MS])
+  const freshnessOf = useCallback(
+    (r: DetailModalRow): 'fresh' | 'stale' | 'degraded' => {
+      interface Timestamps {
+        scannerAt?: unknown
+        tickAt?: unknown
+        pairStatsAt?: unknown
+      }
+      const ts = r as unknown as Timestamps
+      const s = typeof ts.scannerAt === 'number' ? ts.scannerAt : null
+      const t = typeof ts.tickAt === 'number' ? ts.tickAt : null
+      const p = typeof ts.pairStatsAt === 'number' ? ts.pairStatsAt : null
+      const hasAny = [s, t, p].some((v) => v != null)
+      if (!hasAny) return 'degraded'
+      const now = Date.now()
+      const recent = [s, t, p].some((v) => typeof v === 'number' && now - v < ONE_HOUR_MS)
+      return recent ? 'fresh' : 'stale'
+    },
+    [ONE_HOUR_MS],
+  )
   const [baseSearch, setBaseSearch] = useState('')
   const [showBaseList, setShowBaseList] = useState(false)
   // Robust resolver for compare row to handle potential id casing or address-based mismatches
@@ -339,7 +357,14 @@ export default function DetailModal({
         /* no-op */
       }
     }
-  }, [open, primaryRow?.id, primaryRow?.chain, primaryRow?.pairAddress, primaryRow?.tokenAddress, debugEnabled])
+  }, [
+    open,
+    primaryRow?.id,
+    primaryRow?.chain,
+    primaryRow?.pairAddress,
+    primaryRow?.tokenAddress,
+    debugEnabled,
+  ])
 
   useEffect(() => {
     try {
@@ -883,7 +908,11 @@ export default function DetailModal({
                       {(() => {
                         const f = freshnessOf(opt)
                         const color =
-                          f === 'fresh' ? 'var(--accent-up)' : f === 'degraded' ? 'var(--accent-down)' : '#e5e7eb'
+                          f === 'fresh'
+                            ? 'var(--accent-up)'
+                            : f === 'degraded'
+                              ? 'var(--accent-down)'
+                              : '#e5e7eb'
                         return (
                           <span style={{ color }}>
                             {opt.tokenName.toUpperCase()}/{opt.tokenSymbol} / {opt.chain}
@@ -1026,7 +1055,11 @@ export default function DetailModal({
                       {(() => {
                         const f = freshnessOf(opt)
                         const color =
-                          f === 'fresh' ? 'var(--accent-up)' : f === 'degraded' ? 'var(--accent-down)' : '#e5e7eb'
+                          f === 'fresh'
+                            ? 'var(--accent-up)'
+                            : f === 'degraded'
+                              ? 'var(--accent-down)'
+                              : '#e5e7eb'
                         return (
                           <span style={{ color }}>
                             {opt.tokenName.toUpperCase()}/{opt.tokenSymbol} / {opt.chain}

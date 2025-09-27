@@ -626,12 +626,28 @@ function App() {
               if (!action) {
                 console.error('WS: unhandled or malformed message', parsed)
                 try {
-                  type MaybeEvent = { event?: unknown }
+                  interface MaybeEvent {
+                    event?: unknown
+                  }
                   const evName =
-                    typeof parsed === 'object' && parsed && 'event' in (parsed as object)
+                    typeof parsed === 'object' && parsed && 'event' in parsed
                       ? (parsed as MaybeEvent).event
                       : undefined
-                  logWsError('unhandled or malformed message: ' + String(evName ?? 'unknown'))
+                  const safeEv =
+                    evName == null
+                      ? 'unknown'
+                      : typeof evName === 'string'
+                        ? evName
+                        : typeof evName === 'number' || typeof evName === 'boolean'
+                          ? String(evName)
+                          : typeof evName === 'bigint' || typeof evName === 'symbol'
+                            ? String(evName)
+                            : typeof evName === 'function'
+                              ? `[fn ${evName.name || 'anonymous'}]`
+                              : Array.isArray(evName) || typeof evName === 'object'
+                                ? JSON.stringify(evName)
+                                : 'unknown'
+                  logWsError('unhandled or malformed message: ' + safeEv)
                 } catch {}
                 return
               }
@@ -904,15 +920,13 @@ function App() {
     const k = String(ev) as WsEventName
     if (!(k in countsRef.current)) return
     countsRef.current[k] = (countsRef.current[k] ?? 0) + 1
-    if (flushTimerRef.current == null) {
-      flushTimerRef.current ??= window.setTimeout(() => {
-        try {
-          setEventCounts({ ...countsRef.current })
-        } finally {
-          flushTimerRef.current = null
-        }
-      }, 250)
-    }
+    flushTimerRef.current ??= window.setTimeout(() => {
+      try {
+        setEventCounts({ ...countsRef.current })
+      } finally {
+        flushTimerRef.current = null
+      }
+    }, 250)
   }
   // Live subscriptions count (polled)
   const [subCount, setSubCount] = useState<number>(0)

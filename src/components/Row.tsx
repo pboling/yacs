@@ -106,26 +106,133 @@ const Row = memo(
               >
                 {idx + 1}
               </button>
-              <button
-                type="button"
-                className="link"
-                onClick={() => onOpenRowDetails?.(t)}
-                title="Open details"
-                aria-label="Open details"
-              >
-                <ChartNoAxesCombined size={14} />
-              </button>
+              {(() => {
+                // Color the details (chart) icon based on row freshness (same rules/colors as DetailModal)
+                interface Timestamps {
+                  scannerAt?: unknown
+                  tickAt?: unknown
+                  pairStatsAt?: unknown
+                }
+                const ts = t as unknown as Timestamps
+                const s = typeof ts.scannerAt === 'number' ? ts.scannerAt : null
+                const ti = typeof ts.tickAt === 'number' ? ts.tickAt : null
+                const p = typeof ts.pairStatsAt === 'number' ? ts.pairStatsAt : null
+                const hasAny = [s, ti, p].some((v) => v != null)
+                const ONE_HOUR_MS = 60 * 60 * 1000
+                const now = Date.now()
+                const recent = [s, ti, p].some(
+                  (v) => typeof v === 'number' && now - v < ONE_HOUR_MS,
+                )
+                const freshness: 'fresh' | 'stale' | 'degraded' = hasAny
+                  ? recent
+                    ? 'fresh'
+                    : 'stale'
+                  : 'degraded'
+                const iconColor =
+                  freshness === 'fresh'
+                    ? 'var(--accent-up)'
+                    : freshness === 'degraded'
+                      ? 'var(--accent-down)'
+                      : '#e5e7eb'
+                const label = `Open details (${freshness})`
+                return (
+                  <button
+                    type="button"
+                    className="link"
+                    onClick={() => onOpenRowDetails?.(t)}
+                    title={label}
+                    aria-label={label}
+                  >
+                    <ChartNoAxesCombined size={14} style={{ color: iconColor }} />
+                  </button>
+                )
+              })()}
             </div>
           </div>
         </td>
         <td title={t.exchange} style={{ textAlign: 'center' }}>
           <Globe size={14} />
         </td>
-        <td style={{ textAlign: 'right' }}>
-          <NumberCell value={t.priceUsd} prefix="$" />
-        </td>
-        <td style={{ textAlign: 'right' }}>
-          <NumberCell value={t.mcap} prefix="$" />
+        <td colSpan={2} style={{ textAlign: 'right', verticalAlign: 'top' }}>
+          <div
+            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', alignItems: 'start', gap: 4 }}
+          >
+            <div style={{ textAlign: 'right' }}>
+              <NumberCell value={t.priceUsd} prefix="$" />
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <NumberCell value={t.mcap} prefix="$" />
+            </div>
+            {(() => {
+              // Single sparkline of Price spanning both Price and MCap columns (no labels)
+              // Uses last up to 60 points from 1-hour rolling history if available
+              interface MaybeHistory {
+                history?: { price?: unknown }
+              }
+              const h = (t as unknown as MaybeHistory).history
+              const priceArrUnknown = h?.price
+              const priceArr = Array.isArray(priceArrUnknown) ? (priceArrUnknown as number[]) : null
+              const vals = priceArr && priceArr.length > 0 ? priceArr : [t.priceUsd, t.priceUsd]
+              const n = Math.min(60, vals.length)
+              const data = vals.slice(-n)
+              const width = undefined // auto width via viewBox and CSS
+              const height = 18 // ~1.5x line-height visual
+              const pad = 2
+              const max = Math.max(...data)
+              const min = Math.min(...data)
+              const range = Math.max(1e-6, max - min)
+              const len = data.length
+              const w = Math.max(60, len * 2) // ensure some width in viewBox for smoothing
+              const xStep = len > 1 ? (w - pad * 2) / (len - 1) : 0
+              const pts: string[] = []
+              for (let i = 0; i < len; i++) {
+                const x = pad + i * xStep
+                const y = pad + (height - pad * 2) * (1 - (data[i] - min) / range)
+                pts.push(`${x},${y}`)
+              }
+              const d = pts.length ? 'M ' + pts.join(' L ') : ''
+              const trendUp = data[len - 1] >= data[0]
+              const color = trendUp ? 'var(--accent-up)' : 'var(--accent-down)'
+              return (
+                <div style={{ gridColumn: '1 / span 2' }}>
+                  <button
+                    type="button"
+                    onClick={() => onOpenRowDetails?.(t)}
+                    title="Open details (sparkline)"
+                    aria-label="Open details (sparkline)"
+                    style={{
+                      background: 'transparent',
+                      border: 0,
+                      padding: 0,
+                      margin: 0,
+                      display: 'block',
+                      width: '100%',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <svg
+                      role="img"
+                      aria-label="Price sparkline"
+                      width={width}
+                      height={height}
+                      viewBox={`0 0 ${w} ${height}`}
+                      preserveAspectRatio="none"
+                      style={{ display: 'block', width: '100%', height }}
+                    >
+                      {/* baseline */}
+                      <polyline
+                        points={`${pad},${height - pad} ${w - pad},${height - pad}`}
+                        stroke="#374151"
+                        strokeWidth={1}
+                        fill="none"
+                      />
+                      {d && <path d={d} stroke={color} strokeWidth={1.5} fill="none" />}
+                    </svg>
+                  </button>
+                </div>
+              )
+            })()}
+          </div>
         </td>
         <td style={{ textAlign: 'right' }}>
           <NumberCell value={t.volumeUsd} />
