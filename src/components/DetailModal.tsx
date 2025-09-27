@@ -64,11 +64,22 @@ export default function DetailModal({
 
   // Block page scroll while open
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      try {
+        document.body.setAttribute('data-detail-open', '0')
+      } catch {}
+      return
+    }
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
+    try {
+      document.body.setAttribute('data-detail-open', '1')
+    } catch {}
     return () => {
       document.body.style.overflow = prev
+      try {
+        document.body.setAttribute('data-detail-open', '0')
+      } catch {}
     }
   }, [open])
 

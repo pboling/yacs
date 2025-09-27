@@ -263,6 +263,7 @@ type SortKey =
   | 'age'
   | 'tx'
   | 'liquidity'
+  | 'fresh'
 
 // Local state shape matching tokens.reducer.js output
 interface TokensMeta {
@@ -358,6 +359,7 @@ function App() {
         age: 'age',
         tx: 'tx',
         liquidity: 'liquidity',
+        fresh: 'fresh',
       }
       const key = map[rawSort]
       if (key) return { key, dir }

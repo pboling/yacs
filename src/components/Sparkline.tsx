@@ -11,14 +11,33 @@ export default function Sparkline({
   const w = width
   const h = height
   const n = data.length
-  const max = Math.max(1, ...data)
-  const min = 0
+  if (n === 0) {
+    return (
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true" focusable="false">
+        <polyline
+          points={`${pad},${h - pad} ${w - pad},${h - pad}`}
+          stroke="#374151"
+          strokeWidth="1"
+          fill="none"
+        />
+      </svg>
+    )
+  }
+  const max = Math.max(...data)
+  const min = Math.min(...data)
+  const range = Math.max(1e-6, max - min)
   const xStep = n > 1 ? (w - pad * 2) / (n - 1) : 0
   const points: string[] = []
-  for (let i = 0; i < n; i++) {
-    const x = pad + i * xStep
-    const y = pad + (h - pad * 2) * (1 - (data[i] - min) / (max - min))
-    points.push(String(x) + ',' + String(y))
+  if (n === 1) {
+    const y = pad + (h - pad * 2) * (1 - (data[0] - min) / range)
+    points.push(`${pad},${y}`)
+    points.push(`${w - pad},${y}`)
+  } else {
+    for (let i = 0; i < n; i++) {
+      const x = pad + i * xStep
+      const y = pad + (h - pad * 2) * (1 - (data[i] - min) / range)
+      points.push(String(x) + ',' + String(y))
+    }
   }
   const path = points.length > 0 ? 'M ' + points.join(' L ') : ''
   const viewBox = '0 0 ' + String(w) + ' ' + String(h)

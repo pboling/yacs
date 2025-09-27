@@ -225,6 +225,16 @@ export default function Table({
         const visible = e.isIntersecting || e.intersectionRatio > 0
         if (visible) visibleElsRef.current.add(e.target)
         else visibleElsRef.current.delete(e.target)
+        try {
+          const el = e.target as HTMLElement
+          if (visible) el.setAttribute('data-visible', '1')
+          else el.removeAttribute('data-visible')
+          // Notify the row element directly so it can gate animations without new props
+          const evt = new CustomEvent('dex:row-visibility', { detail: { visible } })
+          el.dispatchEvent(evt)
+        } catch {
+          /* no-op */
+        }
         if (onRowVisibilityChange) onRowVisibilityChange(row, visible)
       }
     }
@@ -254,9 +264,19 @@ export default function Table({
           const intersects = r.bottom >= contRect.top && r.top <= contRect.bottom
           if (intersects) {
             visibleElsRef.current.add(el)
+            try {
+              ;(el as HTMLElement).setAttribute('data-visible', '1')
+              const evt = new CustomEvent('dex:row-visibility', { detail: { visible: true } })
+              el.dispatchEvent(evt)
+            } catch {}
             vis.push({ el, row })
           } else {
             visibleElsRef.current.delete(el)
+            try {
+              ;(el as HTMLElement).removeAttribute('data-visible')
+              const evt = new CustomEvent('dex:row-visibility', { detail: { visible: false } })
+              el.dispatchEvent(evt)
+            } catch {}
           }
         }
         // Expand by +/-3 around the edges of the visible block to account for estimation errors
@@ -584,9 +604,9 @@ export default function Table({
                   onSort={onSort}
                 />
                 <th>
-                  Chg (5m/1h
+                  5m 1h Chg
                   <br />
-                  6h/24h)
+                  6h 24h Chg
                 </th>
                 <SortHeader
                   label="Age"
@@ -608,6 +628,14 @@ export default function Table({
                   sortKey={sortKey}
                   sortDir={sortDir}
                   onSort={onSort}
+                />
+                <SortHeader
+                  label="Fresh"
+                  k="fresh"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={onSort}
+                  style={{ width: 60, minWidth: 50 }}
                 />
                 <th>Audit</th>
               </tr>

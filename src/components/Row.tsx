@@ -1,9 +1,11 @@
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import NumberCell from './NumberCell'
 import AuditIcons from './AuditIcons'
 import { Globe, Eye, ChartNoAxesCombined } from 'lucide-react'
 import { formatAge } from '../helpers/format'
 import type { Token as TokenRow } from '../models/Token'
+import { onUpdate } from '../updates.bus'
+import { buildTickKey } from '../utils/key_builder'
 
 export interface RowProps {
   row: TokenRow
@@ -37,6 +39,16 @@ const Row = memo(
   }: RowProps) {
     // Global 1s tick to force sparkline to advance even without new data
     const [_secTick, setSecTick] = useState(0)
+    const eyeRef = useRef<HTMLButtonElement | null>(null)
+    const sparkRef = useRef<HTMLDivElement | null>(null)
+    const trRef = useRef<HTMLTableRowElement | null>(null)
+    const isVisibleRef = useRef<boolean>(true)
+    const lastPriceRef = useRef<number>(typeof t.priceUsd === 'number' ? t.priceUsd : 0)
+
+    useEffect(() => {
+      lastPriceRef.current = typeof t.priceUsd === 'number' ? t.priceUsd : lastPriceRef.current
+    }, [t.priceUsd])
+
     useEffect(() => {
       const handler = () => {
         setSecTick((n) => n + 1)
@@ -51,6 +63,160 @@ const Row = memo(
       }
     }, [])
 
+    // Track row visibility via a custom event emitted by Table’s IntersectionObserver
+    useEffect(() => {
+      const el = trRef.current
+      if (!el) return
+      // Seed from current attribute if Table has already computed it
+      try {
+        const isVis = el.getAttribute('data-visible') === '1'
+        isVisibleRef.current = isVis
+      } catch {}
+      const handler = (ev: Event) => {
+        try {
+          const ce = ev as CustomEvent<{ visible?: boolean }>
+          const v = typeof ce.detail?.visible === 'boolean' ? ce.detail.visible : undefined
+          if (typeof v === 'boolean') isVisibleRef.current = v
+        } catch {
+          /* no-op */
+        }
+      }
+      el.addEventListener('dex:row-visibility', handler as EventListener)
+      return () => {
+        try {
+          el.removeEventListener('dex:row-visibility', handler as EventListener)
+        } catch {}
+      }
+    }, [])
+
+    // Subscribe to per-token tick updates and animate a dot from eye to sparkline
+    useEffect(() => {
+      const token = (t as { tokenAddress?: string }).tokenAddress
+      const chain = t.chain
+      if (!token || !chain) return
+      const key = buildTickKey(token, chain)
+      const off = onUpdate((e) => {
+        if (e.type !== 'tick' || e.key !== key) return
+        // Only animate when the row is visible within the scrollpane viewport
+        // Additionally, pause animations while the detail modal is open
+        try {
+          const modalOpen = document.body.getAttribute('data-detail-open') === '1'
+          if (modalOpen) return
+        } catch {}
+        if (!isVisibleRef.current) return
+        // Try to extract latest swap price from event data
+        let newPrice: number | null = null
+        try {
+          const dd = e.data as {
+            swaps?: { isOutlier?: boolean; priceToken1Usd?: number | string }[]
+          }
+          if (Array.isArray(dd?.swaps)) {
+            const latest = dd.swaps.filter((s) => !s.isOutlier).pop()
+            if (latest) {
+              const v =
+                typeof latest.priceToken1Usd === 'number'
+                  ? latest.priceToken1Usd
+                  : parseFloat(latest.priceToken1Usd ?? 'NaN')
+              if (Number.isFinite(v)) newPrice = v
+            }
+          }
+        } catch {}
+        const prev = lastPriceRef.current
+        const np = newPrice ?? prev // animate regardless; neutral if unchanged
+        const color =
+          !Number.isFinite(prev) || !Number.isFinite(np)
+            ? 'var(--muted, #9CA3AF)'
+            : np > prev
+              ? 'var(--accent-up)'
+              : np < prev
+                ? 'var(--accent-down)'
+                : 'var(--muted, #9CA3AF)'
+        if (Number.isFinite(np)) lastPriceRef.current = np
+        animateDot(color)
+      })
+      return off
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [t.chain, (t as { tokenAddress?: string }).tokenAddress])
+
+    function animateDot(color: string) {
+      try {
+        const eyeEl = eyeRef.current
+        const sparkEl = sparkRef.current
+        const rowEl = trRef.current
+        if (!eyeEl || !sparkEl || !rowEl) return
+        const eyeRect = eyeEl.getBoundingClientRect()
+        const sparkRect = sparkEl.getBoundingClientRect()
+        const rowRect = rowEl.getBoundingClientRect()
+        const startX = eyeRect.left + eyeRect.width / 2
+        const startY = eyeRect.top + eyeRect.height / 2
+        const endX = sparkRect.left + sparkRect.width * 0.85 // aim near the right edge of sparkline
+        const endY = sparkRect.top + sparkRect.height / 2
+        // Target "bottom of the row" (slightly above the border) for the travel phase
+        const bottomY = Math.min(window.innerHeight - 4, rowRect.bottom - 4)
+        const dot = document.createElement('div')
+        dot.setAttribute('aria-hidden', 'true')
+        dot.style.position = 'fixed'
+        dot.style.left = `${startX}px`
+        dot.style.top = `${startY}px`
+        dot.style.width = '8px'
+        dot.style.height = '8px'
+        dot.style.marginLeft = '-4px'
+        dot.style.marginTop = '-4px'
+        dot.style.borderRadius = '50%'
+        dot.style.background = color
+        dot.style.pointerEvents = 'none'
+        dot.style.zIndex = '9999'
+        dot.style.boxShadow = '0 0 8px rgba(0,0,0,0.35)'
+        document.body.appendChild(dot)
+        const dx = endX - startX
+        const dy = endY - startY
+        const bottomDy = bottomY - startY
+        const duration = 700
+        // Two-stage path:
+        //  - Quickly drop to the row's bottom (10% progress)
+        //  - Travel along bottom until 90%
+        //  - Rise to sparkline destination in the last 10%
+        const keyframes: Keyframe[] = [
+          { transform: 'translate(0px, 0px)', opacity: 0.95, offset: 0 },
+          { transform: `translate(${dx * 0.1}px, ${bottomDy}px)`, opacity: 0.9, offset: 0.1 },
+          { transform: `translate(${dx * 0.9}px, ${bottomDy}px)`, opacity: 0.35, offset: 0.9 },
+          { transform: `translate(${dx}px, ${dy}px)`, opacity: 0.2, offset: 1 },
+        ]
+        const anim: Animation | undefined = dot.animate?.(keyframes, {
+          duration,
+          easing: 'linear',
+          fill: 'forwards',
+        })
+        const cleanup = () => {
+          try {
+            if (dot.parentNode) dot.parentNode.removeChild(dot)
+          } catch {}
+        }
+        if (anim && typeof anim.finished?.then === 'function') {
+          anim.finished.then(cleanup).catch(cleanup)
+        } else {
+          // Fallback: manual two-step CSS transition
+          const firstMs = Math.round(duration * 0.9)
+          const lastMs = duration - firstMs
+          // Step 1: move to 90% along bottom
+          dot.style.transition = `transform ${firstMs}ms linear, opacity ${firstMs}ms linear`
+          requestAnimationFrame(() => {
+            dot.style.transform = `translate(${dx * 0.9}px, ${bottomDy}px)`
+            dot.style.opacity = '0.35'
+          })
+          // Step 2: after first phase, rise to destination
+          window.setTimeout(() => {
+            dot.style.transition = `transform ${lastMs}ms linear, opacity ${lastMs}ms linear`
+            dot.style.transform = `translate(${dx}px, ${dy}px)`
+            dot.style.opacity = '0.2'
+            window.setTimeout(cleanup, lastMs + 40)
+          }, firstMs)
+        }
+      } catch {
+        /* no-op */
+      }
+    }
+
     const auditFlags = {
       verified: t.audit?.contractVerified,
       freezable: t.audit?.freezable,
@@ -63,6 +229,8 @@ const Row = memo(
         key={composedId}
         data-row-id={composedId}
         ref={(el) => {
+          // Keep a local ref to the <tr> for visibility events while still registering with Table
+          trRef.current = el
           registerRow(el, t)
         }}
         {...(idx === rowsLen - 1 ? ({ 'data-last-row': '1' } as Record<string, string>) : {})}
@@ -86,7 +254,7 @@ const Row = memo(
             >
               {(() => {
                 const st = getRowStatus?.(t)
-                const tip = st?.tooltip || (st ? st.state : '')
+                const tip = st?.tooltip ?? (st ? st.state : '')
                 const dotColor =
                   st?.state === 'subscribed'
                     ? '#10b981'
@@ -203,7 +371,7 @@ const Row = memo(
                   idx++
                 }
               }
-              if (lastVal == null) lastVal = typeof t.priceUsd === 'number' ? t.priceUsd : 0
+              lastVal ??= typeof t.priceUsd === 'number' ? t.priceUsd : 0
 
               // For each minute bucket, advance idx while history timestamp <= bucket, updating lastVal
               for (let bucket = startBucket; bucket <= endBucket; bucket += MINUTE) {
@@ -244,7 +412,7 @@ const Row = memo(
               const secsFrac = (now % MINUTE) / MINUTE
               const offset = secsFrac * xStep
               return (
-                <div style={{ gridColumn: '1 / span 2' }}>
+                <div style={{ gridColumn: '1 / span 2' }} ref={sparkRef}>
                   <button
                     type="button"
                     onClick={() => onOpenRowDetails?.(t)}
@@ -376,18 +544,54 @@ const Row = memo(
         <td style={{ textAlign: 'right' }}>
           <NumberCell value={t.liquidity.current} prefix="$" />
         </td>
-        <td>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <AuditIcons flags={auditFlags} />
-            <button
-              type="button"
-              title="Toggle subscription for this row"
-              onClick={() => onToggleRowSubscription?.(t)}
-            >
-              <Eye size={14} />
-            </button>
-          </div>
-        </td>
+        {(() => {
+          interface Timestamps {
+            scannerAt?: unknown
+            tickAt?: unknown
+            pairStatsAt?: unknown
+          }
+          const ts = t as unknown as Timestamps
+          const s = typeof ts.scannerAt === 'number' ? ts.scannerAt : null
+          const ti = typeof ts.tickAt === 'number' ? ts.tickAt : null
+          const p = typeof ts.pairStatsAt === 'number' ? ts.pairStatsAt : null
+          const hasAny = [s, ti, p].some((v) => v != null)
+          const ONE_HOUR_MS = 60 * 60 * 1000
+          const now = Date.now()
+          const recent = [s, ti, p].some((v) => typeof v === 'number' && now - v < ONE_HOUR_MS)
+          const freshness: 'fresh' | 'stale' | 'degraded' = hasAny
+            ? recent
+              ? 'fresh'
+              : 'stale'
+            : 'degraded'
+          const freshColor =
+            freshness === 'fresh'
+              ? 'var(--accent-up)'
+              : freshness === 'degraded'
+                ? 'var(--accent-down)'
+                : '#e5e7eb'
+          const label = `Fresh (${freshness})`
+          return (
+            <>
+              <td style={{ textAlign: 'center' }}>
+                <button
+                  type="button"
+                  title={label}
+                  aria-label={label}
+                  onClick={() => onToggleRowSubscription?.(t)}
+                  ref={eyeRef}
+                  style={{ color: freshColor }}
+                >
+                  <Eye size={14} />
+                </button>
+              </td>
+              <td>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <AuditIcons flags={auditFlags} />
+                </div>
+              </td>
+            </>
+          )
+        })()}
       </tr>
     )
   },

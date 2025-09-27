@@ -10,6 +10,7 @@ export type SortKey =
   | 'age'
   | 'tx'
   | 'liquidity'
+  | 'fresh'
 
 type Props = {
   label: string

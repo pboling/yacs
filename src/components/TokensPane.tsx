@@ -43,6 +43,7 @@ type SortKey =
   | 'age'
   | 'tx'
   | 'liquidity'
+  | 'fresh'
 
 type Dir = 'asc' | 'desc'
 
@@ -396,6 +397,17 @@ export default function TokensPane({
             return t.transactions.buys + t.transactions.sells
           case 'liquidity':
             return t.liquidity.current
+          case 'fresh': {
+            const any = t as unknown as {
+              scannerAt?: unknown
+              tickAt?: unknown
+              pairStatsAt?: unknown
+            }
+            const s = typeof any.scannerAt === 'number' ? any.scannerAt : -Infinity
+            const ti = typeof any.tickAt === 'number' ? any.tickAt : -Infinity
+            const p = typeof any.pairStatsAt === 'number' ? any.pairStatsAt : -Infinity
+            return Math.max(s, ti, p)
+          }
           case 'tokenName':
             return t.tokenName.toLowerCase()
           case 'exchange':
