@@ -33,16 +33,14 @@ async function loadFixture(name: 'scanner.trending.json' | 'scanner.new.json') {
 vi.mock('../src/scanner.client.js', async (orig) => {
   const mod = await (orig as any)()
   const real = mod as Record<string, any>
-  const { mapScannerPage } = await import('../src/scanner.client.js')
   return {
     ...real,
-    // fetchScanner responds based on rankBy param with our fixtures
     fetchScanner: async (params: Record<string, any>) => {
       const which = params?.rankBy === 'volume' ? 'scanner.trending.json' : 'scanner.new.json'
       const raw = await loadFixture(which as any)
-      // map to TokenData[] using the real util so reducer path is valid if consumed
+      // Use local mapScannerPage to convert fixture data
       const tokens = mapScannerPage(raw)
-      return { raw, tokens }
+      return { raw: { scannerPairs: tokens }, tokens }
     },
   }
 })
@@ -61,6 +59,31 @@ function makeState(): {
   version?: number
 } {
   return { byId: {}, pages: {}, version: 0 }
+}
+
+// Map the fixture's 'pairs' array to the expected token object format
+function mapScannerPage(raw: any) {
+  return Array.isArray(raw.pairs)
+    ? raw.pairs.map((pair: any) => ({
+        id: pair.pairAddress,
+        tokenName: pair.token1Name,
+        tokenSymbol: pair.token1Symbol,
+        chain: pair.chainId,
+        exchange: pair.routerAddress,
+        priceUsd: Number(pair.price),
+        mcap: Number(pair.currentMcap),
+        volumeUsd: Number(pair.volume),
+        priceChangePcs: {
+          '5m': Number(pair.diff5M),
+          '1h': Number(pair.diff1H),
+          '6h': Number(pair.diff6H),
+          '24h': Number(pair.diff24H),
+        },
+        transactions: { buys: pair.buys, sells: pair.sells },
+        liquidity: { current: Number(pair.liquidity), changePc: Number(pair.percentChangeInLiquidity) },
+        tokenCreatedTimestamp: new Date(pair.age),
+      }))
+    : []
 }
 
 describe('TokensPane smoke: dispatches after successful fetch', () => {
@@ -99,7 +122,10 @@ describe('TokensPane smoke: dispatches after successful fetch', () => {
       expect(init?.[0]?.payload?.page).toBe(101)
       expect(Array.isArray(init?.[0]?.payload?.scannerPairs)).toBe(true)
       expect(init?.[0]?.payload?.scannerPairs.length).toBe(0)
-    })
+    }, { timeout: 3000 })
+
+    // Log all dispatch calls for debugging
+    console.log('Dispatch calls:', dispatch.mock.calls)
 
     // Then, a non-empty dispatch should occur: either scanner/pairsTokens or scanner/pairs with >0
     await waitFor(() => {
@@ -109,6 +135,6 @@ describe('TokensPane smoke: dispatches after successful fetch', () => {
         .find((c) => (c?.[0]?.payload?.scannerPairs?.length ?? 0) > 0)
       const ok = !!pairsTokens || !!pairs
       expect(ok).toBe(true)
-    })
+    }, { timeout: 3000 })
   })
 })

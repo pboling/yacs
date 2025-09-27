@@ -42,8 +42,9 @@ import { setDefaultInvisibleBaseLimit } from './subscription.limit.bus.js'
 import { engageSubscriptionLock, releaseSubscriptionLock } from './subscription.lock.bus.js'
 import { onSubscriptionLockChange, isSubscriptionLockActive } from './subscription.lock.bus.js'
 import { toChainId } from './utils/chain'
-import { buildPairKey } from './utils/key_builder'
+import { buildPairKey, buildTickKey } from './utils/key_builder'
 import { logCatch } from './utils/debug.mjs'
+import { emitUpdate } from './updates.bus'
 
 // Theme allow-list and cookie helpers
 const THEME_ALLOW = ['cherry-sour', 'rocket-lake', 'legendary'] as const
@@ -759,6 +760,28 @@ function App() {
                 }
               }
               const validationEnd = performance.now()
+              // Emit update bus events for components listening to per-key activity (UpdateRate, Row animations)
+              try {
+                if (event === 'tick') {
+                  const d = data as any
+                  const token = d?.pair?.token
+                  const chain = d?.pair?.chain
+                  if (token && chain) {
+                    const key = buildTickKey(String(token), chain)
+                    emitUpdate({ key, type: 'tick', data })
+                  }
+                } else if (event === 'pair-stats') {
+                  const d = data as any
+                  const token = d?.pair?.token1Address
+                  const chain = d?.pair?.chain
+                  if (token && chain) {
+                    const key = buildTickKey(String(token), chain)
+                    emitUpdate({ key, type: 'pair-stats', data })
+                  }
+                }
+              } catch {
+                /* no-op */
+              }
               // Mapping
               const mapStart = performance.now()
               const action = mapIncomingMessageToActionSafe(parsed)

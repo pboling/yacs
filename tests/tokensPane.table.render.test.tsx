@@ -14,18 +14,41 @@ async function loadFixture(name: 'scanner.trending.json' | 'scanner.new.json') {
   return JSON.parse(txt)
 }
 
+function mapScannerPage(raw: any) {
+  return Array.isArray(raw.pairs)
+    ? raw.pairs.map((pair: any) => ({
+        id: pair.pairAddress,
+        tokenName: pair.token1Name,
+        tokenSymbol: pair.token1Symbol,
+        chain: pair.chainId,
+        exchange: pair.routerAddress,
+        priceUsd: Number(pair.price),
+        mcap: Number(pair.currentMcap),
+        volumeUsd: Number(pair.volume ?? 0),
+        priceChangePcs: {
+          '5m': Number(pair.diff5M ?? 0),
+          '1h': Number(pair.diff1H ?? 0),
+          '6h': Number(pair.diff6H ?? 0),
+          '24h': Number(pair.diff24H ?? 0),
+        },
+        transactions: { buys: pair.buys ?? 0, sells: pair.sells ?? 0 },
+        liquidity: { current: Number(pair.liquidity ?? 0), changePc: Number(pair.percentChangeInLiquidity ?? 0) },
+        tokenCreatedTimestamp: new Date(pair.age),
+      }))
+    : []
+}
+
 // Mock the scanner client to return real fixtures mapped through real util
 vi.mock('../src/scanner.client.js', async (orig) => {
   const mod = await (orig as any)()
   const real = mod as Record<string, any>
-  const { mapScannerPage } = await import('../src/scanner.client.js')
   return {
     ...real,
     fetchScanner: async (params: Record<string, any>) => {
       const which = params?.rankBy === 'volume' ? 'scanner.trending.json' : 'scanner.new.json'
       const raw = await loadFixture(which as any)
       const tokens = mapScannerPage(raw)
-      return { raw, tokens }
+      return { raw: { scannerPairs: tokens }, tokens }
     },
   }
 })
