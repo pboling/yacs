@@ -505,8 +505,15 @@ const Row = memo(
         <td>{formatAge(t.tokenCreatedTimestamp)}</td>
         <td>
           <div className="muted" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <span title="Buys">
-              {}
+            <span
+              title="Buys"
+              style={{
+                display: 'inline-flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                lineHeight: 1,
+              }}
+            >
               {/* Colors come from CSS variables */}
               <svg
                 width="12"
@@ -520,10 +527,18 @@ const Row = memo(
               >
                 <path d="M12 19V6" />
                 <path d="M5 12l7-7 7 7" />
-              </svg>{' '}
-              {t.transactions.buys}
+              </svg>
+              <span>{t.transactions.buys}</span>
             </span>
-            <span title="Sells">
+            <span
+              title="Sells"
+              style={{
+                display: 'inline-flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                lineHeight: 1,
+              }}
+            >
               <svg
                 width="12"
                 height="12"
@@ -536,8 +551,8 @@ const Row = memo(
               >
                 <path d="M12 5v13" />
                 <path d="M19 12l-7 7-7-7" />
-              </svg>{' '}
-              {t.transactions.sells}
+              </svg>
+              <span>{t.transactions.sells}</span>
             </span>
           </div>
         </td>
