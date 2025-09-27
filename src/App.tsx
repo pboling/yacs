@@ -73,90 +73,85 @@ function TopBar({
   theme,
   onThemeChange,
   lockActive,
+  eventCounts,
+  subCount,
 }: {
   title: string
   version: number
   theme: ThemeName
   onThemeChange: (v: ThemeName) => void
   lockActive: boolean
+  eventCounts: {
+    'scanner-pairs': number
+    tick: number
+    'pair-stats': number
+    'wpeg-prices': number
+  }
+  subCount: number
 }) {
-  // Restore live subscription counter in the top bar
-  const [subCount, setSubCount] = useState<number>(0)
-  useEffect(() => {
-    let raf = 0
-    let timer: number | null = null
-    const tick = () => {
-      try {
-        setSubCount(SubscriptionQueue.getSubscribedCount())
-      } catch {}
-      timer = window.setTimeout(() => {
-        raf = window.requestAnimationFrame(tick)
-      }, 500)
-    }
-    tick()
-    return () => {
-      if (timer != null) {
-        try {
-          window.clearTimeout(timer)
-        } catch {}
-      }
-      try {
-        window.cancelAnimationFrame(raf)
-      } catch {}
-    }
-  }, [])
   return (
     <div
       style={{
         display: 'flex',
-        alignItems: 'center',
+        alignItems: 'stretch',
         justifyContent: 'space-between',
         gap: 12,
         flexWrap: 'wrap',
         marginBottom: 8,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      {/* Left column: Title */}
+      <div style={{ display: 'flex', alignItems: 'center' }}>
         <h1 style={{ margin: 0 }}>{title}</h1>
-        <UpdateRate version={import.meta.env.DEV ? version : undefined} />
-        <span
-          className="muted"
-          title="Active subscriptions across all panes"
-          style={{
-            fontSize: 11,
-            padding: '2px 6px',
-            border: '1px solid #4b5563',
-            borderRadius: 12,
-            background: 'rgba(255,255,255,0.06)',
-            letterSpacing: 0.5,
-          }}
-        >
-          Subs: <strong style={{ marginLeft: 4 }}>{subCount}</strong>
-        </span>
-        <label className="muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          Theme
-          <select
-            aria-label="Select theme"
-            value={theme}
-            onChange={(e) => {
-              const v = e.currentTarget.value as ThemeName
-              onThemeChange((THEME_ALLOW as readonly string[]).includes(v) ? v : 'cherry-sour')
-            }}
-            style={{
-              background: '#111827',
-              color: '#e5e7eb',
-              border: '1px solid #374151',
-              borderRadius: 4,
-              padding: '6px 8px',
-            }}
-          >
-            <option value="cherry-sour">Cherry Sour (Red and Green)</option>
-            <option value="rocket-lake">Rocket Lake (Orange and Blue)</option>
-            <option value="legendary">Legendary (Yellow and Purple)</option>
-          </select>
-        </label>
-        {lockActive && (
+      </div>
+      {/* Middle column: two rows */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 260, flex: 1 }}>
+        {/* Row A: UpdateRate & Theme selector */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <UpdateRate version={import.meta.env.DEV ? version : undefined} />
+          <label className="muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            Theme
+            <select
+              aria-label="Select theme"
+              value={theme}
+              onChange={(e) => {
+                const v = e.currentTarget.value as ThemeName
+                onThemeChange((THEME_ALLOW as readonly string[]).includes(v) ? v : 'cherry-sour')
+              }}
+              style={{
+                background: '#111827',
+                color: '#e5e7eb',
+                border: '1px solid #374151',
+                borderRadius: 4,
+                padding: '6px 8px',
+              }}
+            >
+              <option value="cherry-sour">Cherry Sour (Red and Green)</option>
+              <option value="rocket-lake">Rocket Lake (Orange and Blue)</option>
+              <option value="legendary">Legendary (Yellow and Purple)</option>
+            </select>
+          </label>
+          {lockActive && (
+            <span
+              style={{
+                fontSize: 11,
+                padding: '2px 6px',
+                border: '1px solid #4b5563',
+                borderRadius: 12,
+                background: 'rgba(255,255,255,0.06)',
+                letterSpacing: 0.5,
+              }}
+              title="Subscription lock active (modal focus)"
+            >
+              Locked
+            </span>
+          )}
+        </div>
+        {/* Row B: Subs and WS event counters */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span
+            className="muted"
+            title="Active subscriptions across all panes"
             style={{
               fontSize: 11,
               padding: '2px 6px',
@@ -165,12 +160,36 @@ function TopBar({
               background: 'rgba(255,255,255,0.06)',
               letterSpacing: 0.5,
             }}
-            title="Subscription lock active (modal focus)"
           >
-            Locked
+            Subs: <strong style={{ marginLeft: 4 }}>{subCount}</strong>
           </span>
-        )}
+          {(
+            [
+              ['scanner-pairs', 'Scanner'],
+              ['tick', 'Tick'],
+              ['pair-stats', 'Pair Stats'],
+              ['wpeg-prices', 'WPEG'],
+            ] as const
+          ).map(([key, label]) => (
+            <span
+              key={key}
+              className="muted"
+              title={`${label} events received`}
+              style={{
+                fontSize: 11,
+                padding: '2px 6px',
+                border: '1px solid #4b5563',
+                borderRadius: 12,
+                background: 'rgba(255,255,255,0.06)',
+                letterSpacing: 0.5,
+              }}
+            >
+              {label}: <strong style={{ marginLeft: 4 }}>{eventCounts[key]}</strong>
+            </span>
+          ))}
+        </div>
       </div>
+      {/* Right column: console fills remaining space */}
       <div
         style={{
           marginLeft: 'auto',
@@ -498,6 +517,9 @@ function App() {
               try {
                 logWsInfo('event ' + String(event))
               } catch {}
+              try {
+                bumpEventCount(event)
+              } catch {}
               const data =
                 parsed && typeof parsed === 'object'
                   ? (parsed as { data?: unknown }).data
@@ -824,6 +846,52 @@ function App() {
   const pendingApplyAfterBlurRef = useRef(false)
   const updatesCounterRef = useRef(0)
   const msgLogCountRef = useRef(0)
+  // WS event counters (allowed incoming events)
+  type WsEventName = 'scanner-pairs' | 'tick' | 'pair-stats' | 'wpeg-prices'
+  type WsCounts = Record<WsEventName, number>
+  const zeroCounts: WsCounts = { 'scanner-pairs': 0, tick: 0, 'pair-stats': 0, 'wpeg-prices': 0 }
+  const countsRef = useRef<WsCounts>({ ...zeroCounts })
+  const [eventCounts, setEventCounts] = useState<WsCounts>({ ...zeroCounts })
+  const flushTimerRef = useRef<number | null>(null)
+  const bumpEventCount = (ev: unknown) => {
+    const k = String(ev) as WsEventName
+    if (!(k in countsRef.current)) return
+    countsRef.current[k] = (countsRef.current[k] ?? 0) + 1
+    if (flushTimerRef.current == null) {
+      flushTimerRef.current = window.setTimeout(() => {
+        try {
+          setEventCounts({ ...countsRef.current })
+        } finally {
+          flushTimerRef.current = null
+        }
+      }, 250)
+    }
+  }
+  // Live subscriptions count (polled)
+  const [subCount, setSubCount] = useState<number>(0)
+  useEffect(() => {
+    let raf = 0
+    let timer: number | null = null
+    const tick = () => {
+      try {
+        setSubCount(SubscriptionQueue.getSubscribedCount())
+      } catch {}
+      timer = window.setTimeout(() => {
+        raf = window.requestAnimationFrame(tick)
+      }, 500)
+    }
+    tick()
+    return () => {
+      if (timer != null) {
+        try {
+          window.clearTimeout(timer)
+        } catch {}
+      }
+      try {
+        window.cancelAnimationFrame(raf)
+      } catch {}
+    }
+  }, [])
   const [rateSeries, setRateSeries] = useState<number[]>([])
 
   // Dev-only touch to keep rateSeries referenced; retained for potential future diagnostics
@@ -1114,6 +1182,8 @@ function App() {
             setTheme(v)
           }}
           lockActive={lockActive}
+          eventCounts={eventCounts}
+          subCount={subCount}
         />
         {/* Filters Bar */}
         <div className="filters">
