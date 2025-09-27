@@ -75,6 +75,8 @@ function TopBar({
   lockActive,
   eventCounts,
   subCount,
+  consoleVisible,
+  onToggleConsole,
 }: {
   title: string
   version: number
@@ -88,6 +90,8 @@ function TopBar({
     'wpeg-prices': number
   }
   subCount: number
+  consoleVisible: boolean
+  onToggleConsole: () => void
 }) {
   return (
     <div
@@ -187,6 +191,24 @@ function TopBar({
               {label}: <strong style={{ marginLeft: 4 }}>{eventCounts[key]}</strong>
             </span>
           ))}
+          <button
+            type="button"
+            className="btn"
+            aria-pressed={consoleVisible}
+            onClick={onToggleConsole}
+            title={consoleVisible ? 'Hide WebSocket console' : 'Show WebSocket console'}
+            style={{
+              background: '#111827',
+              color: '#e5e7eb',
+              border: '1px solid #374151',
+              borderRadius: 12,
+              padding: '2px 8px',
+              fontSize: 11,
+              letterSpacing: 0.5,
+            }}
+          >
+            Console{consoleVisible ? ': On' : ''}
+          </button>
         </div>
       </div>
       {/* Right column: console fills remaining space */}
@@ -199,7 +221,7 @@ function TopBar({
           width: '100%',
         }}
       >
-        <WsConsole />
+        {consoleVisible ? <WsConsole /> : null}
       </div>
     </div>
   )
@@ -893,6 +915,8 @@ function App() {
     }
   }, [])
   const [rateSeries, setRateSeries] = useState<number[]>([])
+  // WebSocket console visibility (default hidden)
+  const [consoleVisible, setConsoleVisible] = useState(false)
 
   // Dev-only touch to keep rateSeries referenced; retained for potential future diagnostics
   useEffect(() => {
@@ -1184,6 +1208,8 @@ function App() {
           lockActive={lockActive}
           eventCounts={eventCounts}
           subCount={subCount}
+          consoleVisible={consoleVisible}
+          onToggleConsole={() => setConsoleVisible((v) => !v)}
         />
         {/* Filters Bar */}
         <div className="filters">
