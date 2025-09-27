@@ -81,7 +81,6 @@ export default function WsConsole() {
     return entries.filter(matchesFilter)
   }, [
     entries,
-    matchesFilter,
     showError,
     showSub,
     showUnsub,

@@ -736,77 +736,137 @@ function App() {
               // Validation
               const validationStart = performance.now()
               if (event === 'scanner-pairs') {
-                const pairs = Array.isArray((data as any)?.pairs) ? (data as any).pairs : undefined
-                if (!pairs) {
+                let hasPairs = false
+                if (data && typeof data === 'object') {
+                  const res = (data as { results?: unknown }).results
+                  if (res && typeof res === 'object') {
+                    const arr = (res as { pairs?: unknown }).pairs
+                    if (Array.isArray(arr)) hasPairs = true
+                  } else {
+                    const pairs = (data as { pairs?: unknown }).pairs
+                    if (Array.isArray(pairs)) hasPairs = true
+                  }
+                }
+                if (!hasPairs) {
                   console.error('WS: invalid scanner-pairs payload: missing pairs array', parsed)
                   return
                 }
               } else if (event === 'tick') {
-                const ok =
-                  data &&
-                  typeof (data as any).pair === 'object' &&
-                  Array.isArray((data as any).swaps)
+                let ok = false
+                if (data && typeof data === 'object') {
+                  const pairObj = (data as { pair?: unknown }).pair
+                  const swaps = (data as { swaps?: unknown }).swaps
+                  ok = !!(pairObj && typeof pairObj === 'object' && Array.isArray(swaps))
+                }
                 if (!ok) {
                   console.error('WS: invalid tick payload: expected { pair, swaps[] }', parsed)
                   return
                 }
               } else if (event === 'pair-stats') {
-                const ok =
-                  data &&
-                  typeof (data as any).pair === 'object' &&
-                  typeof (data as any).pair.pairAddress === 'string'
+                let ok = false
+                if (data && typeof data === 'object') {
+                  const pairObj = (data as { pair?: unknown }).pair
+                  const addr =
+                    pairObj && typeof pairObj === 'object'
+                      ? (pairObj as { pairAddress?: unknown }).pairAddress
+                      : undefined
+                  ok = typeof addr === 'string'
+                }
                 if (!ok) {
                   console.error('WS: invalid pair-stats payload: expected pair.pairAddress', parsed)
                   return
                 }
               }
               const validationEnd = performance.now()
+              try { bumpEventCount(event) } catch {}
               // WsConsole: log allowed incoming events with brief summaries
               try {
                 if (event === 'scanner-pairs') {
-                  const pairs = Array.isArray((data as any)?.results?.pairs)
-                    ? (data as any).results.pairs.length
-                    : Array.isArray((data as any)?.pairs)
-                      ? (data as any).pairs.length
-                      : 0
-                  logWsInfo(`[in] scanner-pairs (${pairs})`)
+                  let count = 0
+                  const d = data
+                  if (d && typeof d === 'object') {
+                    const res = (d as { results?: unknown }).results
+                    if (res && typeof res === 'object') {
+                      const arr = (res as { pairs?: unknown }).pairs
+                      if (Array.isArray(arr)) count = arr.length
+                    } else {
+                      const pairs = (d as { pairs?: unknown }).pairs
+                      if (Array.isArray(pairs)) count = pairs.length
+                    }
+                  }
+                  logWsInfo(`[in] scanner-pairs (${count})`)
                 } else if (event === 'tick') {
-                  const swapsLen = Array.isArray((data as any)?.swaps)
-                    ? (data as any).swaps.length
-                    : 0
-                  const chain = (data as any)?.pair?.chain
-                  logWsInfo(`[in] tick swaps=${swapsLen} chain=${String(chain ?? '')}`)
+                  let swapsLen = 0
+                  let chainStr = ''
+                  const d = data
+                  if (d && typeof d === 'object') {
+                    const swaps = (d as { swaps?: unknown }).swaps
+                    if (Array.isArray(swaps)) swapsLen = swaps.length
+                    const pairObj = (d as { pair?: unknown }).pair
+                    if (pairObj && typeof pairObj === 'object') {
+                      const ch = (pairObj as { chain?: unknown }).chain
+                      chainStr = typeof ch === 'string' || typeof ch === 'number' ? String(ch) : ''
+                    }
+                  }
+                  logWsInfo(`[in] tick swaps=${swapsLen} chain=${chainStr}`)
                 } else if (event === 'pair-stats') {
-                  const chain = (data as any)?.pair?.chain
-                  logWsInfo(`[in] pair-stats chain=${String(chain ?? '')}`)
+                  let chainStr = ''
+                  const d = data
+                  if (d && typeof d === 'object') {
+                    const pairObj = (d as { pair?: unknown }).pair
+                    if (pairObj && typeof pairObj === 'object') {
+                      const ch = (pairObj as { chain?: unknown }).chain
+                      chainStr = typeof ch === 'string' || typeof ch === 'number' ? String(ch) : ''
+                    }
+                  }
+                  logWsInfo(`[in] pair-stats chain=${chainStr}`)
                 } else if (event === 'wpeg-prices') {
-                  const n =
-                    data &&
-                    typeof data === 'object' &&
-                    (data as any).prices &&
-                    typeof (data as any).prices === 'object'
-                      ? Object.keys((data as any).prices).length
-                      : 0
+                  let n = 0
+                  const d = data
+                  if (d && typeof d === 'object') {
+                    const prices = (d as { prices?: unknown }).prices
+                    if (prices && typeof prices === 'object') n = Object.keys(prices as object).length
+                  }
                   logWsInfo(`[in] wpeg-prices (${n})`)
                 }
               } catch {}
               // Emit update bus events for components listening to per-key activity (UpdateRate, Row animations)
               try {
                 if (event === 'tick') {
-                  const d = data as any
-                  const token = d?.pair?.token
-                  const chain = d?.pair?.chain
-                  if (token && chain) {
-                    const key = buildTickKey(String(token), chain)
-                    emitUpdate({ key, type: 'tick', data })
+                  const d = data
+                  if (d && typeof d === 'object') {
+                    const pairObj = (d as { pair?: unknown }).pair
+                    if (pairObj && typeof pairObj === 'object') {
+                      const token = (pairObj as { token?: unknown }).token
+                      const chainUnknown = (pairObj as { chain?: unknown }).chain
+                      const tokenStr = typeof token === 'string' ? token : undefined
+                      const chainVal =
+                        typeof chainUnknown === 'string' || typeof chainUnknown === 'number'
+                          ? chainUnknown
+                          : undefined
+                      if (tokenStr && chainVal !== undefined) {
+                        const key = buildTickKey(tokenStr, chainVal)
+                        emitUpdate({ key, type: 'tick', data })
+                      }
+                    }
                   }
                 } else if (event === 'pair-stats') {
-                  const d = data as any
-                  const token = d?.pair?.token1Address
-                  const chain = d?.pair?.chain
-                  if (token && chain) {
-                    const key = buildTickKey(String(token), chain)
-                    emitUpdate({ key, type: 'pair-stats', data })
+                  const d = data
+                  if (d && typeof d === 'object') {
+                    const pairObj = (d as { pair?: unknown }).pair
+                    if (pairObj && typeof pairObj === 'object') {
+                      const token1 = (pairObj as { token1Address?: unknown }).token1Address
+                      const chainUnknown = (pairObj as { chain?: unknown }).chain
+                      const tokenStr = typeof token1 === 'string' ? token1 : undefined
+                      const chainVal =
+                        typeof chainUnknown === 'string' || typeof chainUnknown === 'number'
+                          ? chainUnknown
+                          : undefined
+                      if (tokenStr && chainVal !== undefined) {
+                        const key = buildTickKey(tokenStr, chainVal)
+                        emitUpdate({ key, type: 'pair-stats', data })
+                      }
+                    }
                   }
                 }
               } catch {
@@ -956,8 +1016,8 @@ function App() {
   ])
 
   const CHAINS = useMemo(() => ['ETH', 'SOL', 'BASE', 'BSC'] as const, [])
-  const [trendingCounts, setTrendingCounts] = useState<Record<string, number>>({})
-  const [newCounts, setNewCounts] = useState<Record<string, number>>({})
+  const [trendingCounts, _setTrendingCounts] = useState<Record<string, number>>({})
+  const [newCounts, _setNewCounts] = useState<Record<string, number>>({})
   const totalCounts = useMemo(() => {
     const out: Record<string, number> = {}
     for (const c of CHAINS) {
@@ -1095,6 +1155,26 @@ function App() {
     trending: false,
     newer: false,
   })
+  // Loading overlay visibility with smooth fade-out when clearing
+  const [showOverlay, setShowOverlay] = useState<boolean>(true)
+  const [overlayClosing, setOverlayClosing] = useState<boolean>(false)
+  // Synchronize overlay with appReady state; when ready, fade for 2s before unmounting
+  useEffect(() => {
+    if (!appReady) {
+      setShowOverlay(true)
+      setOverlayClosing(false)
+      return
+    }
+    setOverlayClosing(true)
+    const t = window.setTimeout(() => {
+      setShowOverlay(false)
+    }, 2000)
+    return () => {
+      try {
+        window.clearTimeout(t)
+      } catch {}
+    }
+  }, [appReady])
   // Early boot diagnostics — log current theme and page keys when state/theme changes
   useEffect(() => {
     try {
@@ -1492,43 +1572,32 @@ function App() {
 
   return (
     <div style={{ position: 'relative' }}>
-      {!appReady && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            display: 'grid',
-            placeItems: 'center',
-            background: '#0b0f14',
-            color: '#e5e7eb',
-            zIndex: 1000,
-          }}
-        >
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      {(() => {
+        // Smooth fade-out overlay: keep mounted while closing
+        // showOverlay is true while visible or fading; overlayClosing triggers opacity transition
+        return showOverlay ? (
           <div
-            role="status"
-            aria-live="polite"
-            aria-busy="true"
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              display: 'grid',
+              placeItems: 'center',
+              background: '#0b0f14',
+              color: '#e5e7eb',
+              zIndex: 1000,
+              opacity: overlayClosing ? 0 : 1,
+              transition: 'opacity 2000ms ease',
+              pointerEvents: overlayClosing ? 'none' : 'auto',
+            }}
+            aria-hidden={overlayClosing ? 'true' : undefined}
           >
-            <div
-              style={{
-                width: 72,
-                height: 72,
-                borderRadius: '50%',
-                background:
-                  'linear-gradient(90deg,var(--spinner-start) 0%, var(--spinner-end) 100%)',
-                WebkitMask: 'radial-gradient(farthest-side, transparent 60%, black 61%)',
-                mask: 'radial-gradient(farthest-side, transparent 60%, black 61%)',
-                animation: 'spin 1s linear infinite',
-              }}
-            />
-            <div className="muted" style={{ fontSize: 14 }}>
-              Loading data…
+            <div className="status loading-bump loading-xl" role="status" aria-live="polite" aria-busy={!overlayClosing}>
+              <span className="loading-spinner" aria-hidden="true" />
+              <span className="loading-text">Loading data…</span>
             </div>
           </div>
-        </div>
-      )}
+        ) : null
+      })()}
       <div style={{ padding: '16px 16px 16px 10px' }}>
         <DetailModal
           open={detailOpen}

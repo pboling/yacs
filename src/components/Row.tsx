@@ -365,9 +365,9 @@ const Row = memo(
               const h = (t as unknown as MaybeHistory).history
               const tsUnknown = h?.ts
               const pricesUnknown = h?.price
-              const tsRaw = Array.isArray(tsUnknown) ? (tsUnknown as Array<number | string>) : []
+              const tsRaw = Array.isArray(tsUnknown) ? (tsUnknown as (number | string)[]) : []
               const pricesArr = Array.isArray(pricesUnknown)
-                ? (pricesUnknown as Array<number | string>).map((v) => Number(v))
+                ? (pricesUnknown as (number | string)[]).map((v) => Number(v))
                 : []
               // Normalize timestamps to milliseconds if they look like seconds precision
               const tsArr = tsRaw.map((v) => {

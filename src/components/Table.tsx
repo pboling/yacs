@@ -519,7 +519,7 @@ export default function Table({
   console.log('[Table] rows prop:', rows)
 
   // Log when the loading spinner would be shown or hidden
-  const showLoadingBanner = !!(loading && rows.length === 0)
+  const showLoadingBanner = loading && rows.length === 0
   const prevShowRef = useRef<boolean>(showLoadingBanner)
   useEffect(() => {
     try {
@@ -577,7 +577,12 @@ export default function Table({
           </button>
         </div>
 
-        {loading && rows.length === 0 && <div className="status">Loading…</div>}
+        {loading && rows.length === 0 && (
+          <div className="status loading-bump" role="status" aria-live="polite">
+            <span className="loading-spinner" aria-hidden="true" />
+            <span className="loading-text">Loading…</span>
+          </div>
+        )}
         {error && <div className="status error">{error}</div>}
         {!loading && !error && rows.length === 0 && <div className="status">No data</div>}
         <div
