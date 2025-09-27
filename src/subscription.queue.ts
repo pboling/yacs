@@ -200,6 +200,12 @@ export const SubscriptionQueue = {
       return 0
     }
   },
+  getVisibleCount() {
+    return visible.size
+  },
+  getInvisCount() {
+    return inactiveQueue.length
+  },
   updateUniverse(keys: Key[], ws: WebSocket | null) {
     const next = Array.isArray(keys) ? [...new Set(keys)] : []
     // Unsubscribe any queued/visible keys that are no longer in the universe

@@ -604,7 +604,7 @@ export default function TokensPane({
       sp.set('dir', sort.dir)
       const nextSearch = `?${sp.toString()}`
       const cur = window.location.pathname + window.location.search
-      const next = window.location.pathname + nextSearch
+      const next = window.pathname + nextSearch
       // Avoid redundant history updates which can cause dev-server page flashes
       if (next !== cur) {
         window.history.replaceState(null, '', next)

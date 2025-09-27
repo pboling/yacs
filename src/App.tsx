@@ -79,6 +79,7 @@ function TopBar({
   lockActive,
   eventCounts,
   subCount,
+  invisCount,
   consoleVisible,
   onToggleConsole,
   onOpenDetail,
@@ -99,6 +100,7 @@ function TopBar({
     'wpeg-prices': number
   }
   subCount: number
+  invisCount: number
   consoleVisible: boolean
   onToggleConsole: () => void
   onOpenDetail: () => void
@@ -119,7 +121,7 @@ function TopBar({
       }}
     >
       {/* Left column: Title */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
         <h1 style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           {title}
           <button
@@ -141,6 +143,60 @@ function TopBar({
             <ChartNoAxesCombined size={46} />
           </button>
         </h1>
+        <h2 style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                    <span
+                      className="muted"
+                      title="Active subscriptions across all panes"
+                      style={{
+                        fontSize: 11,
+                        padding: '2px 6px',
+                        border: '1px solid #4b5563',
+                        borderRadius: 12,
+                        background: 'rgba(255,255,255,0.06)',
+                        letterSpacing: 0.5,
+                      }}
+                    >
+            VisSubs: <strong style={{ marginLeft: 4 }}>{subCount}</strong>
+          </span>
+          <span
+            className="muted"
+            title="Invisible subscriptions in FIFO queue"
+            style={{
+              fontSize: 11,
+              padding: '2px 6px',
+              border: '1px solid #4b5563',
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.06)',
+              letterSpacing: 0.5,
+            }}
+          >
+            InvisSubs: <strong style={{ marginLeft: 4 }}>{invisCount}</strong>
+          </span>
+          {(
+            [
+              ['scanner-pairs', 'Scanner'],
+              ['tick', 'Tick'],
+              ['pair-stats', 'Pair Stats'],
+              ['wpeg-prices', 'WPEG'],
+            ] as const
+          ).map(([key, label]) => (
+            <span
+              key={key}
+              className="muted"
+              title={`${label} events received`}
+              style={{
+                fontSize: 11,
+                padding: '2px 6px',
+                border: '1px solid #4b5563',
+                borderRadius: 12,
+                background: 'rgba(255,255,255,0.06)',
+                letterSpacing: 0.5,
+              }}
+            >
+              {label}: <strong style={{ marginLeft: 4 }}>{eventCounts[key]}</strong>
+            </span>
+          ))}
+        </h2>
       </div>
       {/* Middle column: two rows */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 260, flex: 1 }}>
@@ -276,44 +332,6 @@ function TopBar({
               }}
             />
           </label>
-          <span
-            className="muted"
-            title="Active subscriptions across all panes"
-            style={{
-              fontSize: 11,
-              padding: '2px 6px',
-              border: '1px solid #4b5563',
-              borderRadius: 12,
-              background: 'rgba(255,255,255,0.06)',
-              letterSpacing: 0.5,
-            }}
-          >
-            Subs: <strong style={{ marginLeft: 4 }}>{subCount}</strong>
-          </span>
-          {(
-            [
-              ['scanner-pairs', 'Scanner'],
-              ['tick', 'Tick'],
-              ['pair-stats', 'Pair Stats'],
-              ['wpeg-prices', 'WPEG'],
-            ] as const
-          ).map(([key, label]) => (
-            <span
-              key={key}
-              className="muted"
-              title={`${label} events received`}
-              style={{
-                fontSize: 11,
-                padding: '2px 6px',
-                border: '1px solid #4b5563',
-                borderRadius: 12,
-                background: 'rgba(255,255,255,0.06)',
-                letterSpacing: 0.5,
-              }}
-            >
-              {label}: <strong style={{ marginLeft: 4 }}>{eventCounts[key]}</strong>
-            </span>
-          ))}
           <button
             type="button"
             className="btn"
@@ -932,6 +950,8 @@ function App() {
   }
   // Live subscriptions count (polled)
   const [subCount, setSubCount] = useState<number>(0)
+  // Invisible subs count (polled)
+  const [invisCount, setInvisCount] = useState<number>(0)
   // Global throttle for total subscriptions (visible + inactive)
   const [subThrottle, setSubThrottle] = useState<number>(300)
   // Dynamic base limit used when no throttle is applied (affects default heuristic)
@@ -967,7 +987,8 @@ function App() {
     let timer: number | null = null
     const tick = () => {
       try {
-        setSubCount(SubscriptionQueue.getSubscribedCount())
+        setSubCount(SubscriptionQueue.getVisibleCount())
+        setInvisCount(SubscriptionQueue.getInvisCount())
       } catch {}
       timer = window.setTimeout(() => {
         raf = window.requestAnimationFrame(tick)
@@ -1439,6 +1460,7 @@ function App() {
           lockActive={lockActive}
           eventCounts={eventCounts}
           subCount={subCount}
+          invisCount={invisCount}
           consoleVisible={consoleVisible}
           onToggleConsole={() => {
             setConsoleVisible((v) => !v)
