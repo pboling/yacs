@@ -20,6 +20,15 @@ import { getDefaultInvisibleBaseLimit } from './subscription.limit.bus.js'
 
 type Key = string // pair|token|chain
 
+// Runtime validator: ensure keys follow pair|token|chain
+function isValidKey(key: Key): boolean {
+  if (typeof key !== 'string') return false
+  const parts = key.split('|')
+  if (parts.length !== 3) return false
+  const [pair, token, chain] = parts
+  return !!pair && !!token && !!chain
+}
+
 const visible = new Set<Key>()
 const ignored = new Set<Key>()
 let universe: Key[] = [] // all keys known to the pane (deduped)
@@ -202,17 +211,28 @@ export const SubscriptionQueue = {
   },
   getVisibleCount() {
     try {
-      console.log('[SubscriptionQueue] getVisibleCount:', visible.size)
-      return visible.size
+      console.log('[SubscriptionQueue] getVisibleCount:', visible.size, Array.from(visible));
+      return visible.size;
     } catch {
-      return 0
+      return 0;
     }
   },
   getInvisCount() {
     return invisibleQueue.length
   },
   updateUniverse(keys: Key[], ws: WebSocket | null) {
-    const next = Array.isArray(keys) ? [...new Set(keys)] : []
+    const nextRaw = Array.isArray(keys) ? [...new Set(keys)] : []
+    // Filter and warn on malformed keys
+    const next: Key[] = []
+    for (const k of nextRaw) {
+      if (isValidKey(k)) next.push(k)
+      else {
+        try {
+          console.warn('[SubscriptionQueue] updateUniverse: invalid key', k)
+        } catch {}
+      }
+    }
+    console.log('[SubscriptionQueue] updateUniverse: incoming keys', next);
     // Unsubscribe any queued/visible keys that are no longer in the universe
     const nextSet = new Set(next)
     for (const key of [...invisibleQueue]) {
@@ -221,12 +241,12 @@ export const SubscriptionQueue = {
         unsubscribeKey(ws, key)
       }
     }
+    // Suppress removal of visible keys from visible set
     for (const key of Array.from(visible)) {
       if (!nextSet.has(key)) {
-        visible.delete(key)
-        // Pane will typically handle unsubscribing visible keys when no longer visible.
-        // As a safety, also unsubscribe here since it left the universe.
-        unsubscribeKey(ws, key)
+        // console.log('[SubscriptionQueue] updateUniverse: would remove visible', key);
+        // visible.delete(key)
+        // unsubscribeKey(ws, key)
       }
     }
     for (const key of Array.from(ignored)) {
@@ -235,34 +255,26 @@ export const SubscriptionQueue = {
     universe = next
     ensureQueueWithinQuota(ws)
   },
-  setVisible(key: Key, isVisible: boolean, ws: WebSocket | null) {
+  setVisible(key: Key, isVisible: boolean, ws: WebSocket | null, source?: string) {
+    if (!isValidKey(key)) {
+      try {
+        console.warn('[SubscriptionQueue] setVisible: invalid key', key, 'source:', source)
+      } catch {}
+      return
+    }
     if (isVisible) {
       visible.add(key)
       removeFromQueue(key)
       // Debug log
       try {
-        console.log('[SubscriptionQueue] setVisible: added', key, 'visible.size:', visible.size)
+        console.log('[SubscriptionQueue] setVisible: added', key, 'visible.size:', visible.size, Array.from(visible), 'source:', source);
       } catch {}
     } else {
       visible.delete(key)
       // Debug log
       try {
-        console.log('[SubscriptionQueue] setVisible: removed', key, 'visible.size:', visible.size)
+        console.log('[SubscriptionQueue] setVisible: removed', key, 'visible.size:', visible.size, Array.from(visible), 'source:', source);
       } catch {}
-      if (!ignored.has(key) && universe.includes(key) && !invisibleSet.has(key)) {
-        invisibleQueue.push(key)
-        invisibleSet.add(key)
-        const invisible = getInvisibleUniverse()
-        const quota = computeQuota(invisible.length)
-        while (invisibleQueue.length > quota) {
-          const k = invisibleQueue.shift()
-          if (!k) break
-          invisibleSet.delete(k)
-          unsubscribeKey(ws, k)
-        }
-      } else {
-        ensureQueueWithinQuota(ws)
-      }
     }
   },
   setIgnored(key: Key, isIgnored: boolean, ws: WebSocket | null) {

@@ -938,18 +938,29 @@ export default function TokensPane({
     rowsRef.current = rows
   }, [rows])
 
-  // Keep subscription queue universe in sync with the full set of loaded payloads (not just visible rows)
+  // Keep subscription queue universe in sync with the full set of known keys.
+  // Merge payload-derived keys with keys derivable from currently rendered rows so we also
+  // refresh the universe when the table composition changes due to scrolling/sorting.
   useEffect(() => {
     try {
       const payloads = payloadsRef.current || []
-      const keys: string[] = []
+      const keysSet = new Set<string>()
       for (const p of payloads) {
         const pair = p.pair ?? ''
         const tokenAddr = (p.token ?? '').toLowerCase()
         const chain = p.chain ?? ''
         if (!pair || !tokenAddr || !chain) continue
-        keys.push(buildPairKey(pair, tokenAddr, chain))
+        keysSet.add(buildPairKey(pair, tokenAddr, chain))
       }
+      const sourceRows = rowsRef.current && rowsRef.current.length > 0 ? rowsRef.current : rows
+      for (const r of sourceRows) {
+        const pair = r.pairAddress ?? ''
+        const tokenAddr = (r.tokenAddress ?? '').toLowerCase()
+        const chain = toChainId(r.chain)
+        if (!pair || !tokenAddr || !chain) continue
+        keysSet.add(buildPairKey(pair, tokenAddr, chain))
+      }
+      const keys = Array.from(keysSet)
       SubscriptionQueue.updateUniverse(keys, wsRef.current ?? null)
     } catch {}
   }, [rows])

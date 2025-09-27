@@ -778,7 +778,9 @@ function App() {
                 }
               }
               const validationEnd = performance.now()
-              try { bumpEventCount(event) } catch {}
+              try {
+                bumpEventCount(event)
+              } catch {}
               // WsConsole: log allowed incoming events with brief summaries
               try {
                 if (event === 'scanner-pairs') {
@@ -825,7 +827,7 @@ function App() {
                   const d = data
                   if (d && typeof d === 'object') {
                     const prices = (d as { prices?: unknown }).prices
-                    if (prices && typeof prices === 'object') n = Object.keys(prices as object).length
+                    if (prices && typeof prices === 'object') n = Object.keys(prices).length
                   }
                   logWsInfo(`[in] wpeg-prices (${n})`)
                 }
@@ -1591,7 +1593,12 @@ function App() {
             }}
             aria-hidden={overlayClosing ? 'true' : undefined}
           >
-            <div className="status loading-bump loading-xl" role="status" aria-live="polite" aria-busy={!overlayClosing}>
+            <div
+              className="status loading-bump loading-xl"
+              role="status"
+              aria-live="polite"
+              aria-busy={!overlayClosing}
+            >
               <span className="loading-spinner" aria-hidden="true" />
               <span className="loading-text">Loading data…</span>
             </div>

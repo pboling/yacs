@@ -376,7 +376,6 @@ table.tokens {
   color: var(--muted);
 }
 
-
 /* === Loading spinner bump/blur styles === */
 .status.loading-bump {
   display: inline-flex;
@@ -385,10 +384,12 @@ table.tokens {
   padding: 10px 12px;
   border: 1px solid var(--thead-border);
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(17,24,39,0.85), rgba(17,24,39,0.6));
-  box-shadow: 0 6px 18px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.03);
+  background: linear-gradient(180deg, rgba(17, 24, 39, 0.85), rgba(17, 24, 39, 0.6));
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
   /* Slight fog around edges to blend into bg */
-  filter: drop-shadow(0 2px 10px rgba(0,0,0,0.35));
+  filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.35));
   animation: bump-up 1400ms ease-in-out infinite;
 }
 .status.loading-bump .loading-text {
@@ -399,33 +400,55 @@ table.tokens {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background:
-    conic-gradient(from 0deg, var(--spinner-start), var(--spinner-end));
+  background: conic-gradient(from 0deg, var(--spinner-start), var(--spinner-end));
   -webkit-mask: radial-gradient(circle 8px at 50% 50%, transparent 6px, black 6.5px);
   mask: radial-gradient(circle 8px at 50% 50%, transparent 6px, black 6.5px);
   box-shadow:
-    0 0 8px rgba(0,0,0,0.4), /* outer blend */
-    inset 0 0 6px rgba(0,0,0,0.6); /* edge darken */
-  animation: spin 900ms linear infinite, soften-edges 1200ms ease-in-out infinite;
+    0 0 8px rgba(0, 0, 0, 0.4),
+    /* outer blend */ inset 0 0 6px rgba(0, 0, 0, 0.6); /* edge darken */
+  animation:
+    spin 900ms linear infinite,
+    soften-edges 1200ms ease-in-out infinite;
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 @keyframes soften-edges {
-  0%, 100% { filter: blur(0.4px); opacity: 0.95; }
-  50% { filter: blur(1.2px); opacity: 0.85; }
+  0%,
+  100% {
+    filter: blur(0.4px);
+    opacity: 0.95;
+  }
+  50% {
+    filter: blur(1.2px);
+    opacity: 0.85;
+  }
 }
 @keyframes bump-up {
-  0% { transform: translateY(0); }
-  35% { transform: translateY(-10px); }
-  65% { transform: translateY(-10px); }
-  100% { transform: translateY(0); }
+  0% {
+    transform: translateY(0);
+  }
+  35% {
+    transform: translateY(-10px);
+  }
+  65% {
+    transform: translateY(-10px);
+  }
+  100% {
+    transform: translateY(0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .status.loading-bump { animation: none; }
-  .status.loading-bump .loading-spinner { animation: none; }
+  .status.loading-bump {
+    animation: none;
+  }
+  .status.loading-bump .loading-spinner {
+    animation: none;
+  }
 }
 
 /* XL variant for full-app loading overlay */
@@ -444,6 +467,6 @@ table.tokens {
   -webkit-mask: radial-gradient(circle 16px at 50% 50%, transparent 12px, black 13px);
   mask: radial-gradient(circle 16px at 50% 50%, transparent 12px, black 13px);
   box-shadow:
-    0 0 12px rgba(0,0,0,0.45),
-    inset 0 0 8px rgba(0,0,0,0.65);
+    0 0 12px rgba(0, 0, 0, 0.45),
+    inset 0 0 8px rgba(0, 0, 0, 0.65);
 }
