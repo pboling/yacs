@@ -771,16 +771,22 @@ function App() {
                       : 0
                   logWsInfo(`[in] scanner-pairs (${pairs})`)
                 } else if (event === 'tick') {
-                  const swapsLen = Array.isArray((data as any)?.swaps) ? (data as any).swaps.length : 0
+                  const swapsLen = Array.isArray((data as any)?.swaps)
+                    ? (data as any).swaps.length
+                    : 0
                   const chain = (data as any)?.pair?.chain
                   logWsInfo(`[in] tick swaps=${swapsLen} chain=${String(chain ?? '')}`)
                 } else if (event === 'pair-stats') {
                   const chain = (data as any)?.pair?.chain
                   logWsInfo(`[in] pair-stats chain=${String(chain ?? '')}`)
                 } else if (event === 'wpeg-prices') {
-                  const n = (data && typeof data === 'object' && (data as any).prices && typeof (data as any).prices === 'object')
-                    ? Object.keys((data as any).prices).length
-                    : 0
+                  const n =
+                    data &&
+                    typeof data === 'object' &&
+                    (data as any).prices &&
+                    typeof (data as any).prices === 'object'
+                      ? Object.keys((data as any).prices).length
+                      : 0
                   logWsInfo(`[in] wpeg-prices (${n})`)
                 }
               } catch {}

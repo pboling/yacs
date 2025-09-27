@@ -263,6 +263,9 @@ export default function TokensPane({
       } catch (err) {
         logCatch(`[TokensPane:${title}] init: dispatch empty pairs on empty chains failed`, err)
       }
+      try {
+        console.log(`[Loading:${title}] clearing because chains list is empty at mount`)
+      } catch {}
       setLoading(false)
       setHasMore(false)
       return () => {
@@ -282,6 +285,9 @@ export default function TokensPane({
       try {
         timeoutId = window.setTimeout(() => {
           if (cancelled) return
+          try {
+            console.warn(`[Loading:${title}] failsafe timeout fired (10s) — clearing loading`)
+          } catch {}
           setLoading(false)
           setError((prev) => prev ?? 'Initial load timed out. Please retry or adjust filters.')
         }, 10000)
@@ -318,6 +324,11 @@ export default function TokensPane({
           scannerPairs: dedupedList,
         })
         dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: dedupedList } })
+        try {
+          console.log(
+            `[Loading:${title}] clearing after initial fetch success; rows will derive shortly`,
+          )
+        } catch {}
         setLoading(false)
         // Debug: print first few tokens and their id values
         console.log(
@@ -382,7 +393,14 @@ export default function TokensPane({
             timeoutId = null
           }
         } catch {}
-        if (!cancelled) setLoading(false)
+        if (!cancelled) {
+          try {
+            console.log(
+              `[Loading:${title}] clearing in finally after init fetch (cancelled=${cancelled})`,
+            )
+          } catch {}
+          setLoading(false)
+        }
       }
     }
     void run()
@@ -506,6 +524,31 @@ export default function TokensPane({
     } catch {}
     return finalRows
   }, [state.byId, state.pages, page, sort, clientFilters, visibleCount, title])
+
+  // Ensure the loading spinner is dismissed as soon as we actually have rows to render,
+  // even if some upstream flag forgot to clear. This prevents masking ready data under
+  // a stale "Loading…" indicator.
+  useEffect(() => {
+    try {
+      if (loading && rows.length > 0) {
+        console.log(
+          `[Loading:${title}] auto-clear: rows.length=${rows.length} (>0) while loading=true`,
+        )
+        setLoading(false)
+      }
+    } catch {
+      /* no-op */
+    }
+  }, [rows.length, loading])
+
+  // Log any loading state transition with current rows count for root-cause tracing
+  useEffect(() => {
+    try {
+      console.log(
+        `[Loading:${title}] state now ${loading ? 'true' : 'false'}; rows.length=${rows.length}`,
+      )
+    } catch {}
+  }, [loading, rows.length, title])
 
   const paneIdRef = useRef<string>('')
   useEffect(() => {

@@ -518,6 +518,20 @@ export default function Table({
 
   console.log('[Table] rows prop:', rows)
 
+  // Log when the loading spinner would be shown or hidden
+  const showLoadingBanner = !!(loading && rows.length === 0)
+  const prevShowRef = useRef<boolean>(showLoadingBanner)
+  useEffect(() => {
+    try {
+      if (prevShowRef.current !== showLoadingBanner) {
+        console.log(
+          `[Table:${title}] loading banner ${showLoadingBanner ? 'shown' : 'hidden'} (loading=${loading}, rows=${rows.length})`,
+        )
+        prevShowRef.current = showLoadingBanner
+      }
+    } catch {}
+  }, [showLoadingBanner, loading, rows.length, title])
+
   return (
     <section>
       <div
@@ -563,7 +577,7 @@ export default function Table({
           </button>
         </div>
 
-        {loading && <div className="status">Loading…</div>}
+        {loading && rows.length === 0 && <div className="status">Loading…</div>}
         {error && <div className="status error">{error}</div>}
         {!loading && !error && rows.length === 0 && <div className="status">No data</div>}
         <div

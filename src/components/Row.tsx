@@ -44,6 +44,11 @@ const Row = memo(
     const trRef = useRef<HTMLTableRowElement | null>(null)
     const isVisibleRef = useRef<boolean>(true)
     const lastPriceRef = useRef<number>(typeof t.priceUsd === 'number' ? t.priceUsd : 0)
+    // Latest incoming tick override for sparkline's most recent bucket
+    const latestOverrideRef = useRef<{ price: number; at: number } | null>(null)
+    // Temporary stroke color pulse to match the incoming dot color
+    const pulseColorRef = useRef<string>('')
+    const pulseUntilRef = useRef<number>(0)
 
     useEffect(() => {
       lastPriceRef.current = typeof t.priceUsd === 'number' ? t.priceUsd : lastPriceRef.current
@@ -131,7 +136,15 @@ const Row = memo(
               : np < prev
                 ? 'var(--accent-down)'
                 : 'var(--muted, #9CA3AF)'
-        if (Number.isFinite(np)) lastPriceRef.current = np
+        if (Number.isFinite(np)) {
+          lastPriceRef.current = np
+          latestOverrideRef.current = { price: np, at: Date.now() }
+        }
+        // Pulse the sparkline stroke to the dot color briefly
+        pulseColorRef.current = color
+        pulseUntilRef.current = Date.now() + 1200
+        // Nudge a render so the override/color apply immediately
+        setSecTick((n) => n + 1)
         animateDot(color)
       })
       return off
@@ -344,7 +357,7 @@ const Row = memo(
             </div>
             {(() => {
               // Single sparkline of Price spanning both Price and MCap columns (no labels)
-              // Render a rolling 60-minute window that advances every minute.
+              // Render a rolling 5-minute window that advances every tick / pulse.
               // If there are no new data points, the line flatlines at the last known value.
               interface MaybeHistory {
                 history?: { ts?: unknown; price?: unknown }
@@ -352,13 +365,22 @@ const Row = memo(
               const h = (t as unknown as MaybeHistory).history
               const tsUnknown = h?.ts
               const pricesUnknown = h?.price
-              const tsArr = Array.isArray(tsUnknown) ? (tsUnknown as number[]) : []
-              const pricesArr = Array.isArray(pricesUnknown) ? (pricesUnknown as number[]) : []
+              const tsRaw = Array.isArray(tsUnknown) ? (tsUnknown as Array<number | string>) : []
+              const pricesArr = Array.isArray(pricesUnknown)
+                ? (pricesUnknown as Array<number | string>).map((v) => Number(v))
+                : []
+              // Normalize timestamps to milliseconds if they look like seconds precision
+              const tsArr = tsRaw.map((v) => {
+                const n = Number(v)
+                // Heuristic: Unix seconds are < 1e12 for the foreseeable future; ms are >= 1e12
+                return n < 1e12 ? Math.floor(n * 1000) : Math.floor(n)
+              })
 
               const now = Date.now()
               const MINUTE = 60_000
               const endBucket = Math.floor(now / MINUTE) * MINUTE
-              const startBucket = endBucket - 59 * MINUTE
+              const WINDOW_POINTS = 5
+              const startBucket = endBucket - (WINDOW_POINTS - 1) * MINUTE
 
               // Walk the history once and build a carry-forward series for each minute bucket
               const data: number[] = []
@@ -383,13 +405,21 @@ const Row = memo(
                 data.push(lastVal)
               }
 
-              // Ensure we have exactly 60 points
-              if (data.length !== 60) {
+              // Ensure we have exactly WINDOW_POINTS points
+              if (data.length !== WINDOW_POINTS) {
                 // Fallback: build a flat series from current price
                 const base = typeof t.priceUsd === 'number' ? t.priceUsd : 0
-                while (data.length < 60) data.unshift(base)
-                if (data.length > 60) data.splice(0, data.length - 60)
+                while (data.length < WINDOW_POINTS) data.unshift(base)
+                if (data.length > WINDOW_POINTS) data.splice(0, data.length - WINDOW_POINTS)
               }
+
+              // If we have a fresh live override (from incoming tick), apply it to the last bucket
+              try {
+                const ov = latestOverrideRef.current
+                if (ov && now - ov.at < 60_000) {
+                  data[data.length - 1] = ov.price
+                }
+              } catch {}
 
               const width = undefined // auto width via viewBox and CSS
               const height = 34 // ~1.5x line-height visual
@@ -408,7 +438,13 @@ const Row = memo(
               }
               const d = pts.length ? 'M ' + pts.join(' L ') : ''
               const trendUp = data[len - 1] >= data[0]
-              const color = trendUp ? 'var(--accent-up)' : 'var(--accent-down)'
+              let color = trendUp ? 'var(--accent-up)' : 'var(--accent-down)'
+              // If a pulse is active, override stroke color temporarily to match the incoming dot
+              try {
+                if (pulseUntilRef.current > now && typeof pulseColorRef.current === 'string') {
+                  color = pulseColorRef.current || color
+                }
+              } catch {}
               // Fractional left-shift so the chart advances smoothly each second
               const secsFrac = (now % MINUTE) / MINUTE
               const offset = secsFrac * xStep
@@ -417,8 +453,8 @@ const Row = memo(
                   <button
                     type="button"
                     onClick={() => onOpenRowDetails?.(t)}
-                    title="Open details (sparkline)"
-                    aria-label="Open details (sparkline)"
+                    title={`Price sparkline • Y[min,max]: $${min.toLocaleString(undefined, { maximumSignificantDigits: 4 })} – $${max.toLocaleString(undefined, { maximumSignificantDigits: 4 })}`}
+                    aria-label={`Price sparkline. Y-axis from $${min.toLocaleString(undefined, { maximumSignificantDigits: 4 })} to $${max.toLocaleString(undefined, { maximumSignificantDigits: 4 })}. Click to open details.`}
                     style={{
                       background: 'transparent',
                       border: 0,
