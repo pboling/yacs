@@ -79,6 +79,7 @@ function TopBar({
   subCount,
   consoleVisible,
   onToggleConsole,
+  onOpenDetail,
 }: {
   title: string
   version: number
@@ -94,6 +95,7 @@ function TopBar({
   subCount: number
   consoleVisible: boolean
   onToggleConsole: () => void
+  onOpenDetail: () => void
 }) {
   return (
     <div
@@ -107,8 +109,28 @@ function TopBar({
       }}
     >
       {/* Left column: Title */}
-      <div style={{ display: 'flex', alignItems: 'center' }}>
-        <h1 style={{ margin: 0 }}>{title}</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <h1 style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          {title}
+          <button
+            type="button"
+            aria-label="Open details"
+            title="Open Details"
+            onClick={onOpenDetail}
+            style={{
+              background: 'transparent',
+              border: '1px solid #4b5563',
+              borderRadius: 6,
+              color: 'inherit',
+              fontSize: 22,
+              lineHeight: 1,
+              padding: '2px 6px',
+              cursor: 'pointer',
+            }}
+          >
+            📈
+          </button>
+        </h1>
       </div>
       {/* Middle column: two rows */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 260, flex: 1 }}>
@@ -1041,6 +1063,7 @@ function App() {
 
   // Modal state & helpers
   const [detailRow, setDetailRow] = useState<TokenRow | null>(null)
+  const [detailOpen, setDetailOpen] = useState<boolean>(false)
   const [lockActive, setLockActive] = useState<boolean>(false)
   useEffect(() => {
     try {
@@ -1084,6 +1107,7 @@ function App() {
   }
   const openDetails = (row: TokenRow) => {
     setDetailRow(row)
+    setDetailOpen(true)
     try {
       emitFilterFocusStart()
     } catch {
@@ -1123,6 +1147,7 @@ function App() {
   const closeDetails = () => {
     const row = detailRow
     setDetailRow(null)
+    setDetailOpen(false)
     try {
       emitFilterApplyComplete()
     } catch {
@@ -1193,7 +1218,7 @@ function App() {
       )}
       <div style={{ padding: '16px 16px 16px 10px' }}>
         <DetailModal
-          open={!!detailRow}
+          open={detailOpen}
           row={detailRow}
           currentRow={detailRow ? (getRowById(detailRow.id) ?? detailRow) : null}
           onClose={closeDetails}
@@ -1213,6 +1238,10 @@ function App() {
           consoleVisible={consoleVisible}
           onToggleConsole={() => {
             setConsoleVisible((v) => !v)
+          }}
+          onOpenDetail={() => {
+            setDetailRow(null)
+            setDetailOpen(true)
           }}
         />
         {/* Filters Bar */}

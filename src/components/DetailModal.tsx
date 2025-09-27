@@ -110,9 +110,18 @@ export default function DetailModal({
   // Track display order swap (visual only)
   const [reversed, setReversed] = useState(false)
 
-  // Comparison selection state
+  // Base/Compare selection state
+  const [baseId, setBaseId] = useState<string | null>(null)
   const [compareId, setCompareId] = useState<string | null>(null)
-  // Persist compare selection
+  // Persist selections
+  useEffect(() => {
+    try {
+      if (baseId) window.localStorage.setItem('detailModal.baseId', baseId)
+      else window.localStorage.removeItem('detailModal.baseId')
+    } catch {
+      /* no-op */
+    }
+  }, [baseId])
   useEffect(() => {
     try {
       if (compareId) window.localStorage.setItem('detailModal.compareId', compareId)
@@ -122,13 +131,29 @@ export default function DetailModal({
     }
   }, [compareId])
 
-  // Reset series when a new row opens (only when id changes)
+  // Initialize baseId and reset series when base (primary) changes
   useEffect(() => {
-    if (!open || !row?.id) return
+    if (!open) return
+    // Initialize baseId from provided row or persisted value
+    if (row?.id) {
+      if (baseId !== row.id) setBaseId(row.id)
+    } else if (!baseId) {
+      try {
+        const stored =
+          typeof window !== 'undefined' ? window.localStorage.getItem('detailModal.baseId') : null
+        if (stored) setBaseId(stored)
+      } catch {}
+    }
+  }, [open, row?.id, baseId])
+  // Reset series when a new primary row opens (only when id changes)
+  const baseRow = resolveCompareRow(baseId)
+  const primaryRow = row ?? baseRow
+  useEffect(() => {
+    if (!open || !primaryRow?.id) return
     setHistory({ price: [], mcap: [], volume: [], buys: [], sells: [], liquidity: [] })
     setHistory2({ price: [], mcap: [], volume: [], buys: [], sells: [], liquidity: [] })
     setReversed(false)
-  }, [open, row?.id])
+  }, [open, primaryRow?.id])
 
   // Manage persisted compare selection without wiping history on table updates
   useEffect(() => {
@@ -151,14 +176,16 @@ export default function DetailModal({
 
   // Seed initial base snapshot so chart isn't empty while waiting for first WS update (id-based)
   useEffect(() => {
-    if (!open || !row?.id) return
-    setHistory((prev) => (prev.price.length > 0 ? prev : seedFromRow(row)))
+    if (!open || !primaryRow?.id) return
+    setHistory((prev) => (prev.price.length > 0 ? prev : seedFromRow(primaryRow)))
     // We intentionally seed only when id changes to avoid re-seeding on live updates
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, row?.id])
+  }, [open, primaryRow?.id])
 
   const [compareSearch, setCompareSearch] = useState('')
   const [showCompareList, setShowCompareList] = useState(false)
+  const [baseSearch, setBaseSearch] = useState('')
+  const [showBaseList, setShowBaseList] = useState(false)
   // Robust resolver for compare row to handle potential id casing or address-based mismatches
   const resolveCompareRow = useCallback(
     (id: string | null): DetailModalRow | null => {
@@ -196,13 +223,13 @@ export default function DetailModal({
 
   // Engage / update subscription lock when compare token changes
   useEffect(() => {
-    if (!open || !row) return
+    if (!open || !primaryRow) return
     // Allow both pair-stats and high-frequency tick keys for base + compare so their charts update
     const basePairKey =
-      row.pairAddress && row.tokenAddress
-        ? buildPairKey(row.pairAddress, row.tokenAddress, row.chain)
+      primaryRow.pairAddress && primaryRow.tokenAddress
+        ? buildPairKey(primaryRow.pairAddress, primaryRow.tokenAddress, primaryRow.chain)
         : null
-    const baseTick = row.tokenAddress ? buildTickKey(row.tokenAddress, row.chain) : null
+    const baseTick = primaryRow.tokenAddress ? buildTickKey(primaryRow.tokenAddress, primaryRow.chain) : null
     const cmpPairKey =
       compareRow?.pairAddress && compareRow?.tokenAddress
         ? buildPairKey(compareRow.pairAddress, compareRow.tokenAddress, compareRow.chain)
@@ -224,7 +251,7 @@ export default function DetailModal({
         /* no-op */
       }
     }
-  }, [compareRow, open, row])
+  }, [compareRow, open, primaryRow])
   // Subscribe to compare row updates (original detailed pair|token|chain listener removed; handled by unified tick/pair-stats listeners below)
 
   // Metric selection (shared across both charts)
@@ -250,8 +277,14 @@ export default function DetailModal({
   const filteredCompareOptions = computeFilteredCompareOptions<DetailModalRow>({
     open,
     allRows,
-    currentRow: row ?? null,
+    currentRow: primaryRow ?? null,
     compareSearch,
+  })
+  const filteredBaseOptions = computeFilteredCompareOptions<DetailModalRow>({
+    open,
+    allRows,
+    currentRow: null,
+    compareSearch: baseSearch,
   })
 
   // Debug updates panel: capture raw JSON updates for this row
@@ -260,9 +293,9 @@ export default function DetailModal({
   const logIdRef = useRef<number>(0)
 
   useEffect(() => {
-    const pair = row?.pairAddress
-    const token = row?.tokenAddress
-    const chain = row?.chain
+    const pair = primaryRow?.pairAddress
+    const token = primaryRow?.tokenAddress
+    const chain = primaryRow?.chain
     if (!open || !pair || !token || !debugEnabled) return
     // Only clear the log when the tracked key changes (avoid clearing on every render)
     setUpdatesLog([])
@@ -287,7 +320,7 @@ export default function DetailModal({
         /* no-op */
       }
     }
-  }, [open, row?.id, debugEnabled])
+  }, [open, primaryRow?.id, debugEnabled])
 
   useEffect(() => {
     try {
@@ -395,10 +428,10 @@ export default function DetailModal({
 
   // Build derived subscription keys
   const basePairStatsKey =
-    row?.pairAddress && row.tokenAddress
-      ? buildPairKey(row.pairAddress, row.tokenAddress, row.chain)
+    primaryRow?.pairAddress && primaryRow.tokenAddress
+      ? buildPairKey(primaryRow.pairAddress, primaryRow.tokenAddress, primaryRow.chain)
       : null
-  const baseTickKey = row?.tokenAddress ? buildTickKey(row.tokenAddress, row.chain) : null
+  const baseTickKey = primaryRow?.tokenAddress ? buildTickKey(primaryRow.tokenAddress, primaryRow.chain) : null
   const comparePairStatsKey =
     compareRow?.pairAddress && compareRow.tokenAddress
       ? buildPairKey(compareRow.pairAddress, compareRow.tokenAddress, compareRow.chain)
@@ -682,8 +715,8 @@ export default function DetailModal({
             Close
           </button>
         </div>
-        {/* Compare selector */}
-        {open && row && (
+        {/* Selectors */}
+        {open && (
           <div
             style={{
               marginBottom: 12,
@@ -693,6 +726,110 @@ export default function DetailModal({
               flexWrap: 'wrap',
             }}
           >
+            {/* Base selector */}
+            <div style={{ position: 'relative' }}>
+              <label style={{ fontSize: 12 }} className="muted">
+                Base token
+              </label>
+              <br />
+              <input
+                type="text"
+                value={baseSearch}
+                placeholder={
+                  primaryRow
+                    ? `${primaryRow.tokenName}/${primaryRow.tokenSymbol}`
+                    : 'Search token name or symbol'
+                }
+                onFocus={() => {
+                  setShowBaseList(true)
+                }}
+                onChange={(e) => {
+                  setBaseSearch(e.currentTarget.value)
+                  setShowBaseList(true)
+                }}
+                style={{
+                  background: '#111827',
+                  border: '1px solid #374151',
+                  borderRadius: 4,
+                  padding: '4px 8px',
+                  color: '#e5e7eb',
+                  minWidth: 220,
+                }}
+              />
+              {primaryRow && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBaseId(null)
+                    setBaseSearch('')
+                    setHistory({ price: [], mcap: [], volume: [], buys: [], sells: [], liquidity: [] })
+                    setHistory2({ price: [], mcap: [], volume: [], buys: [], sells: [], liquidity: [] })
+                  }}
+                  style={{
+                    marginLeft: 8,
+                    background: 'transparent',
+                    border: '1px solid #4b5563',
+                    borderRadius: 4,
+                    padding: '4px 8px',
+                    color: 'inherit',
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+              {showBaseList && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    zIndex: 10000,
+                    background: '#1f2937',
+                    border: '1px solid #374151',
+                    borderRadius: 4,
+                    width: 360,
+                    maxHeight: 260,
+                    overflow: 'auto',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                  }}
+                >
+                  {filteredBaseOptions.length === 0 && (
+                    <div className="muted" style={{ padding: 6, fontSize: 12 }}>
+                      No matches
+                    </div>
+                  )}
+                  {filteredBaseOptions.map((opt) => (
+                    <div
+                      key={opt.id}
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                      }}
+                      onClick={() => {
+                        setBaseId(opt.id)
+                        setBaseSearch(`${opt.tokenName}/${opt.tokenSymbol}`)
+                        setShowBaseList(false)
+                      }}
+                      style={{
+                        padding: '6px 8px',
+                        fontSize: 12,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        background: baseId === opt.id ? '#374151' : 'transparent',
+                      }}
+                    >
+                      <span>
+                        {opt.tokenName.toUpperCase()}/{opt.tokenSymbol} / {opt.chain}
+                      </span>
+                      <span className="muted">
+                        {opt.pairAddress && opt.tokenAddress ? '•' : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* Compare selector */}
             <div style={{ position: 'relative' }}>
               <label style={{ fontSize: 12 }} className="muted">
                 Compare with
@@ -805,18 +942,23 @@ export default function DetailModal({
         )}
         {/* Chart sections */}
         {(() => {
-          if (!row) return null
+          if (!primaryRow)
+                      return (
+                        <div className="muted" style={{ marginTop: 8, marginBottom: 8 }}>
+                          Select a base token to view details and charts.
+                        </div>
+                      )
           const baseSection = (
             <ChartSection
-              key={row.id + '-base'}
-              title={`${row.tokenName} (${row.tokenSymbol}) – ${row.chain}`}
+              key={primaryRow.id + '-base'}
+              title={`${primaryRow.tokenName} (${primaryRow.tokenSymbol}) – ${primaryRow.chain}`}
               history={history as Record<string, number[]>}
               palette={palette as Record<string, string>}
               selectedMetric={selectedMetric}
               seriesKeys={seriesKeys}
               seriesLabels={seriesLabels as Record<string, string>}
               focusOrder={focusOrderBase}
-              symbol={row.tokenSymbol}
+              symbol={primaryRow.tokenSymbol}
               buildPath={buildPath}
               showMetricChooser
               onChangeMetric={(m) => {
