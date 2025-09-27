@@ -16,6 +16,7 @@ import { toChainId } from '../utils/chain'
 import { buildPairKey } from '../utils/key_builder'
 import { dedupeByPairAddress } from '../utils/dedupeByPairAddress'
 import { filterRowsByTokenQuery } from '../utils/filteredCompareOptions.mjs'
+import { logCatch } from '../utils/debug.mjs'
 import {
   onSubscriptionLockChange,
   isSubscriptionLockActive,
@@ -233,21 +234,41 @@ export default function TokensPane({
     }
   }, [buildPairSubscriptionSafe, buildPairStatsSubscriptionSafe, title])
 
+  // Run initial data load only once per pane; do not reset rows on filter changes
+  const didInitRef = useRef<boolean>(false)
+
   // Initial REST load (page must start at 1 for every pane)
   useEffect(() => {
     let cancelled = false
-    // reset infinite scroll state on new mount/filters
-    setVisibleCount(50)
-    setCurrentPage(1)
-    setHasMore(true)
-    // If the client filters specify no chains selected, freeze the pane: clear rows and skip fetching.
+
+    // Run only once per pane mount; do not re-fetch or reset due to filter changes
+    if (didInitRef.current) {
+      return () => {
+        cancelled = true
+      }
+    }
+    didInitRef.current = true
+
+    // Immediately initialize the page with an empty dataset so App boot readiness can flip
+    try {
+      console.info(`[TokensPane:${title}] init: dispatch empty page to initialize state`)
+      dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: [] } })
+      console.info(
+        `[TokensPane:${title}] init: dispatched scanner/pairs with 0 items for page ${String(page)}`,
+      )
+    } catch (err) {
+      logCatch(`[TokensPane:${title}] init: early empty dispatch failed`, err)
+    }
+
+    // If the client filters specify no chains selected at mount, skip initial fetch.
     const chainsProvidedEmpty =
       Array.isArray(clientFilters?.chains) && clientFilters.chains.length === 0
     if (chainsProvidedEmpty) {
+      // Initialize the page with an empty dataset so App can flip readiness flags
       try {
         dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: [] } })
-      } catch {
-        /* no-op */
+      } catch (err) {
+        logCatch(`[TokensPane:${title}] init: dispatch empty pairs on empty chains failed`, err)
       }
       setLoading(false)
       setHasMore(false)
@@ -255,9 +276,31 @@ export default function TokensPane({
         /* frozen: nothing to cleanup */
       }
     }
+
+    // Failsafe: clear loading if init doesn't complete in time to avoid stuck spinner
+    let timeoutId: number | null = null
+    const armFailsafe = () => {
+      try {
+        if (timeoutId != null) {
+          window.clearTimeout(timeoutId)
+          timeoutId = null
+        }
+      } catch {}
+      try {
+        timeoutId = window.setTimeout(() => {
+          if (cancelled) return
+          setLoading(false)
+          setError((prev) => prev ?? 'Initial load timed out. Please retry or adjust filters.')
+        }, 10000)
+      } catch {
+        /* no-op */
+      }
+    }
+
     const run = async () => {
       setLoading(true)
       setError(null)
+      armFailsafe()
       try {
         console.log('[TokensPane:' + title + '] fetching initial scanner page with filters', {
           ...filters,
@@ -265,26 +308,21 @@ export default function TokensPane({
         })
         const res = await fetchScannerTyped({ ...filters, page: 1 })
         if (cancelled) return
+        console.info(`[TokensPane:${title}] fetchScanner ✓ returned`, {
+          count: Array.isArray(res?.tokens) ? res.tokens.length : 'n/a',
+        })
         const raw = res.raw as unknown
-        // Production shape: { pairs: [...] }
-        const pairsArr =
+        // API response shape source of truth: tests/fixtures/scanner.*.json
+        // Expect { pairs: [...] }
+        const list =
           raw && typeof raw === 'object' && Array.isArray((raw as { pairs?: unknown[] }).pairs)
             ? (raw as { pairs: unknown[] }).pairs
-            : null
-        if (!pairsArr) {
-          const errMsg = 'Unexpected data shape from /scanner: missing or invalid pairs array'
-          // Surface loudly in console and UI
-          console.error(errMsg, raw)
-          // Mark page as initialized with no rows so App overlay can clear
-          try {
-            dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: [] } })
-          } catch {
-            /* no-op */
-          }
-          if (!cancelled) setError(errMsg)
-          return
+            : []
+        if (list.length === 0) {
+          console.warn(
+            `[TokensPane:${title}] /scanner returned 0 items or missing pairs[]; proceeding with empty list`,
+          )
         }
-        const list = pairsArr
         console.log(
           '[TokensPane:' + title + '] /scanner returned ' + String(list.length) + ' items',
         )
@@ -299,29 +337,46 @@ export default function TokensPane({
               ' duplicates removed',
           )
         }
-        // Update local ids for this pane only
-        const payloads = computePairPayloadsSafe(dedupedList)
-        payloadsRef.current = payloads
+        // IMPORTANT: Dispatch to reducer BEFORE any heavy/optional computations.
+        // Prefer dispatching pre-mapped tokens to avoid remapping and potential exceptions.
         try {
-          const keys = payloads.map((p) => buildPairKey(p.pair, p.token, p.chain))
-          SubscriptionQueue.updateUniverse(keys, wsRef.current ?? null)
-        } catch {}
-        // Deduplicate pair ids for this pane to avoid duplicate row keys (computePairPayloads emits chain variants)
-        const seenPairs = new Set<string>()
-        const localIds: string[] = []
-        for (const p of payloads) {
-          if (!seenPairs.has(p.pair)) {
-            seenPairs.add(p.pair)
-            localIds.push(p.pair)
-          }
+          // Dispatch raw pairs only using the canonical reducer path.
+          dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: dedupedList } })
+          console.info(`[TokensPane:${title}] dispatched scanner/pairs`, {
+            page,
+            count: dedupedList.length,
+          })
+        } catch (err) {
+          logCatch(`[TokensPane:${title}] dispatch failed`, err)
         }
-        console.log(
-          '[TokensPane:' +
-            title +
-            `] computed ${String(payloads.length)} pair subscription payloads and ${String(localIds.length)} unique pair ids for table`,
-        )
-        // Merge into global store (byId/meta) — page value is irrelevant for panes
-        dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: list } })
+
+        // Best-effort: compute subscription payloads and update universe after dispatch.
+        try {
+          const payloads = computePairPayloadsSafe(dedupedList)
+          payloadsRef.current = payloads
+          try {
+            const keys = payloads.map((p) => buildPairKey(p.pair, p.token, p.chain))
+            SubscriptionQueue.updateUniverse(keys, wsRef.current ?? null)
+          } catch (err) {
+            logCatch(`[TokensPane:${title}] updateUniverse (init) failed`, err)
+          }
+          // Deduplicate pair ids for this pane to avoid duplicate row keys (computePairPayloads emits chain variants)
+          const seenPairs = new Set<string>()
+          const localIds: string[] = []
+          for (const p of payloads) {
+            if (!seenPairs.has(p.pair)) {
+              seenPairs.add(p.pair)
+              localIds.push(p.pair)
+            }
+          }
+          console.log(
+            '[TokensPane:' +
+              title +
+              `] computed ${String(payloads.length)} pair subscription payloads and ${String(localIds.length)} unique pair ids for table`,
+          )
+        } catch (err) {
+          logCatch(`[TokensPane:${title}] compute payloads failed (init)`, err)
+        }
         // Do not subscribe all pairs here; subscriptions are gated by row viewport visibility.
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Failed to load data'
@@ -334,24 +389,27 @@ export default function TokensPane({
         }
         if (!cancelled) setError(msg)
       } finally {
+        try {
+          if (timeoutId != null) {
+            window.clearTimeout(timeoutId)
+            timeoutId = null
+          }
+        } catch {}
         if (!cancelled) setLoading(false)
       }
     }
     void run()
     return () => {
       cancelled = true
+      try {
+        if (timeoutId != null) {
+          window.clearTimeout(timeoutId)
+          timeoutId = null
+        }
+      } catch {}
     }
-  }, [
-    filters,
-    clientFilters,
-    dispatch,
-    fetchScannerTyped,
-    computePairPayloadsSafe,
-    buildPairSubscriptionSafe,
-    buildPairStatsSubscriptionSafe,
-    page,
-    title,
-  ])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, title])
 
   // Derive rows for this pane from global byId
   const rows = useMemo(() => {
@@ -392,10 +450,10 @@ export default function TokensPane({
       return true
     })
     // Apply token search filter (reuses DetailModal rules). Only applies when a query is present.
-    if (cf.tokenQuery && String(cf.tokenQuery).trim().length > 0) {
+    if (cf.tokenQuery && cf.tokenQuery.trim().length > 0) {
       const allowed = filterRowsByTokenQuery({
         rows: base,
-        query: String(cf.tokenQuery).trim(),
+        query: cf.tokenQuery.trim(),
         includeStale: !!cf.includeStale,
         includeDegraded: !!cf.includeDegraded,
       })
@@ -449,7 +507,17 @@ export default function TokensPane({
         ? clientFilters.limit
         : Number.POSITIVE_INFINITY
     const cap = Math.min(visibleCount, limit)
-    return sorted.slice(0, Number.isFinite(cap) ? cap : visibleCount)
+    const finalRows = sorted.slice(0, Number.isFinite(cap) ? cap : visibleCount)
+    try {
+      console.info(`[TokensPane:${title}] rows derived`, {
+        page,
+        ids: listed.length,
+        collected: collected.length,
+        afterFilters: base.length,
+        rendering: finalRows.length,
+      })
+    } catch {}
+    return finalRows
   }, [state.byId, state.pages, page, sort, clientFilters, visibleCount])
 
   const paneIdRef = useRef<string>('')
@@ -593,6 +661,19 @@ export default function TokensPane({
       // Deduplicate by pairAddress (case-insensitive)
       const dedupedList = dedupeByPairAddress(list as ScannerResult[])
       // Merge new payloads into our cumulative payloadsRef and update SubscriptionQueue universe
+      // Dispatch append EARLY to ensure rows appear even if later steps fail.
+      dispatch({
+        type: 'scanner/append',
+        payload: { page, scannerPairs: dedupedList },
+      } as ScannerAppendAction)
+      try {
+        console.info(`[TokensPane:${title}] dispatched scanner/append`, {
+          page,
+          added: dedupedList.length,
+        })
+      } catch {}
+
+      // Best-effort: compute/update subscription universe after dispatch
       try {
         const newPayloads = computePairPayloadsSafe(dedupedList)
         const all = [...(payloadsRef.current || []), ...newPayloads]
@@ -608,12 +689,9 @@ export default function TokensPane({
         payloadsRef.current = merged
         const keys = merged.map((p) => buildPairKey(p.pair, (p.token ?? '').toLowerCase(), p.chain))
         SubscriptionQueue.updateUniverse(keys, wsRef.current ?? null)
-      } catch {}
-      // Dispatch typed append
-      dispatch({
-        type: 'scanner/append',
-        payload: { page, scannerPairs: dedupedList },
-      } as ScannerAppendAction)
+      } catch (err) {
+        logCatch(`[TokensPane:${title}] updateUniverse (loadMore) failed`, err)
+      }
       // Increase visible count so user sees more rows immediately, but do not exceed limit
       setVisibleCount((c) => {
         const limit =
@@ -650,6 +728,7 @@ export default function TokensPane({
     bothEndsVisible,
     computePairPayloadsSafe,
     title,
+    clientFilters,
   ])
 
   // Load more when the scroll-trigger row (10 above the last) enters the viewport of the pane
@@ -733,7 +812,7 @@ export default function TokensPane({
         rebindTimeoutRef.current = null
       }
     }
-  }, [lastRowId, triggerRowId, loadMore, bothEndsVisible])
+  }, [lastRowId, triggerRowId, loadMore, bothEndsVisible, clientFilters, rows.length])
 
   // Handler wired to Table row visibility
   const onRowVisibilityChange = useCallback((row: TokenRow, visible: boolean) => {

@@ -50,6 +50,8 @@ describe('filteredCompareOptions and uniqueById', () => {
       allRows,
       currentRow: base,
       compareSearch: '',
+      includeStale: true,
+      includeDegraded: true,
     })
 
     // base is excluded
@@ -75,6 +77,8 @@ describe('filteredCompareOptions and uniqueById', () => {
       allRows: rows,
       currentRow: base,
       compareSearch: 'FoO',
+      includeStale: true,
+      includeDegraded: true,
     })
     // base excluded + filtered by symbol contains only evens; cap 100
     expect(optionsFoo.length).toBeLessThanOrEqual(100)

@@ -243,7 +243,7 @@ export default function Table({
     } catch {
       /* no-op */
     }
-  }, [containerRef])
+  }, [containerRef, estimatedRowSize])
 
   // Virtualizer for rows: only render what is visible to drastically reduce DOM nodes
   const virtualizer = useVirtualizer({
@@ -661,7 +661,12 @@ export default function Table({
                   style={{ width: 60, minWidth: 50 }}
                   title="Freshness score: recency of the latest update across scanner, live trades (tick), and pair stats. Newer data ranks higher. Click to sort by recency."
                 />
-                <th title="Audit and safety quick checks (e.g., honeypot, verification)." style={{ textAlign: 'center' }}>Audit</th>
+                <th
+                  title="Audit and safety quick checks (e.g., honeypot, verification)."
+                  style={{ textAlign: 'center' }}
+                >
+                  Audit
+                </th>
               </tr>
             </thead>
             {enableVirtual ? (
@@ -750,6 +755,7 @@ export default function Table({
                   colSpan={10}
                   className="muted"
                   style={{ fontSize: 12, textAlign: 'right', padding: '6px 8px' }}
+                  data-testid={`rows-count-${title === 'Trending Tokens' ? 'trending' : title === 'New Tokens' ? 'new' : title.replace(/\s+/g, '-').toLowerCase()}`}
                 >
                   Rows (non-hidden): <strong>{rows.length}</strong>
                 </td>

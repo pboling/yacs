@@ -1,0 +1,114 @@
+import '@testing-library/jest-dom/vitest'
+import React from 'react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, waitFor } from '@testing-library/react'
+import TokensPane from '../src/components/TokensPane'
+import fs from 'node:fs/promises'
+
+// Minimal Token type consistent with UI usage
+interface TokenRow {
+  id: string
+  tokenName: string
+  tokenSymbol: string
+  chain: string
+  exchange: string
+  priceUsd: number
+  mcap: number
+  volumeUsd: number
+  priceChangePcs: { '5m': number; '1h': number; '6h': number; '24h': number }
+  transactions: { buys: number; sells: number }
+  liquidity: { current: number; changePc: number }
+  tokenCreatedTimestamp: Date
+}
+
+import path from 'node:path'
+
+async function loadFixture(name: 'scanner.trending.json' | 'scanner.new.json') {
+  const p = path.resolve(process.cwd(), 'tests', 'fixtures', name)
+  const txt = await fs.readFile(p, 'utf-8')
+  return JSON.parse(txt)
+}
+
+// We will mock the module that TokensPane imports (../scanner.client.js)
+vi.mock('../src/scanner.client.js', async (orig) => {
+  const mod = await (orig as any)()
+  const real = mod as Record<string, any>
+  const { mapScannerPage } = await import('../src/scanner.client.js')
+  return {
+    ...real,
+    // fetchScanner responds based on rankBy param with our fixtures
+    fetchScanner: async (params: Record<string, any>) => {
+      const which = params?.rankBy === 'volume' ? 'scanner.trending.json' : 'scanner.new.json'
+      const raw = await loadFixture(which as any)
+      // map to TokenData[] using the real util so reducer path is valid if consumed
+      const tokens = mapScannerPage(raw)
+      return { raw, tokens }
+    },
+  }
+})
+
+// Light-weight environment stubs used by Table inside TokensPane
+class IO {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+// Helper to build minimal state object
+function makeState(): {
+  byId: Record<string, TokenRow | undefined>
+  pages: Record<number, string[]>
+  version?: number
+} {
+  return { byId: {}, pages: {}, version: 0 }
+}
+
+describe('TokensPane smoke: dispatches after successful fetch', () => {
+  const origIO = (global as any).IntersectionObserver
+  const origRO = (global as any).ResizeObserver
+
+  beforeEach(() => {
+    ;(global as any).IntersectionObserver = IO as any
+    ;(global as any).ResizeObserver = IO as any
+  })
+  afterEach(() => {
+    ;(global as any).IntersectionObserver = origIO
+    ;(global as any).ResizeObserver = origRO
+  })
+
+  it('fires init empty dispatch and then a non-empty scanner dispatch', async () => {
+    const dispatch = vi.fn()
+    const state = makeState()
+
+    render(
+      <TokensPane
+        title="Trending Tokens"
+        filters={{ rankBy: 'volume', orderBy: 'desc', minVol24H: 1000, isNotHP: true } as any}
+        page={101}
+        state={state as any}
+        dispatch={dispatch as any}
+        defaultSort={{ key: 'tokenName', dir: 'asc' }}
+        clientFilters={{ chains: ['ETH', 'SOL', 'BASE', 'BSC'] }}
+      />,
+    )
+
+    // First, an init empty dispatch should fire
+    await waitFor(() => {
+      const init = dispatch.mock.calls.find((c) => c?.[0]?.type === 'scanner/pairs')
+      expect(init).toBeTruthy()
+      expect(init?.[0]?.payload?.page).toBe(101)
+      expect(Array.isArray(init?.[0]?.payload?.scannerPairs)).toBe(true)
+      expect(init?.[0]?.payload?.scannerPairs.length).toBe(0)
+    })
+
+    // Then, a non-empty dispatch should occur: either scanner/pairsTokens or scanner/pairs with >0
+    await waitFor(() => {
+      const pairsTokens = dispatch.mock.calls.find((c) => c?.[0]?.type === 'scanner/pairsTokens')
+      const pairs = dispatch.mock.calls
+        .filter((c) => c?.[0]?.type === 'scanner/pairs')
+        .find((c) => (c?.[0]?.payload?.scannerPairs?.length ?? 0) > 0)
+      const ok = !!pairsTokens || !!pairs
+      expect(ok).toBe(true)
+    })
+  })
+})

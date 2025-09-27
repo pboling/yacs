@@ -505,7 +505,10 @@ const Row = memo(
         </td>
         <td style={{ textAlign: 'right' }}>{formatAge(t.tokenCreatedTimestamp)}</td>
         <td>
-          <div className="muted" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+          <div
+            className="muted"
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}
+          >
             <span
               title="Buys"
               style={{

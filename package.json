@@ -24,7 +24,8 @@
     "format:prettier": "prettier . --write",
     "format:check": "prettier . --check",
     "format": "pnpm run format:prettier && pnpm run lint:fix",
-    "fixture:scanner": "node scripts/fetch-scanner-fixture.mjs"
+    "fixture:scanner": "node scripts/fetch-scanner-fixture.mjs",
+    "fixture:sets": "node scripts/fetch-trending-and-new-fixtures.mjs"
   },
   "dependencies": {
     "concurrently": "^9.1.2",

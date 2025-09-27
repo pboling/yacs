@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import React from 'react'
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import DetailModal, { type DetailModalRow } from '../src/components/DetailModal'
 
@@ -28,13 +28,28 @@ function makeRow(partial: Partial<DetailModalRow> & { id: string }): DetailModal
     ownerAddress: partial.ownerAddress,
     audit: partial.audit,
     security: partial.security,
-  }
+    // mark as fresh so it appears in compare options by default
+    scannerAt: (partial as any).scannerAt ?? Date.now(),
+  } as any
 }
 
 describe('DetailModal compare chooser', () => {
   it('selecting a token shows the compare token in the modal', async () => {
-    const base = makeRow({ id: '1', tokenName: 'Alpha', tokenSymbol: 'ALPHA', chain: 'ETH' })
-    const other = makeRow({ id: '2', tokenName: 'Beta', tokenSymbol: 'BETA', chain: 'ETH' })
+    const now = Date.now()
+    const base = makeRow({
+      id: '1',
+      tokenName: 'Alpha',
+      tokenSymbol: 'ALPHA',
+      chain: 'ETH',
+      scannerAt: now,
+    })
+    const other = makeRow({
+      id: '2',
+      tokenName: 'Beta',
+      tokenSymbol: 'BETA',
+      chain: 'ETH',
+      scannerAt: now,
+    })
     const allRows = [base, other]
 
     const user = userEvent.setup()
@@ -51,18 +66,21 @@ describe('DetailModal compare chooser', () => {
     )
 
     // Focus the compare input to open the list
-    const input = screen.getByPlaceholderText('Search token name or symbol')
+    const input = screen.getByTestId('compare-input')
     await user.click(input)
+    await user.type(input, 'bet')
 
     // Click on the option with the other token name/symbol
-    const option = await screen.findByText(/BETA/i)
+    const list = await screen.findByTestId('compare-options')
+    const option = await within(list).findByText(/BETA/i)
     await user.click(option)
 
     // After selection, the compare chart section title should include Beta (BETA)
     const compareTitle = await screen.findByText(/Beta \(BETA\) – ETH/)
     expect(compareTitle).toBeInTheDocument()
 
-    // Clear button should appear as well
-    expect(screen.getByRole('button', { name: /Clear/i })).toBeInTheDocument()
+    // Clear button(s) should appear as well (base and compare sections each have one)
+    const clearButtons = screen.getAllByRole('button', { name: /Clear/i })
+    expect(clearButtons.length).toBeGreaterThan(0)
   })
 })

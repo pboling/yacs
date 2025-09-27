@@ -54,12 +54,14 @@ export function buildScannerQuery(params = {}) {
  * Map a ScannerApiResponse-like object to an array of TokenData (UI shape).
  * Delegates per-item conversion to mapScannerResultToToken.
  *
- * @param {{ scannerPairs?: any[] }} apiResponse
+ * Shape source of truth: tests/fixtures/scanner.*.json
+ * Expected API response shape: { pairs: [...] }
+ *
+ * @param {{ pairs?: any[] }} apiResponse
  * @returns {any[]} TokenData[]
  */
 export function mapScannerPage(apiResponse) {
-  // Support both shapes: production (scannerPairs) and legacy/tests (pairs)
-  const items = (apiResponse && (apiResponse.scannerPairs || apiResponse.pairs)) || []
+  const items = apiResponse && Array.isArray(apiResponse.pairs) ? apiResponse.pairs : []
   return items.map(mapScannerResultToToken)
 }
 
@@ -80,14 +82,34 @@ export async function fetchScanner(params, opts = {}) {
   const qp = buildScannerQuery(params)
 
   const url = `${baseUrl}/scanner?${qp.toString()}`
-  const res = await fetchImpl(url, { headers: { accept: 'application/json' } })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    const err = new Error(`Scanner request failed ${res.status}: ${text}`)
-    // @ts-expect-error augment for callers in JS
-    err.status = res.status
+  const startedAt = Date.now()
+  try {
+    console.info('[scanner] → GET', url)
+    const res = await fetchImpl(url, { headers: { accept: 'application/json' } })
+    console.info('[scanner] ← status', res.status, url)
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      const ms = Date.now() - startedAt
+      console.error('[scanner] ✖ failed', {
+        status: res.status,
+        ms,
+        url,
+        sample: text?.slice?.(0, 200) || '',
+      })
+      const err = new Error(`Scanner request failed ${res.status}: ${text}`)
+      // @ts-expect-error augment for callers in JS
+      err.status = res.status
+      throw err
+    }
+    const json = await res.json()
+    const tokens = mapScannerPage(json)
+    const ms = Date.now() - startedAt
+    console.info('[scanner] ✓ success', { status: res.status, count: tokens.length, ms, url })
+    return { raw: json, tokens }
+  } catch (err) {
+    const ms = Date.now() - startedAt
+    const message = err && err.message ? err.message : String(err)
+    console.error('[scanner] ✖ network error', { ms, url, message })
     throw err
   }
-  const json = await res.json()
-  return { raw: json, tokens: mapScannerPage(json) }
 }

@@ -560,6 +560,27 @@ Notes:
 
 ## WebSocket channels overview and boot overlay
 
+### Scanner page identifiers (101 and 201)
+
+In the UI we use two logical page identifiers to disambiguate the two main panes and their corresponding WebSocket scanner streams:
+
+- TRENDING_PAGE = 101 (Trending Tokens pane)
+- NEW_PAGE = 201 (New Tokens pane)
+
+Why these numbers?
+
+- They are client-assigned, out-of-band identifiers used in two places:
+  1. As keys in the Redux-like state under state.pages[page] so that Trending and New datasets never collide.
+  2. As the `page` field in the scanner-filter WebSocket subscription payload. The backend echoes this page back in scanner-pairs events; we route the dataset to the correct pane by matching the echoed page.
+- We chose 1xx for Trending and 2xx for New to make it visually obvious they are not normal REST pagination pages (1, 2, 3, …). REST pagination for infinite scroll still uses 1, 2, 3 on the HTTP /scanner endpoint.
+- If you add more panes, pick another distinct range (e.g., 3xx) and keep identifiers unique.
+
+Where to find/change them:
+
+- Defined in src/App.tsx next to the WebSocket bootstrap code:
+  const TRENDING_PAGE = 101; const NEW_PAGE = 201;
+- These are used when sending the initial scanner-filter subscriptions and when scanning reducer state for boot readiness.
+
 - scanner-filter → server listens for this subscription and responds with scanner-pairs for the requested filter (page, rankBy, chain, etc.). This is the primary/bootstrap stream that seeds the tables. You should consider it the “main” subscription.
 - scanner-pairs → full dataset replacement for a page. The app reducer ingests these to populate state.pages and byId.
 - subscribe-pair / unsubscribe-pair → per-row real-time tick updates (price, volume, buys/sells). The client gates these by viewport to reduce load.
@@ -600,6 +621,15 @@ Prettier is run separately for formatting but also integrated into ESLint via `e
 
 ### Scripts
 
+- fixture:sets
+  - Generate two fixtures exactly like the app’s boot REST calls (Trending and New), save them, and print whether they are identical now (order-insensitive by pairAddress).
+  - Run: pnpm run fixture:sets
+  - Env: API_BASE to override base URL (defaults to the client default, which is the public API in production).
+  - Outputs:
+    - tests/fixtures/scanner.trending.json
+    - tests/fixtures/scanner.new.json
+    - tests/fixtures/scanner.compare.txt (summary)
+
 | Command                    | Purpose                                        |
 | -------------------------- | ---------------------------------------------- |
 | `pnpm run lint`            | Dev lint (warnings OK)                         |
@@ -628,3 +658,35 @@ pnpm dlx husky add .husky/pre-push "pnpm run lint:ci && pnpm test"
 Edit `eslint.ci.config.js` and append rule names to the `promoteToError` array. For style-only enforcement, change `'prettier/prettier': 'warn'` to `'error'` in the Prettier block.
 
 ---
+
+## REST: Trending vs New — optional single-request dedupe (opt-in)
+
+Are the initial REST results for Trending and New the same? Sometimes; often they are not, because the presets use different rank/sort/age constraints which can change the returned set, not only the ordering. Because of that, deduping these requests by default has limited value and can be misleading.
+
+What we do now
+
+- By default, the client does NOT dedupe the two boot requests. Each pane performs its own GET /scanner.
+- You can opt-in to deduplication when you know your backend returns the same underlying set for both presets:
+  - Set VITE_SCANNER_DEDUPE_INIT=1 (or true) at build/runtime.
+  - When enabled, src/scanner.client.js coalesces overlapping initial requests using a canonical dataset key that intentionally ignores presentation-only params like rankBy/orderBy/timeFrame. A short-lived cache (TTL: 5s) serves immediate repeats.
+
+Verifying with curl (to decide whether to enable)
+
+Run these side-by-side and compare:
+
+- Trending preset:
+  curl -s "${API_BASE:-https://api-rs.dexcelerate.com}/scanner?rankBy=volume&orderBy=desc&minVol24H=1000&isNotHP=true&maxAge=$((7*24*60\*60))&page=1" | jq '.pairs|length,(.pairs[]?.pairAddress)' > /tmp/trending.txt
+
+- New preset:
+  curl -s "${API_BASE:-https://api-rs.dexcelerate.com}/scanner?rankBy=age&orderBy=desc&isNotHP=true&maxAge=$((24*60*60))&page=1" | jq '.pairs|length,(.pairs[]?.pairAddress)' > /tmp/new.txt
+
+Then compare:
+diff -u /tmp/trending.txt /tmp/new.txt || true
+
+If the diff is empty, the sets are identical (ordering aside) and enabling VITE_SCANNER_DEDUPE_INIT can avoid one request at boot.
+
+Notes
+
+- Infinite scroll (page>1) always requests per pane with the pane’s filters.
+- WebSocket subscriptions remain per-pane (distinct logical pages 101/201) and are unaffected by this REST dedupe.
+- No caching is used when the flag is off; requests are performed directly.

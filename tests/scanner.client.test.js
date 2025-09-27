@@ -62,7 +62,7 @@ function makeScanner(overrides = {}) {
 }
 
 const sampleResponse = {
-  scannerPairs: [
+  pairs: [
     makeScanner(),
     makeScanner({
       pairAddress: '0xPAIR2',

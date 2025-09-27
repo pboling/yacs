@@ -26,7 +26,7 @@ export default defineConfig(() => {
     test: {
       environment: 'jsdom',
       setupFiles: ['./tests/setup.ts'],
-      include: ['tests/detailModal.compare.test.tsx', 'tests/detailModal.compare.dedupe.test.tsx'],
+      include: ['tests/**/*.test.tsx'],
       globals: true,
     },
   }

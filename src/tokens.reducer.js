@@ -53,7 +53,61 @@ const __REDUCER_SEEN__ = new WeakSet()
 
 export function tokensReducer(state = initialState, action) {
   switch (action.type) {
+    case 'scanner/pairsTokens': {
+      // Ingest pre-mapped TokenData[] directly (bypass per-item mapping)
+      const { page, tokens } = action.payload
+      const next = {
+        ...state,
+        byId: { ...state.byId },
+        meta: { ...state.meta },
+        pages: { ...state.pages },
+      }
+      const ids = []
+      for (const tNew of Array.isArray(tokens) ? tokens : []) {
+        const id = tNew.id
+        const idLower = String(id || '').toLowerCase()
+        ids.push(id)
+        const existing = next.byId[id] || next.byId[idLower]
+        const now = Date.now()
+        const merged = existing
+          ? {
+              ...tNew,
+              priceUsd: existing.priceUsd,
+              mcap: existing.mcap,
+              volumeUsd: existing.volumeUsd,
+              transactions: existing.transactions,
+              history: existing.history || __emptyHistory__(),
+              scannerAt: now,
+              tickAt: existing.tickAt,
+              pairStatsAt: existing.pairStatsAt,
+            }
+          : { ...tNew, history: __emptyHistory__(), scannerAt: now }
+        next.byId[id] = merged
+        next.byId[idLower] = merged
+        // meta.totalSupply is optional in mapped token; keep existing if present
+        const existingMeta = next.meta[id] || next.meta[idLower] || {}
+        next.meta[id] = existingMeta
+        next.meta[idLower] = existingMeta
+      }
+      next.pages[page] = ids
+      try {
+        console.info('REDUCER: pages updated', {
+          page,
+          idsLen: Array.isArray(ids) ? ids.length : 0,
+          sample: Array.isArray(ids) ? ids.slice(0, 3) : [],
+        })
+      } catch {}
+      return { ...next, version: (state.version || 0) + 1 }
+    }
     case 'scanner/pairs': {
+      try {
+        console.info('REDUCER: scanner/pairs', {
+          page: action?.payload?.page,
+          count: Array.isArray(action?.payload?.scannerPairs)
+            ? action.payload.scannerPairs.length
+            : 'n/a',
+        })
+      } catch {}
       if (!__REDUCER_SEEN__.has(action)) {
         __REDUCER_SEEN__.add(action)
         try {
@@ -105,6 +159,13 @@ export function tokensReducer(state = initialState, action) {
       }
       // set page ids (keep original-cased ids for external expectations/tests)
       next.pages[page] = ids
+      try {
+        console.info('REDUCER: pages updated', {
+          page,
+          idsLen: Array.isArray(ids) ? ids.length : 0,
+          sample: Array.isArray(ids) ? ids.slice(0, 3) : [],
+        })
+      } catch {}
       // Note: we purposely avoid global removal here to allow tokens present on other pages
       // The cleanup strategy can be implemented later if needed.
       return { ...next, version: (state.version || 0) + 1 }

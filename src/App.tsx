@@ -45,6 +45,7 @@ import { engageSubscriptionLock, releaseSubscriptionLock } from './subscription.
 import { onSubscriptionLockChange, isSubscriptionLockActive } from './subscription.lock.bus.js'
 import { toChainId } from './utils/chain'
 import { buildPairKey, buildTickKey } from './utils/key_builder'
+import { logCatch } from './utils/debug.mjs'
 
 // Theme allow-list and cookie helpers
 const THEME_ALLOW = ['cherry-sour', 'rocket-lake', 'legendary'] as const
@@ -137,7 +138,7 @@ function TopBar({
               cursor: 'pointer',
             }}
           >
-            📈
+            <ChartNoAxesCombined size={46} />
           </button>
         </h1>
       </div>
@@ -329,7 +330,7 @@ function TopBar({
               letterSpacing: 0.5,
             }}
           >
-            Console{consoleVisible ? ': On' : ''}
+            Console: {consoleVisible ? 'On' : 'Off'}
           </button>
         </div>
       </div>
@@ -351,6 +352,7 @@ function TopBar({
 
 // Minimal row type for table consumption
 import type { Token as TokenRow } from './models/Token'
+import { ChartNoAxesCombined } from 'lucide-react'
 
 type SortKey =
   | 'tokenName'
@@ -470,7 +472,18 @@ function App() {
   const trendingFilters: GetScannerResultParams = useMemo(() => TRENDING_TOKENS_FILTERS, [])
   const newFilters: GetScannerResultParams = useMemo(() => NEW_TOKENS_FILTERS, [])
 
-  // Distinct page ids per pane to keep datasets independent in state
+  // Distinct logical page identifiers per pane to keep datasets independent in state.
+  // Why 101 and 201?
+  // - These are client-assigned, "out-of-band" identifiers used in two places:
+  //   1) As keys under state.pages[page] to ensure the Trending and New datasets never collide.
+  //   2) In the scanner-filter WebSocket subscription payload as `page`, so the server echoes the
+  //      same `page` value back in scanner-pairs events. We use that echo to route incoming
+  //      datasets to the correct pane without guessing.
+  // - We pick numbers in the 1xx (Trending) and 2xx (New) ranges to avoid any confusion with
+  //   REST pagination pages (1, 2, 3, …). The REST calls still use page=1,2,… for infinite scroll,
+  //   while these constants are purely logical identifiers for the two streams.
+  // - You can change them if needed; just keep them distinct. If you add more panes, choose another
+  //   disjoint range (e.g., 3xx) to keep things obvious.
   const TRENDING_PAGE = 101
   const NEW_PAGE = 201
 
@@ -1041,17 +1054,44 @@ function App() {
   const countsRef = useRef<WsCounts>({ ...zeroCounts })
   const [eventCounts, setEventCounts] = useState<WsCounts>({ ...zeroCounts })
   const flushTimerRef = useRef<number | null>(null)
-  const bumpEventCount = (ev: unknown) => {
-    const k = String(ev) as WsEventName
-    if (!(k in countsRef.current)) return
-    countsRef.current[k] = (countsRef.current[k] ?? 0) + 1
-    flushTimerRef.current ??= window.setTimeout(() => {
-      try {
-        setEventCounts({ ...countsRef.current })
-      } finally {
-        flushTimerRef.current = null
+  // Normalize varying server event name styles to our canonical keys
+  const normalizeEventName = (ev: unknown): WsEventName | null => {
+    try {
+      const s = String(ev ?? '').toLowerCase()
+      const collapsed = s.replace(/[^a-z0-9]/g, '') // remove dashes/underscores/spaces
+      switch (collapsed) {
+        case 'scannerpairs':
+        case 'pairs': // tolerate legacy short name
+          return 'scanner-pairs'
+        case 'tick':
+          return 'tick'
+        case 'pairstats':
+        case 'pairstat':
+          return 'pair-stats'
+        case 'wpegprices':
+        case 'wpeg':
+          return 'wpeg-prices'
+        default:
+          return null
       }
-    }, 250)
+    } catch {
+      return null
+    }
+  }
+  const bumpEventCount = (ev: unknown) => {
+    const k = normalizeEventName(ev)
+    if (!k) return
+    countsRef.current[k] = (countsRef.current[k] ?? 0) + 1
+    // Coalesce flushes to avoid excessive setState under high throughput
+    if (flushTimerRef.current == null) {
+      flushTimerRef.current = window.setTimeout(() => {
+        try {
+          setEventCounts({ ...countsRef.current })
+        } finally {
+          flushTimerRef.current = null
+        }
+      }, 250)
+    }
   }
   // Live subscriptions count (polled)
   const [subCount, setSubCount] = useState<number>(0)
@@ -1123,24 +1163,77 @@ function App() {
     trending: false,
     newer: false,
   })
+  // Early boot diagnostics
+  useEffect(() => {
+    try {
+      const pages = (state as unknown as { pages?: Partial<Record<number, string[]>> }).pages ?? {}
+      console.info('App: mount', {
+        theme,
+        bypassBoot: false,
+        pagesKeys: Object.keys(pages),
+      })
+    } catch {
+      /* no-op */
+    }
+    // Global error diagnostics to catch silent failures after REST success
+    const onError = (ev: ErrorEvent) => {
+      try {
+        console.error('App: global error', {
+          message: ev.message,
+          filename: ev.filename,
+          lineno: ev.lineno,
+          colno: ev.colno,
+        })
+      } catch {}
+    }
+    const onRejection = (ev: PromiseRejectionEvent) => {
+      try {
+        const reason = ev?.reason
+        const msg = reason?.message ? reason.message : String(reason)
+        console.error('App: global unhandledrejection', { message: msg })
+      } catch {}
+    }
+    try {
+      window.addEventListener('error', onError)
+    } catch {}
+    try {
+      window.addEventListener('unhandledrejection', onRejection as any)
+    } catch {}
+    return () => {
+      try {
+        window.removeEventListener('error', onError)
+      } catch {}
+      try {
+        window.removeEventListener('unhandledrejection', onRejection as any)
+      } catch {}
+    }
+  }, [])
   // Fallback readiness: if pages are initialized via REST (or WS), consider panes ready
   // This avoids the app getting stuck on the boot overlay when the backend does not
   // emit scanner-pairs over WebSocket, while REST has already populated the store.
   useEffect(() => {
     try {
       const pages = (state as unknown as { pages?: Partial<Record<number, string[]>> }).pages ?? {}
-      const hasTrending = Array.isArray(
-        (pages as Record<number, string[] | undefined>)[TRENDING_PAGE],
-      )
-      const hasNew = Array.isArray((pages as Record<number, string[] | undefined>)[NEW_PAGE])
+      const trendingArr = (pages as Record<number, string[] | undefined>)[TRENDING_PAGE]
+      const newArr = (pages as Record<number, string[] | undefined>)[NEW_PAGE]
+      const hasTrending = Array.isArray(trendingArr)
+      const hasNew = Array.isArray(newArr)
+      console.info('App: pages-scan', {
+        TRENDING_PAGE,
+        NEW_PAGE,
+        hasTrending,
+        hasNew,
+        trendingLen: Array.isArray(trendingArr) ? trendingArr.length : undefined,
+        newLen: Array.isArray(newArr) ? newArr.length : undefined,
+      })
       if (hasTrending || hasNew) {
         setWsScannerReady((prev) => ({
           trending: prev.trending || hasTrending,
           newer: prev.newer || hasNew,
         }))
       }
-    } catch {
-      /* no-op */
+    } catch (err) {
+      logCatch('App: boot readiness pages scan failed', err)
     }
   }, [state, TRENDING_PAGE, NEW_PAGE])
   // Allow E2E/automation to bypass the boot splash to avoid spinner-related flakiness
@@ -1170,6 +1263,7 @@ function App() {
     }
     let mounted = true
     let timer: ReturnType<typeof setTimeout> | null = null
+    let failsafe: ReturnType<typeof setTimeout> | null = null
     const compute = () => {
       try {
         const ready = wsScannerReady.trending && wsScannerReady.newer
@@ -1179,7 +1273,31 @@ function App() {
         }
         // Debounce the flip to avoid brief flickers during FE/BE startup races
         timer = setTimeout(() => {
-          if (mounted) setAppReady(ready)
+          if (mounted) {
+            setAppReady(ready)
+            if (!ready && !failsafe) {
+              // Arm a bounded boot failsafe so the overlay cannot stick forever without any errors
+              failsafe = setTimeout(() => {
+                try {
+                  const st = state as unknown as {
+                    pages?: Partial<Record<number, string[]>>
+                    byId?: Record<string, unknown>
+                  }
+                  const pages = st.pages ?? {}
+                  const pageKeys = Object.keys(pages)
+                  const hasAnyPage = pageKeys.length > 0
+                  const hasAnyRows = st.byId && Object.keys(st.byId).length > 0
+                  if (!appReady && (hasAnyPage || hasAnyRows)) {
+                    console.warn('App: boot failsafe released overlay', { hasAnyPage, hasAnyRows })
+                    setAppReady(true)
+                  }
+                } catch {
+                  // still release to unblock UI
+                  setAppReady(true)
+                }
+              }, 6000)
+            }
+          }
         }, 250)
       } catch {
         /* no-op */
@@ -1192,8 +1310,12 @@ function App() {
         clearTimeout(timer)
         timer = null
       }
+      if (failsafe) {
+        clearTimeout(failsafe)
+        failsafe = null
+      }
     }
-  }, [wsScannerReady, bypassBoot])
+  }, [wsScannerReady, bypassBoot, state, appReady])
 
   // Watch version for filter apply completion after blur
   useEffect(() => {
@@ -1473,16 +1595,19 @@ function App() {
           {/* Row 2: Other filters */}
           <div className="row">
             <div className="group" id="filter-token-search">
-              <label>Token Search <span className="muted" style={{ marginLeft: 'auto', fontSize: 11 }}>
+              <label>
+                Token Search{' '}
+                <span className="muted" style={{ marginLeft: 'auto', fontSize: 11 }}>
                   <span style={{ color: 'var(--accent-up)' }}>(Fresh included)</span>
-                </span></label>
+                </span>
+              </label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <input
                   type="text"
-                  value={state.filters.tokenQuery ?? ''}
+                  value={String(state.filters.tokenQuery ?? '')}
                   placeholder={
                     typeof state.filters.tokenQuery === 'string' && state.filters.tokenQuery
-                      ? state.filters.tokenQuery
+                      ? String(state.filters.tokenQuery)
                       : 'Search token name or symbol'
                   }
                   onFocus={() => {
@@ -1542,8 +1667,7 @@ function App() {
                   />{' '}
                   <span className="muted" style={{ marginLeft: 'auto', fontSize: 11 }}>
                     <span style={{ color: '#e5e7eb' }}>Include stale</span>
-                </span>
-
+                  </span>
                 </label>
                 <label className="chk" style={{ fontSize: 12 }}>
                   <input
@@ -1558,8 +1682,7 @@ function App() {
                   />{' '}
                   <span className="muted" style={{ marginLeft: 'auto', fontSize: 11 }}>
                     <span style={{ color: 'var(--accent-down)' }}>Include degraded</span>
-                </span>
-
+                  </span>
                 </label>
               </div>
             </div>
@@ -1725,7 +1848,27 @@ function App() {
                 }
               }
               dispatch={
-                dispatch as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>
+                ((action) => {
+                  try {
+                    const t = action?.type || 'unknown'
+                    if (
+                      t === 'scanner/pairs' ||
+                      t === 'scanner/append' ||
+                      t === 'scanner/pairsTokens'
+                    ) {
+                      const p = action.payload || {}
+                      const count = Array.isArray(p.scannerPairs)
+                        ? p.scannerPairs.length
+                        : Array.isArray(p.tokens)
+                          ? p.tokens.length
+                          : 'n/a'
+                      console.info('DISPATCH:', t, { page: p.page, count })
+                    }
+                  } catch {
+                    /* no-op */
+                  }
+                  ;(dispatch as unknown as React.Dispatch<Action>)(action as Action)
+                }) as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>
               }
               defaultSort={initialSort ?? { key: 'tokenName', dir: 'asc' }}
               clientFilters={
@@ -1793,7 +1936,27 @@ function App() {
                 }
               }
               dispatch={
-                dispatch as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>
+                ((action) => {
+                  try {
+                    const t = action?.type || 'unknown'
+                    if (
+                      t === 'scanner/pairs' ||
+                      t === 'scanner/append' ||
+                      t === 'scanner/pairsTokens'
+                    ) {
+                      const p = action.payload || {}
+                      const count = Array.isArray(p.scannerPairs)
+                        ? p.scannerPairs.length
+                        : Array.isArray(p.tokens)
+                          ? p.tokens.length
+                          : 'n/a'
+                      console.info('DISPATCH:', t, { page: p.page, count })
+                    }
+                  } catch {
+                    /* no-op */
+                  }
+                  ;(dispatch as unknown as React.Dispatch<Action>)(action as Action)
+                }) as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>
               }
               defaultSort={initialSort ?? { key: 'age', dir: 'desc' }}
               clientFilters={

@@ -30,3 +30,13 @@ export function debugLog(...args) {
     // ignore
   }
 }
+
+// Log caught errors with context; always logs (not gated by debug flag)
+export function logCatch(context, err) {
+  try {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(context, msg, err)
+  } catch {
+    // ignore
+  }
+}

@@ -953,6 +953,7 @@ export default function DetailModal({
               <br />
               <input
                 type="text"
+                data-testid="compare-input"
                 value={compareSearch}
                 placeholder={
                   compareRow
@@ -1031,6 +1032,7 @@ export default function DetailModal({
               </div>
               {showCompareList && (
                 <div
+                  data-testid="compare-options"
                   style={{
                     position: 'absolute',
                     top: '100%',

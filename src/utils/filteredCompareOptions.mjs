@@ -72,7 +72,12 @@ export function computeFilteredCompareOptions({
  * @param {boolean} [params.includeDegraded=false]
  * @returns {Set<string>} matching ids
  */
-export function filterRowsByTokenQuery({ rows, query, includeStale = false, includeDegraded = false }) {
+export function filterRowsByTokenQuery({
+  rows,
+  query,
+  includeStale = false,
+  includeDegraded = false,
+}) {
   const list = Array.isArray(rows) ? rows : []
   const uniq = uniqueById(list)
   if (!query) {
@@ -87,14 +92,21 @@ export function filterRowsByTokenQuery({ rows, query, includeStale = false, incl
       const any = !!(s || t || p)
       const fresh = any && [s, t, p].some((v) => typeof v === 'number' && now - v < ONE_HOUR_MS)
       const state = any ? (fresh ? 'fresh' : 'stale') : 'degraded'
-      if (state === 'fresh' || (state === 'stale' && includeStale) || (state === 'degraded' && includeDegraded)) {
+      if (
+        state === 'fresh' ||
+        (state === 'stale' && includeStale) ||
+        (state === 'degraded' && includeDegraded)
+      ) {
         ids.add(r.id)
       }
     }
     return ids
   }
   const q = String(query).toLowerCase()
-  const safeIncludes = (s) => String(s || '').toLowerCase().includes(q)
+  const safeIncludes = (s) =>
+    String(s || '')
+      .toLowerCase()
+      .includes(q)
   const ids = new Set()
   const ONE_HOUR_MS = 60 * 60 * 1000
   const now = Date.now()
@@ -105,7 +117,14 @@ export function filterRowsByTokenQuery({ rows, query, includeStale = false, incl
     const any = !!(s || t || p)
     const fresh = any && [s, t, p].some((v) => typeof v === 'number' && now - v < ONE_HOUR_MS)
     const state = any ? (fresh ? 'fresh' : 'stale') : 'degraded'
-    if (!(state === 'fresh' || (state === 'stale' && includeStale) || (state === 'degraded' && includeDegraded))) continue
+    if (
+      !(
+        state === 'fresh' ||
+        (state === 'stale' && includeStale) ||
+        (state === 'degraded' && includeDegraded)
+      )
+    )
+      continue
     if (safeIncludes(r?.tokenName) || safeIncludes(r?.tokenSymbol)) ids.add(r.id)
   }
   return ids
