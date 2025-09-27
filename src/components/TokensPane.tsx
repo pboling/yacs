@@ -300,24 +300,21 @@ export default function TokensPane({
         })
         const res = await fetchScannerTyped({ ...filters, page: 1 })
         if (cancelled) return
-        const raw = res.raw as unknown
-        const tokens = Array.isArray(res.tokens) ? res.tokens : []
-        console.log('[TokensPane:' + title + '] mapped tokens from fetchScanner:', tokens)
-        // Check for missing ids
-        const missingIds = tokens.filter((token) => !token || !token.id)
-        if (missingIds.length > 0) {
-          console.warn('[TokensPane:' + title + '] tokens with missing id:', missingIds)
+        const tokens = Array.isArray(res.raw.scannerPairs) ? res.raw.scannerPairs : []
+        // Check for address-like ids
+        const addressLikeIds = tokens.filter(
+          (token) => token && typeof token.id === 'string' && token.id.length === 42,
+        )
+        if (addressLikeIds.length > 0) {
+          console.warn('[TokensPane:' + title + '] token with id of address length:', addressLikeIds[0])
         }
         // Deduplicate by pairAddress (case-insensitive) before computing payloads/dispatching
         const dedupedList = dedupeByPairAddress(tokens as ScannerResult[])
-        console.log('[TokensPane:' + title + '] dispatching scanner/pairsTokens:', { page, tokens: dedupedList })
-        // --- ACTION TYPE CLARIFICATION ---
-        // We dispatch 'scanner/pairsTokens' here because fetchScanner returns tokens already mapped to TokenData shape.
-        // This bypasses per-item mapping in the reducer and is more efficient for large datasets.
-        // Use 'scanner/pairsTokens' whenever you have mapped tokens from fetchScanner.
-        // If you have raw scanner results (unmapped), use 'scanner/pairs' instead and let the reducer map them.
-        // ----------------------------------
-        dispatch({ type: 'scanner/pairsTokens', payload: { page, tokens: dedupedList } })
+        console.log('[TokensPane:' + title + '] dispatching scanner/pairs:', {
+          page,
+          scannerPairs: dedupedList,
+        })
+        dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: dedupedList } })
         setLoading(false)
         // Debug: print first few tokens and their id values
         console.log(
@@ -326,7 +323,7 @@ export default function TokensPane({
             id: t.id,
             pairAddress: t.pairAddress,
             token1Address: t.token1Address,
-            tokenName: t.tokenName,
+            tokenName: t.token1Name,
           })),
         )
         // Best-effort: compute subscription payloads and update universe after dispatch.
@@ -337,24 +334,27 @@ export default function TokensPane({
             const keys = payloads.map((p) => buildPairKey(p.pair, p.token, p.chain))
             SubscriptionQueue.updateUniverse(keys, wsRef.current ?? null)
           } catch (err) {
-            logCatch(`[TokensPane:${title}] updateUniverse (init) failed`, err)
+            if (err instanceof Error) {
+              logCatch(`[TokensPane:${title}] updateUniverse (init) failed`, err)
+            } else {
+              logCatch(`[TokensPane:${title}] updateUniverse (init) failed`, new Error(String(err)))
+            }
           }
           // Deduplicate pair ids for this pane to avoid duplicate row keys (computePairPayloads emits chain variants)
           const seenPairs = new Set<string>()
           const localIds: string[] = []
           for (const p of payloads) {
-            if (!seenPairs.has(p.pair)) {
+            if (typeof p.pair === 'string' && !seenPairs.has(p.pair)) {
               seenPairs.add(p.pair)
               localIds.push(p.pair)
             }
           }
-          console.log(
-            '[TokensPane:' +
-              title +
-              `] computed ${String(payloads.length)} pair subscription payloads and ${String(localIds.length)} unique pair ids for table`,
-          )
         } catch (err) {
-          logCatch(`[TokensPane:${title}] compute payloads failed (init)`, err)
+          if (err instanceof Error) {
+            logCatch(`[TokensPane:${title}] computePairPayloadsSafe failed`, err)
+          } else {
+            logCatch(`[TokensPane:${title}] computePairPayloadsSafe failed`, new Error(String(err)))
+          }
         }
         // Do not subscribe all pairs here; subscriptions are gated by row viewport visibility.
       } catch (e) {
@@ -604,7 +604,7 @@ export default function TokensPane({
       sp.set('dir', sort.dir)
       const nextSearch = `?${sp.toString()}`
       const cur = window.location.pathname + window.location.search
-      const next = window.pathname + nextSearch
+      const next = window.location.pathname + nextSearch
       // Avoid redundant history updates which can cause dev-server page flashes
       if (next !== cur) {
         window.history.replaceState(null, '', next)

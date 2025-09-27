@@ -109,7 +109,10 @@ export function tokensReducer(state = initialState, action) {
       case 'scanner/pairs': {
         // Ingest raw scannerPairs[] for a page
         const { page, scannerPairs } = action.payload
-        console.log('[tokensReducer] scanner/pairs payload:', { page, scannerPairsLen: Array.isArray(scannerPairs) ? scannerPairs.length : 0 })
+        console.log('[tokensReducer] scanner/pairs payload:', {
+          page,
+          scannerPairsLen: Array.isArray(scannerPairs) ? scannerPairs.length : 0,
+        })
         const next = {
           ...state,
           byId: { ...state.byId },
@@ -204,7 +207,8 @@ export function tokensReducer(state = initialState, action) {
           // Suppress noisy warnings in tests and production unless explicitly enabled.
           try {
             const dbg =
-              (typeof process !== 'undefined' && process.env && process.env.DEX_DEBUG_REDUCER) === '1'
+              (typeof process !== 'undefined' && process.env && process.env.DEX_DEBUG_REDUCER) ===
+              '1'
             if (dbg) {
               // Only log when developer opts in via DEX_DEBUG_REDUCER=1
               console.warn('REDUCER: pair/tick ignored - token not found in state.byId', {

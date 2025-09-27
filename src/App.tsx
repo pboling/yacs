@@ -37,14 +37,12 @@ import TokensPane from './components/TokensPane'
 import DetailModal from './components/DetailModal'
 import { emitFilterFocusStart, emitFilterApplyComplete } from './filter.bus.js'
 import { fetchScanner } from './scanner.client.js'
-import { getCount } from './visibility.bus.js'
 import { SubscriptionQueue } from './subscription.queue'
-import { setDefaultInactiveBaseLimit } from './subscription.limit.bus.js'
-import { emitUpdate } from './updates.bus'
+import { setDefaultInvisibleBaseLimit } from './subscription.limit.bus.js'
 import { engageSubscriptionLock, releaseSubscriptionLock } from './subscription.lock.bus.js'
 import { onSubscriptionLockChange, isSubscriptionLockActive } from './subscription.lock.bus.js'
 import { toChainId } from './utils/chain'
-import { buildPairKey, buildTickKey } from './utils/key_builder'
+import { buildPairKey } from './utils/key_builder'
 import { logCatch } from './utils/debug.mjs'
 
 // Theme allow-list and cookie helpers
@@ -144,18 +142,18 @@ function TopBar({
           </button>
         </h1>
         <h2 style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                    <span
-                      className="muted"
-                      title="Active subscriptions across all panes"
-                      style={{
-                        fontSize: 11,
-                        padding: '2px 6px',
-                        border: '1px solid #4b5563',
-                        borderRadius: 12,
-                        background: 'rgba(255,255,255,0.06)',
-                        letterSpacing: 0.5,
-                      }}
-                    >
+          <span
+            className="muted"
+            title="Active subscriptions across all panes"
+            style={{
+              fontSize: 11,
+              padding: '2px 6px',
+              border: '1px solid #4b5563',
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.06)',
+              letterSpacing: 0.5,
+            }}
+          >
             VisSubs: <strong style={{ marginLeft: 4 }}>{subCount}</strong>
           </span>
           <span
@@ -298,6 +296,7 @@ function TopBar({
           </label>
           <label
             className="muted"
+            title="Base Limit: maximum invisible subscriptions when Throttle is unset."
             style={{
               fontSize: 11,
               padding: '2px 6px',
@@ -309,7 +308,7 @@ function TopBar({
               alignItems: 'center',
               gap: 6,
             }}
-            title="Default base for inactive subs when Throttle is unset"
+            title="Default base for invisible subs when Throttle is unset"
           >
             Base Limit
             <input
@@ -320,7 +319,8 @@ function TopBar({
               value={subBaseLimit}
               onChange={(e) => {
                 const n = Math.max(0, Math.min(1000, Number(e.currentTarget.value) || 0))
-                ;(setSubBaseLimit as (n: number) => void)(n)
+                setSubBaseLimit(n)
+                setDefaultInvisibleBaseLimit(n)
               }}
               style={{
                 width: 80,
@@ -718,32 +718,41 @@ function App() {
             const start = performance.now()
             defer(() => {
               const parseStart = performance.now()
-              let parsed: any
+              let parsed: Record<string, unknown> | null = null
               try {
-                parsed = JSON.parse(typeof ev.data === 'string' ? ev.data : String(ev.data))
+                parsed = JSON.parse(
+                  typeof ev.data === 'string' ? ev.data : String(ev.data),
+                ) as Record<string, unknown>
               } catch (err) {
                 console.error('WS: failed to parse message', err)
                 return
               }
               const parseEnd = performance.now()
-              const event = parsed && typeof parsed === 'object' ? parsed.event : undefined
-              const data = parsed && typeof parsed === 'object' ? parsed.data : undefined
+              const event = typeof parsed?.event === 'string' ? parsed.event : undefined
+              const data =
+                typeof parsed?.data === 'object' && parsed?.data !== null ? parsed.data : undefined
               // Validation
               const validationStart = performance.now()
               if (event === 'scanner-pairs') {
-                const pairs = data && typeof data === 'object' ? data.pairs : undefined
-                if (!Array.isArray(pairs)) {
+                const pairs = Array.isArray((data as any)?.pairs) ? (data as any).pairs : undefined
+                if (!pairs) {
                   console.error('WS: invalid scanner-pairs payload: missing pairs array', parsed)
                   return
                 }
               } else if (event === 'tick') {
-                const ok = data && typeof data === 'object' && data.pair && Array.isArray(data.swaps)
+                const ok =
+                  data &&
+                  typeof (data as any).pair === 'object' &&
+                  Array.isArray((data as any).swaps)
                 if (!ok) {
                   console.error('WS: invalid tick payload: expected { pair, swaps[] }', parsed)
                   return
                 }
               } else if (event === 'pair-stats') {
-                const ok = data && typeof data === 'object' && data.pair && typeof data.pair.pairAddress === 'string'
+                const ok =
+                  data &&
+                  typeof (data as any).pair === 'object' &&
+                  typeof (data as any).pair.pairAddress === 'string'
                 if (!ok) {
                   console.error('WS: invalid pair-stats payload: expected pair.pairAddress', parsed)
                   return
@@ -764,11 +773,19 @@ function App() {
               const dispatchEnd = performance.now()
               // Timing logs
               if (import.meta.env.DEV) {
-                console.log('[WS timing] total:', (dispatchEnd - start).toFixed(2), 'ms',
-                  'parse:', (parseEnd - parseStart).toFixed(2),
-                  'validation:', (validationEnd - validationStart).toFixed(2),
-                  'map:', (mapEnd - mapStart).toFixed(2),
-                  'dispatch:', (dispatchEnd - dispatchStart).toFixed(2))
+                console.log(
+                  '[WS timing] total:',
+                  (dispatchEnd - start).toFixed(2),
+                  'ms',
+                  'parse:',
+                  (parseEnd - parseStart).toFixed(2),
+                  'validation:',
+                  (validationEnd - validationStart).toFixed(2),
+                  'map:',
+                  (mapEnd - mapStart).toFixed(2),
+                  'dispatch:',
+                  (dispatchEnd - dispatchStart).toFixed(2),
+                )
               }
             })
           }
@@ -896,7 +913,6 @@ function App() {
   const blurVersionRef = useRef<number | null>(null)
   const pendingApplyAfterBlurRef = useRef(false)
   const updatesCounterRef = useRef(0)
-  const msgLogCountRef = useRef(0)
   // WS event counters (allowed incoming events)
   type WsEventName = 'scanner-pairs' | 'tick' | 'pair-stats' | 'wpeg-prices'
   type WsCounts = Record<WsEventName, number>
@@ -969,7 +985,7 @@ function App() {
   useEffect(() => {
     try {
       const safe = Math.max(0, Math.min(1000, subBaseLimit || 0))
-      setDefaultInactiveBaseLimit(safe)
+      setDefaultInvisibleBaseLimit(safe)
     } catch {
       /* no-op */
     }
@@ -1089,13 +1105,13 @@ function App() {
   // This avoids the app getting stuck on the boot overlay when the backend does not
   // emit scanner-pairs over WebSocket, while REST has already populated the store.
   useEffect(() => {
-    if (appReady) return; // Only run if spinner is still showing
+    if (appReady) return // Only run if spinner is still showing
     try {
-      const pages = (state as unknown as { pages?: Partial<Record<number, string[]>> }).pages ?? {};
-      const trendingArr = (pages as Record<number, string[] | undefined>)[TRENDING_PAGE];
-      const newArr = (pages as Record<number, string[] | undefined>)[NEW_PAGE];
-      const hasTrending = Array.isArray(trendingArr);
-      const hasNew = Array.isArray(newArr);
+      const pages = (state as unknown as { pages?: Partial<Record<number, string[]>> }).pages ?? {}
+      const trendingArr = (pages as Record<number, string[] | undefined>)[TRENDING_PAGE]
+      const newArr = (pages as Record<number, string[] | undefined>)[NEW_PAGE]
+      const hasTrending = Array.isArray(trendingArr)
+      const hasNew = Array.isArray(newArr)
       console.info('App: pages-scan', {
         TRENDING_PAGE,
         NEW_PAGE,
@@ -1103,15 +1119,15 @@ function App() {
         hasNew,
         trendingLen: Array.isArray(trendingArr) ? trendingArr.length : undefined,
         newLen: Array.isArray(newArr) ? newArr.length : undefined,
-      });
+      })
       if (hasTrending || hasNew) {
         setWsScannerReady((prev) => ({
           trending: prev.trending || hasTrending,
           newer: prev.newer || hasNew,
-        }));
+        }))
       }
     } catch (err) {
-      logCatch('App: boot readiness pages scan failed', err);
+      logCatch('App: boot readiness pages scan failed', err)
     }
   }, [appReady, state])
   // Allow E2E/automation to bypass the boot splash to avoid spinner-related flakiness
@@ -1369,7 +1385,11 @@ function App() {
     async function fetchInitialData() {
       try {
         console.log('[App.tsx] fetchScanner: Trending Tokens (effect)')
-        const trendingRes = await fetchScanner({ ...TRENDING_TOKENS_FILTERS, page: 1, __source: 'App.tsx useEffect Trending' })
+        const trendingRes = await fetchScanner({
+          ...TRENDING_TOKENS_FILTERS,
+          page: 1,
+          __source: 'App.tsx useEffect Trending',
+        })
         console.log('[App.tsx] fetchScanner: Trending Tokens result', trendingRes)
         if (!cancelled) {
           console.log('[App.tsx] dispatching scanner/pairs for Trending', trendingRes.tokens)
@@ -1383,7 +1403,11 @@ function App() {
       }
       try {
         console.log('[App.tsx] fetchScanner: New Tokens (effect)')
-        const newRes = await fetchScanner({ ...NEW_TOKENS_FILTERS, page: 1, __source: 'App.tsx useEffect New' })
+        const newRes = await fetchScanner({
+          ...NEW_TOKENS_FILTERS,
+          page: 1,
+          __source: 'App.tsx useEffect New',
+        })
         console.log('[App.tsx] fetchScanner: New Tokens result', newRes)
         if (!cancelled) {
           console.log('[App.tsx] dispatching scanner/pairs for New', newRes.tokens)
@@ -1396,7 +1420,7 @@ function App() {
         console.error('[App] Initial REST fetch failed: New', err)
       }
     }
-    fetchInitialData()
+    void fetchInitialData()
     return () => {
       cancelled = true
     }

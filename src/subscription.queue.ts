@@ -1,22 +1,22 @@
 // subscription.queue.ts
-// Rolling subscription manager for inactive tokens.
+// Rolling subscription manager for invisible tokens.
 // Operates on keys in the `pair|token|chain` format.
-// Maintains a FIFO queue of inactive-subscribed tokens and rotates on tick.
+// Maintains a FIFO queue of invisible-subscribed tokens and rotates on tick.
 // Quotas:
 // - Default (no throttle set): dynamic heuristic using a configurable base limit
-//   base = getDefaultInactiveBaseLimit() (defaults to 0). If totalInactive <= base → subscribe all inactive,
-//   else → subscribe base + ceil(1/10 of the remaining inactive).
-// - When a throttle is set (max total subscriptions), inactive quota becomes:
-//   min(inactiveUniverse.length, max(0, throttleMax - visible.size))
+//   base = getDefaultInvisibleBaseLimit() (defaults to 100). If totalInvisible <= base → subscribe all invisible,
+//   else → subscribe base + ceil(1/10 of the remaining invisible).
+// - When a throttle is set (max total subscriptions), invisible quota becomes:
+//   min(invisibleUniverse.length, max(0, throttleMax - visible.size))
 //
 // Scrolling/visibility policy:
-// - When a key becomes visible, it is subscribed by the pane and removed from the inactive queue.
+// - When a key becomes visible, it is subscribed by the pane and removed from the invisible queue.
 // - When a key leaves the viewport, it remains subscribed and is appended to the tail of the
-//   inactive FIFO queue. If the queue exceeds its quota, we unsubscribe from the head until
+//   invisible FIFO queue. If the queue exceeds its quota, we unsubscribe from the head until
 //   the queue fits. This guarantees: visible → active window; just-hidden → tail; rotation → head.
 
 import { sendSubscribe, sendUnsubscribe } from './ws.mapper.js'
-import { getDefaultInactiveBaseLimit } from './subscription.limit.bus.js'
+import { getDefaultInvisibleBaseLimit } from './subscription.limit.bus.js'
 
 type Key = string // pair|token|chain
 
@@ -24,12 +24,12 @@ const visible = new Set<Key>()
 const ignored = new Set<Key>()
 let universe: Key[] = [] // all keys known to the pane (deduped)
 
-// Global throttle: maximum total subscriptions (visible + inactive). 0 or undefined → use default policy
+// Global throttle: maximum total subscriptions (visible + invisible). 0 or undefined → use default policy
 let throttleMax: number | undefined = undefined
 
-// FIFO queue of currently subscribed inactive keys
-const inactiveQueue: Key[] = []
-const inactiveSet = new Set<Key>() // mirror of queue for O(1) lookup
+// FIFO queue of currently subscribed invisible keys
+const invisibleQueue: Key[] = []
+const invisibleSet = new Set<Key>() // mirror of queue for O(1) lookup
 
 // Aging: last time key was unsubscribed
 const lastUnsubscribedAt = new Map<Key, number>()
@@ -39,8 +39,8 @@ function splitKey(key: Key) {
   return { pair, token, chain }
 }
 
-function getInactiveUniverse(): Key[] {
-  // inactive = universe - visible - ignored
+function getInvisibleUniverse(): Key[] {
+  // invisible = universe - visible - ignored
   const res: Key[] = []
   const seen = new Set<Key>()
   for (const k of universe) {
@@ -53,17 +53,17 @@ function getInactiveUniverse(): Key[] {
   return res
 }
 
-function computeQuota(totalInactive: number) {
-  if (totalInactive <= 0) return 0
-  // If throttle is set and > 0, compute inactive quota as (throttle - visibleCount)
+function computeQuota(totalInvisible: number) {
+  if (totalInvisible <= 0) return 0
+  // If throttle is set and > 0, compute invisible quota as (throttle - visibleCount)
   if (typeof throttleMax === 'number' && throttleMax >= 0) {
-    const allowedInactive = Math.max(0, throttleMax - visible.size)
-    return Math.min(totalInactive, allowedInactive)
+    const allowedInvisible = Math.max(0, throttleMax - visible.size)
+    return Math.min(totalInvisible, allowedInvisible)
   }
   // Default heuristic quota using a dynamic base limit from global state
-  const base = Math.max(0, getDefaultInactiveBaseLimit())
-  if (totalInactive <= base) return totalInactive
-  const remaining = totalInactive - base
+  const base = Math.max(0, getDefaultInvisibleBaseLimit())
+  if (totalInvisible <= base) return totalInvisible
+  const remaining = totalInvisible - base
   const extra = Math.ceil(remaining / 10)
   return base + extra
 }
@@ -96,30 +96,30 @@ function subscribeKey(ws: WebSocket | null, key: Key) {
 }
 
 function removeFromQueue(key: Key) {
-  if (!inactiveSet.has(key)) return
-  inactiveSet.delete(key)
-  const idx = inactiveQueue.indexOf(key)
-  if (idx >= 0) inactiveQueue.splice(idx, 1)
+  if (!invisibleSet.has(key)) return
+  invisibleSet.delete(key)
+  const idx = invisibleQueue.indexOf(key)
+  if (idx >= 0) invisibleQueue.splice(idx, 1)
 }
 
 function ensureQueueWithinQuota(ws: WebSocket | null) {
-  const inactive = getInactiveUniverse()
-  const inactiveSetUniverse = new Set(inactive)
-  const quota = computeQuota(inactive.length)
+  const invisible = getInvisibleUniverse()
+  const invisibleSetUniverse = new Set(invisible)
+  const quota = computeQuota(invisible.length)
 
   // 1) Remove any keys from queue that are no longer eligible
-  for (let i = 0; i < inactiveQueue.length; ) {
-    const key = inactiveQueue[i]
+  for (let i = 0; i < invisibleQueue.length; ) {
+    const key = invisibleQueue[i]
     if (visible.has(key)) {
       // Visible keys are managed by the pane; keep them subscribed but not in inactive queue
-      inactiveQueue.splice(i, 1)
-      inactiveSet.delete(key)
+      invisibleQueue.splice(i, 1)
+      invisibleSet.delete(key)
       continue
     }
-    if (!inactiveSetUniverse.has(key) || ignored.has(key)) {
+    if (!invisibleSetUniverse.has(key) || ignored.has(key)) {
       // No longer in universe or user-disabled → unsubscribe immediately
-      inactiveQueue.splice(i, 1)
-      inactiveSet.delete(key)
+      invisibleQueue.splice(i, 1)
+      invisibleSet.delete(key)
       unsubscribeKey(ws, key)
       continue
     }
@@ -127,22 +127,22 @@ function ensureQueueWithinQuota(ws: WebSocket | null) {
   }
 
   // 2) If under quota, fill with oldest-by-lastUnsubscribed inactive candidates not already in queue
-  if (inactiveQueue.length < quota) {
-    const candidates = inactive.filter((k) => !inactiveSet.has(k))
-    const toAdd = pickOldestByUnsubscribed(candidates, quota - inactiveQueue.length)
+  if (invisibleQueue.length < quota) {
+    const candidates = invisible.filter((k) => !invisibleSet.has(k))
+    const toAdd = pickOldestByUnsubscribed(candidates, quota - invisibleQueue.length)
     for (const key of toAdd) {
-      inactiveQueue.push(key)
-      inactiveSet.add(key)
+      invisibleQueue.push(key)
+      invisibleSet.add(key)
       // These are newly admitted inactive subs → we must send subscribe
       subscribeKey(ws, key)
     }
   }
 
   // 3) If over quota, unsubscribe from head until we fit
-  while (inactiveQueue.length > quota) {
-    const key = inactiveQueue.shift()
+  while (invisibleQueue.length > quota) {
+    const key = invisibleQueue.shift()
     if (key) {
-      inactiveSet.delete(key)
+      invisibleSet.delete(key)
       unsubscribeKey(ws, key)
     } else {
       break
@@ -152,41 +152,41 @@ function ensureQueueWithinQuota(ws: WebSocket | null) {
 
 // Tick: rotate FIFO — unsubscribe head and subscribe next oldest inactive candidate at tail
 function tick(ws: WebSocket | null) {
-  const inactive = getInactiveUniverse()
-  if (inactive.length === 0) return
-  const quota = computeQuota(inactive.length)
+  const invisible = getInvisibleUniverse()
+  if (invisible.length === 0) return
+  const quota = computeQuota(invisible.length)
   if (quota <= 0) {
     // No capacity for inactive subs; purge any queued
-    while (inactiveQueue.length > 0) {
-      const k = inactiveQueue.shift()
+    while (invisibleQueue.length > 0) {
+      const k = invisibleQueue.shift()
       if (!k) break
-      inactiveSet.delete(k)
+      invisibleSet.delete(k)
       unsubscribeKey(ws, k)
     }
     return
   }
   // If currently under quota, grow by adding one without removing any
-  if (inactiveQueue.length < quota) {
-    const candidates = inactive.filter((k) => !inactiveSet.has(k))
+  if (invisibleQueue.length < quota) {
+    const candidates = invisible.filter((k) => !invisibleSet.has(k))
     const toAdd = pickOldestByUnsubscribed(candidates, 1)[0]
     if (toAdd) {
-      inactiveQueue.push(toAdd)
-      inactiveSet.add(toAdd)
+      invisibleQueue.push(toAdd)
+      invisibleSet.add(toAdd)
       subscribeKey(ws, toAdd)
     }
     return
   }
   // Otherwise rotate: remove one from head and add one candidate
-  const toRemove = inactiveQueue.shift()
+  const toRemove = invisibleQueue.shift()
   if (toRemove) {
-    inactiveSet.delete(toRemove)
+    invisibleSet.delete(toRemove)
     unsubscribeKey(ws, toRemove)
   }
-  const candidates = inactive.filter((k) => !inactiveSet.has(k))
+  const candidates = invisible.filter((k) => !invisibleSet.has(k))
   const toAdd = pickOldestByUnsubscribed(candidates, 1)[0]
   if (toAdd) {
-    inactiveQueue.push(toAdd)
-    inactiveSet.add(toAdd)
+    invisibleQueue.push(toAdd)
+    invisibleSet.add(toAdd)
     subscribeKey(ws, toAdd)
   }
 }
@@ -194,23 +194,28 @@ function tick(ws: WebSocket | null) {
 export const SubscriptionQueue = {
   getSubscribedCount(): number {
     try {
-      // Total subscribed = visible (pane-managed) + inactiveSet (queue-managed)
-      return visible.size + inactiveSet.size
+      // Total subscribed = visible (pane-managed) + invisibleSet (queue-managed)
+      return visible.size + invisibleSet.size
     } catch {
       return 0
     }
   },
   getVisibleCount() {
-    return visible.size
+    try {
+      console.log('[SubscriptionQueue] getVisibleCount:', visible.size)
+      return visible.size
+    } catch {
+      return 0
+    }
   },
   getInvisCount() {
-    return inactiveQueue.length
+    return invisibleQueue.length
   },
   updateUniverse(keys: Key[], ws: WebSocket | null) {
     const next = Array.isArray(keys) ? [...new Set(keys)] : []
     // Unsubscribe any queued/visible keys that are no longer in the universe
     const nextSet = new Set(next)
-    for (const key of [...inactiveQueue]) {
+    for (const key of [...invisibleQueue]) {
       if (!nextSet.has(key)) {
         removeFromQueue(key)
         unsubscribeKey(ws, key)
@@ -233,27 +238,29 @@ export const SubscriptionQueue = {
   setVisible(key: Key, isVisible: boolean, ws: WebSocket | null) {
     if (isVisible) {
       visible.add(key)
-      // Ensure it is not tracked as inactive
       removeFromQueue(key)
-      // No subscribe here; pane already sent subscribe for visible keys
+      // Debug log
+      try {
+        console.log('[SubscriptionQueue] setVisible: added', key, 'visible.size:', visible.size)
+      } catch {}
     } else {
       visible.delete(key)
-      // When leaving viewport, keep it subscribed and move to the tail if eligible
-      if (!ignored.has(key) && universe.includes(key) && !inactiveSet.has(key)) {
-        inactiveQueue.push(key)
-        inactiveSet.add(key)
-        // Do not send subscribe here; it should already be subscribed while visible
-        // Enforce quota (may unsubscribe from head if we overflow)
-        const inactive = getInactiveUniverse()
-        const quota = computeQuota(inactive.length)
-        while (inactiveQueue.length > quota) {
-          const k = inactiveQueue.shift()
+      // Debug log
+      try {
+        console.log('[SubscriptionQueue] setVisible: removed', key, 'visible.size:', visible.size)
+      } catch {}
+      if (!ignored.has(key) && universe.includes(key) && !invisibleSet.has(key)) {
+        invisibleQueue.push(key)
+        invisibleSet.add(key)
+        const invisible = getInvisibleUniverse()
+        const quota = computeQuota(invisible.length)
+        while (invisibleQueue.length > quota) {
+          const k = invisibleQueue.shift()
           if (!k) break
-          inactiveSet.delete(k)
+          invisibleSet.delete(k)
           unsubscribeKey(ws, k)
         }
       } else {
-        // Still reconcile to handle removals and fills
         ensureQueueWithinQuota(ws)
       }
     }
@@ -263,7 +270,7 @@ export const SubscriptionQueue = {
       ignored.add(key)
       // Remove from visible and inactive, unsubscribe if was subscribed by us
       visible.delete(key)
-      if (inactiveSet.has(key)) {
+      if (invisibleSet.has(key)) {
         removeFromQueue(key)
         unsubscribeKey(ws, key)
       } else {
@@ -298,14 +305,14 @@ export const SubscriptionQueue = {
   // For testing/inspection
   __debug__: {
     getUniverse: () => [...universe],
-    getInactiveQueue: () => [...inactiveQueue],
+    getInactiveQueue: () => [...invisibleQueue],
     getLastUnsubscribedAt: (k: Key) => lastUnsubscribedAt.get(k) ?? 0,
     reset() {
       universe = []
       visible.clear()
       ignored.clear()
-      inactiveQueue.length = 0
-      inactiveSet.clear()
+      invisibleQueue.length = 0
+      invisibleSet.clear()
       lastUnsubscribedAt.clear()
     },
   },

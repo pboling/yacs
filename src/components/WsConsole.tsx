@@ -79,7 +79,17 @@ export default function WsConsole() {
 
   const visibleEntries = useMemo(() => {
     return entries.filter(matchesFilter)
-  }, [entries, showError, showSub, showUnsub, showScannerPairs, showTick, showPairStats, showWpegPrices])
+  }, [
+    entries,
+    matchesFilter,
+    showError,
+    showSub,
+    showUnsub,
+    showScannerPairs,
+    showTick,
+    showPairStats,
+    showWpegPrices,
+  ])
 
   const textBlob = useMemo(() => {
     return visibleEntries
@@ -115,25 +125,74 @@ export default function WsConsole() {
         <div className="ws-console__actions">
           {/* Filter checkboxes */}
           <label style={{ marginLeft: 8 }}>
-            <input type="checkbox" checked={showError} onChange={e => setShowError(e.target.checked)} /> Err
+            <input
+              type="checkbox"
+              checked={showError}
+              onChange={(e) => {
+                setShowError(e.target.checked)
+              }}
+            />{' '}
+            Err
           </label>
           <label style={{ marginLeft: 8 }}>
-            <input type="checkbox" checked={showSub} onChange={e => setShowSub(e.target.checked)} /> Sub
+            <input
+              type="checkbox"
+              checked={showSub}
+              onChange={(e) => {
+                setShowSub(e.target.checked)
+              }}
+            />{' '}
+            Sub
           </label>
           <label style={{ marginLeft: 8 }}>
-            <input type="checkbox" checked={showUnsub} onChange={e => setShowUnsub(e.target.checked)} /> Uns
+            <input
+              type="checkbox"
+              checked={showUnsub}
+              onChange={(e) => {
+                setShowUnsub(e.target.checked)
+              }}
+            />{' '}
+            Uns
           </label>
           <label style={{ marginLeft: 8 }}>
-            <input type="checkbox" checked={showScannerPairs} onChange={e => setShowScannerPairs(e.target.checked)} /> scan
+            <input
+              type="checkbox"
+              checked={showScannerPairs}
+              onChange={(e) => {
+                setShowScannerPairs(e.target.checked)
+              }}
+            />{' '}
+            scan
           </label>
           <label style={{ marginLeft: 8 }}>
-            <input type="checkbox" checked={showTick} onChange={e => setShowTick(e.target.checked)} /> tick
+            <input
+              type="checkbox"
+              checked={showTick}
+              onChange={(e) => {
+                setShowTick(e.target.checked)
+              }}
+            />{' '}
+            tick
           </label>
           <label style={{ marginLeft: 8 }}>
-            <input type="checkbox" checked={showPairStats} onChange={e => setShowPairStats(e.target.checked)} /> stat
+            <input
+              type="checkbox"
+              checked={showPairStats}
+              onChange={(e) => {
+                setShowPairStats(e.target.checked)
+              }}
+            />{' '}
+            stat
           </label>
           <label style={{ marginLeft: 8 }}>
-            <input type="checkbox" checked={showWpegPrices} onChange={e => setShowWpegPrices(e.target.checked)} /> wpeg
+            <input
+              type="checkbox"
+              checked={showWpegPrices}
+              onChange={(e) => {
+                setShowWpegPrices(e.target.checked)
+              }}
+            />{' '}
+            wpeg
           </label>
           <button type="button" className="btn" onClick={onCopyClick} title="Copy to clipboard">
             {copied ? 'Copied' : 'Copy'}
