@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import Row from './Row'
 import SortHeader, { type SortKey as HeaderSortKey } from './SortHeader'
 
@@ -215,6 +216,42 @@ export default function Table({
   // Header/Footer refs for viewport-span detection
   const theadRef = useRef<HTMLTableSectionElement | null>(null)
   const tfootRef = useRef<HTMLTableSectionElement | null>(null)
+
+  // Feature flag: enable virtualization only when ?virtual=true is in the URL
+  const enableVirtual = useMemo(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search)
+      return sp.get('virtual') === 'true'
+    } catch {
+      return false
+    }
+  }, [])
+
+  // Compute an estimated row size: ~3x line-height (rows have three lines) + padding/borders
+  const [estimatedRowSize, setEstimatedRowSize] = useState<number>(66)
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    try {
+      const cs = window.getComputedStyle(el)
+      // Try to read line-height in px; fallback to 18 if not parseable
+      const lhRaw = cs.lineHeight
+      const lh = Number.isFinite(parseFloat(lhRaw)) ? parseFloat(lhRaw) : 18
+      // Approximate: 3 lines + vertical paddings/margins/borders (~12px)
+      const est = Math.max(40, Math.round(lh * 3 + 12))
+      if (Math.abs(est - estimatedRowSize) > 1) setEstimatedRowSize(est)
+    } catch {
+      /* no-op */
+    }
+  }, [containerRef])
+
+  // Virtualizer for rows: only render what is visible to drastically reduce DOM nodes
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => containerRef.current,
+    estimateSize: () => estimatedRowSize,
+    overscan: 8,
+  })
 
   useEffect(() => {
     const rootEl = containerRef.current
@@ -615,32 +652,86 @@ export default function Table({
                 <th>Audit</th>
               </tr>
             </thead>
-            <tbody>
-              {rows.map((t, idx) => {
-                const suffix =
-                  title === 'Trending Tokens'
-                    ? 'TREND'
-                    : title === 'New Tokens'
-                      ? 'NEW'
-                      : title.replace(/\s+/g, '-').toUpperCase()
-                const composedId = `${t.id}::${suffix}`
-                return (
-                  <Row
-                    key={composedId}
-                    row={t}
-                    idx={idx}
-                    rowsLen={rows.length}
-                    composedId={composedId}
-                    getRowStatus={getRowStatus}
-                    onOpenRowDetails={onOpenRowDetails}
-                    onToggleRowSubscription={onToggleRowSubscription}
-                    showBurnTooltipIdx={showBurnTooltipIdx}
-                    setShowBurnTooltipIdx={setShowBurnTooltipIdx}
-                    registerRow={registerRowCb}
-                  />
-                )
-              })}
-            </tbody>
+            {enableVirtual ? (
+              <tbody
+                style={{
+                  display: 'block',
+                  position: 'relative',
+                  height: virtualizer.getTotalSize(),
+                  minHeight: 1,
+                }}
+              >
+                {virtualizer.getVirtualItems().map((item) => {
+                  const idx = item.index
+                  const t = rows[idx]
+                  if (!t) return null
+                  const suffix =
+                    title === 'Trending Tokens'
+                      ? 'TREND'
+                      : title === 'New Tokens'
+                        ? 'NEW'
+                        : title.replace(/\s+/g, '-').toUpperCase()
+                  const composedId = `${t.id}::${suffix}`
+                  return (
+                    <Row
+                      key={composedId}
+                      row={t}
+                      idx={idx}
+                      rowsLen={rows.length}
+                      composedId={composedId}
+                      getRowStatus={getRowStatus}
+                      onOpenRowDetails={onOpenRowDetails}
+                      onToggleRowSubscription={onToggleRowSubscription}
+                      showBurnTooltipIdx={showBurnTooltipIdx}
+                      setShowBurnTooltipIdx={setShowBurnTooltipIdx}
+                      registerRow={(el) => {
+                        if (el) {
+                          try {
+                            // absolutely position the <tr> at the virtual offset
+                            el.style.position = 'absolute'
+                            el.style.top = '0'
+                            el.style.left = '0'
+                            el.style.right = '0'
+                            el.style.width = '100%'
+                            el.style.transform = `translateY(${item.start}px)`
+                          } catch {
+                            /* no-op */
+                          }
+                        }
+                        registerRowCb(el, t)
+                      }}
+                    />
+                  )
+                })}
+              </tbody>
+            ) : (
+              <tbody>
+                {rows.map((t, idx) => {
+                  const suffix =
+                    title === 'Trending Tokens'
+                      ? 'TREND'
+                      : title === 'New Tokens'
+                        ? 'NEW'
+                        : title.replace(/\s+/g, '-').toUpperCase()
+                  const composedId = `${t.id}::${suffix}`
+                  return (
+                    <Row
+                      key={composedId}
+                      row={t}
+                      idx={idx}
+                      rowsLen={rows.length}
+                      composedId={composedId}
+                      getRowStatus={getRowStatus}
+                      onOpenRowDetails={onOpenRowDetails}
+                      onToggleRowSubscription={onToggleRowSubscription}
+                      showBurnTooltipIdx={showBurnTooltipIdx}
+                      setShowBurnTooltipIdx={setShowBurnTooltipIdx}
+                      registerRow={registerRowCb}
+                    />
+                  )
+                })}
+              </tbody>
+            )}
             <tfoot ref={tfootRef}>
               <tr>
                 <td

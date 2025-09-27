@@ -554,6 +554,16 @@ export default function TokensPane({
   const loadMore = useCallback(async () => {
     // If no rows are rendered, freeze load-more regardless of which filter caused it.
     if (rowsRef.current.length === 0) return
+    // Respect per-table row limit from clientFilters; 0 or undefined means no limit
+    const limit =
+      clientFilters && typeof clientFilters.limit === 'number' && clientFilters.limit > 0
+        ? clientFilters.limit
+        : null
+    if (limit != null && rowsRef.current.length >= limit) {
+      // We've already reached the cap; stop infinite scroll
+      if (hasMore) setHasMore(false)
+      return
+    }
     if (bothEndsVisible) return
     if (loadingMore || !hasMore) return
     setLoadingMore(true)
@@ -590,10 +600,22 @@ export default function TokensPane({
         type: 'scanner/append',
         payload: { page, scannerPairs: dedupedList },
       } as ScannerAppendAction)
-      // Increase visible count so user sees more rows immediately
-      setVisibleCount((c) => c + 50)
+      // Increase visible count so user sees more rows immediately, but do not exceed limit
+      setVisibleCount((c) => {
+        const limit =
+          clientFilters && typeof clientFilters.limit === 'number' && clientFilters.limit > 0
+            ? clientFilters.limit
+            : Number.POSITIVE_INFINITY
+        const next = c + 50
+        return Math.min(next, limit)
+      })
       setCurrentPage(nextPage)
-      if (dedupedList.length === 0) {
+      // If server returned no items, or we've hit the configured limit, stop auto-loading
+      const limitVal =
+        clientFilters && typeof clientFilters.limit === 'number' && clientFilters.limit > 0
+          ? clientFilters.limit
+          : null
+      if (dedupedList.length === 0 || (limitVal != null && rowsRef.current.length >= limitVal)) {
         setHasMore(false)
       }
     } catch (err) {
@@ -631,6 +653,14 @@ export default function TokensPane({
     if (!root) return
     if (rowsRef.current.length === 0) return
     if (bothEndsVisible) return
+    // Stop binding trigger if a hard limit is configured and we've reached it
+    const hardLimit =
+      clientFilters && typeof clientFilters.limit === 'number' && clientFilters.limit > 0
+        ? clientFilters.limit
+        : null
+    if (hardLimit != null && rows.length >= hardLimit) {
+      return
+    }
     // debounce rebind by 100ms
     if (rebindTimeoutRef.current != null) {
       try {
@@ -930,6 +960,50 @@ export default function TokensPane({
     [persistDisabled],
   )
 
+  // Derive hard limit and reached state for UI/toast
+  const limitValue =
+    clientFilters && typeof clientFilters.limit === 'number' && clientFilters.limit > 0
+      ? clientFilters.limit
+      : null
+  const limitReached = limitValue != null && rows.length >= limitValue
+
+  const handleShowMeHow = useCallback(() => {
+    try {
+      const el = document.getElementById('filter-limit-rows')
+      if (el) {
+        try {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        } catch {
+          /* no-op */
+        }
+        // Starburst/glow animation using Web Animations API
+        try {
+          const originalOutline = el.style.outline
+          const originalOutlineOffset = el.style.outlineOffset
+          el.style.outline = '2px solid rgba(255,215,0,0.9)'
+          el.style.outlineOffset = '2px'
+          const kf = [
+            { boxShadow: '0 0 0 0 rgba(255,215,0,0.9)' },
+            { boxShadow: '0 0 0 14px rgba(255,215,0,0)' },
+          ]
+          const anim = el.animate(kf, { duration: 900, iterations: 3, easing: 'ease-out' })
+          anim.onfinish = () => {
+            try {
+              el.style.outline = originalOutline
+              el.style.outlineOffset = originalOutlineOffset
+            } catch {
+              /* no-op */
+            }
+          }
+        } catch {
+          /* no-op */
+        }
+      }
+    } catch {
+      /* no-op */
+    }
+  }, [])
+
   return (
     <div>
       <Table
@@ -1033,6 +1107,46 @@ export default function TokensPane({
       {!hasMore && (
         <div className="status muted" style={{ fontSize: 12 }}>
           No more results
+        </div>
+      )}
+      {limitReached && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            marginTop: 8,
+            border: '1px solid #374151',
+            background: 'rgba(17,24,39,0.85)',
+            color: '#e5e7eb',
+            borderRadius: 8,
+            padding: '8px 10px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+          }}
+        >
+          <span className="muted" style={{ fontSize: 12 }}>
+            limit reached, increase to load more
+          </span>
+          <button
+            type="button"
+            onClick={handleShowMeHow}
+            style={{
+              background: '#111827',
+              color: '#e5e7eb',
+              border: '1px solid #4b5563',
+              borderRadius: 12,
+              padding: '4px 10px',
+              fontSize: 12,
+              letterSpacing: 0.3,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+            title="Scroll to filters and highlight the Limit control"
+          >
+            show me how
+          </button>
         </div>
       )}
     </div>

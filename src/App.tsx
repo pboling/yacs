@@ -1472,7 +1472,7 @@ function App() {
           </div>
           {/* Row 2: Other filters */}
           <div className="row">
-            <div className="group">
+            <div className="group" id="filter-limit-rows">
               <label>Limit Rows per Table (0 = N/A)</label>
               <input
                 type="number"

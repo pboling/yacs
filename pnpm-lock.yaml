@@ -7,6 +7,9 @@ settings:
 importers:
   .:
     dependencies:
+      '@tanstack/react-virtual':
+        specifier: ^3.10.9
+        version: 3.13.12(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       concurrently:
         specifier: ^9.1.2
         version: 9.2.1
@@ -1057,6 +1060,21 @@ packages:
       }
     cpu: [x64]
     os: [win32]
+
+  '@tanstack/react-virtual@3.13.12':
+    resolution:
+      {
+        integrity: sha512-Gd13QdxPSukP8ZrkbgS2RwoZseTTbQPLnQEn7HY/rqtM+8Zt95f7xKC7N0EsKs7aoz0WzZ+fditZux+F8EzYxA==,
+      }
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+      react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
+  '@tanstack/virtual-core@3.13.12':
+    resolution:
+      {
+        integrity: sha512-1YBOJfRHV4sXUmWsFSf5rQor4Ss82G8dQWLRbnk3GA4jeP8hQt1hxXh0tmflpC0dz3VgEv/1+qwPyLeWkQuPFA==,
+      }
 
   '@testing-library/dom@10.4.1':
     resolution:
@@ -4168,6 +4186,14 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.52.2':
     optional: true
+
+  '@tanstack/react-virtual@3.13.12(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
+    dependencies:
+      '@tanstack/virtual-core': 3.13.12
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
+
+  '@tanstack/virtual-core@3.13.12': {}
 
   '@testing-library/dom@10.4.1':
     dependencies:
