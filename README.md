@@ -68,6 +68,69 @@ This repo includes UI end-to-end tests using Playwright that validate live WebSo
 
 Note on CORS: The dev proxy avoids the need for a CORS extension during development when you use relative URLs as shown above. If you bypass the proxy and hit the public API directly from the browser, a CORS extension may be required.
 
+## Deploying (frontend-only)
+
+This project builds to a static site in dist/ and can be deployed without a server to GitHub Pages, Vercel, or Netlify. The app uses the public API by default in production (API base: https://api-rs.dexcelerate.com). If you need to point to a different API, set the environment variable VITE_API_BASE at build time.
+
+Common steps
+- Build: npm run build (or pnpm run build)
+- Preview locally: npm run preview
+- Output directory: dist
+- Optional env vars at build time:
+  - VITE_API_BASE: https://your-api.example.com (defaults to https://api-rs.dexcelerate.com)
+
+### GitHub Pages
+
+There are two common GitHub Pages modes. Choose one and follow the matching steps.
+
+1) User/Org Pages (https://<user>.github.io) — base path is '/'
+- No Vite base change needed.
+- Build: npm run build
+- Push dist/ to a gh-pages branch or use the Pages workflow (recommended).
+
+2) Project Pages (https://<user>.github.io/<REPO>) — needs a non-root base
+- Build with an explicit base so asset URLs are correct:
+  - npm run build -- --base=/<REPO_NAME>/
+  - Example: npm run build -- --base=/dexcelerate-fe-test/
+- Publish the dist/ directory via GitHub Pages.
+
+SPA fallback (optional): If you later add client-side routing, Pages should serve index.html on unknown paths. Easiest is to upload a 404.html that is a copy of index.html in the published artifact. Many GitHub Pages actions support this automatically; otherwise, copy dist/index.html to dist/404.html before upload.
+
+Example GitHub Actions workflow (project pages)
+- Create .github/workflows/pages.yml with a workflow akin to:
+  - on: push: branches: [main]
+  - jobs.build: checkout → setup-node@v4 → npm ci → npm run build -- --base=/<REPO>/ → actions/upload-pages-artifact@v3 (path: dist)
+  - jobs.deploy: actions/deploy-pages@v4
+- In repo Settings → Pages, select GitHub Actions as the source.
+
+### Vercel (static export)
+
+- Import the repository in Vercel and select Framework Preset: Vite.
+- Build Command: npm run build
+- Output Directory: dist
+- Environment Variables (optional):
+  - VITE_API_BASE=https://api-rs.dexcelerate.com (or your own API)
+- Since this app does not currently use client-side routing, no rewrites are required. If you add routing in the future, enable the SPA fallback by adding a vercel.json with a catch-all rewrite to /index.html.
+
+vercel.json example for SPA fallback (only if/when you add routing)
+{
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
+
+### Netlify
+
+- New Site from Git → pick this repo.
+- Build Command: npm run build
+- Publish Directory: dist
+- Environment Variables (optional):
+  - VITE_API_BASE=https://api-rs.dexcelerate.com (or your own API)
+- SPA fallback (only if/when you add routing): add a _redirects file to publish a catch-all to /index.html.
+
+_redirects
+/* /index.html 200
+
+That’s it. Once deployed, your static build will fetch data from the public API and open a WebSocket to the public endpoint from the browser, with no server needed.
+
 ## Requirements
 
 Runtime behavior (dev and prod): On page load, the app performs an initial GET /scanner to fetch the initial dataset for both tables, and it also opens a WebSocket connection and subscribes to updates (scanner-filter and per-pair/per-pair-stats). This is true in all environments.
