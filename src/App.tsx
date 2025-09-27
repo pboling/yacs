@@ -1564,12 +1564,12 @@ function App() {
               </div>
             </div>
             <div className="group" id="filter-limit-rows">
-              <label>Limit Rows per Table (0 = N/A)</label>
+              <label>Limit per Table (Rows, 0 = N/A)</label>
               <input
                 type="number"
                 min={0}
                 step={50}
-                value={state.filters.limit ?? 200}
+                defaultValue={state.filters.limit ?? 200}
                 onFocus={() => {
                   try {
                     emitFilterFocusStart()
@@ -1577,25 +1577,24 @@ function App() {
                     /* no-op */
                   }
                 }}
-                onBlur={() => {
+                onBlur={(e) => {
                   blurVersionRef.current = (state as unknown as { version?: number }).version ?? 0
                   pendingApplyAfterBlurRef.current = true
-                }}
-                onChange={(e) => {
+                  const v = Math.max(0, Number(e.currentTarget.value))
                   d({
                     type: 'filters/set',
-                    payload: { limit: Math.max(0, Number(e.currentTarget.value)) },
+                    payload: { limit: v },
                   } as FiltersAction)
                 }}
               />
             </div>
             <div className="group">
-              <label>Min Volume ($)</label>
+              <label>Min Volume ($, 0 = N/A)</label>
               <input
                 type="number"
                 min={0}
                 step={100}
-                value={state.filters.minVolume ?? 0}
+                defaultValue={state.filters.minVolume ?? 0}
                 onFocus={() => {
                   try {
                     emitFilterFocusStart()
@@ -1603,11 +1602,9 @@ function App() {
                     /* no-op */
                   }
                 }}
-                onBlur={() => {
+                onBlur={(e) => {
                   blurVersionRef.current = (state as unknown as { version?: number }).version ?? 0
                   pendingApplyAfterBlurRef.current = true
-                }}
-                onChange={(e) => {
                   d({
                     type: 'filters/set',
                     payload: { minVolume: Number(e.currentTarget.value) },
@@ -1616,12 +1613,12 @@ function App() {
               />
             </div>
             <div className="group">
-              <label>Max Age (hours)</label>
+              <label>Max Age (hours, 0 = N/A)</label>
               <input
                 type="number"
                 min={0}
                 step={1}
-                value={state.filters.maxAgeHours ?? ''}
+                defaultValue={state.filters.maxAgeHours ?? ''}
                 placeholder="any"
                 onFocus={() => {
                   try {
@@ -1630,11 +1627,9 @@ function App() {
                     /* no-op */
                   }
                 }}
-                onBlur={() => {
+                onBlur={(e) => {
                   blurVersionRef.current = (state as unknown as { version?: number }).version ?? 0
                   pendingApplyAfterBlurRef.current = true
-                }}
-                onChange={(e) => {
                   const v = e.currentTarget.value
                   d({
                     type: 'filters/set',
@@ -1644,12 +1639,12 @@ function App() {
               />
             </div>
             <div className="group">
-              <label>Min Market Cap ($)</label>
+              <label>Min Market Cap ($, 0 = N/A)</label>
               <input
                 type="number"
                 min={0}
                 step={1000}
-                value={state.filters.minMcap ?? 0}
+                defaultValue={state.filters.minMcap ?? 0}
                 onFocus={() => {
                   try {
                     emitFilterFocusStart()
@@ -1657,11 +1652,9 @@ function App() {
                     /* no-op */
                   }
                 }}
-                onBlur={() => {
+                onBlur={(e) => {
                   blurVersionRef.current = (state as unknown as { version?: number }).version ?? 0
                   pendingApplyAfterBlurRef.current = true
-                }}
-                onChange={(e) => {
                   d({
                     type: 'filters/set',
                     payload: { minMcap: Number(e.currentTarget.value) },
