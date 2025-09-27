@@ -761,6 +761,29 @@ function App() {
                 }
               }
               const validationEnd = performance.now()
+              // WsConsole: log allowed incoming events with brief summaries
+              try {
+                if (event === 'scanner-pairs') {
+                  const pairs = Array.isArray((data as any)?.results?.pairs)
+                    ? (data as any).results.pairs.length
+                    : Array.isArray((data as any)?.pairs)
+                      ? (data as any).pairs.length
+                      : 0
+                  logWsInfo(`[in] scanner-pairs (${pairs})`)
+                } else if (event === 'tick') {
+                  const swapsLen = Array.isArray((data as any)?.swaps) ? (data as any).swaps.length : 0
+                  const chain = (data as any)?.pair?.chain
+                  logWsInfo(`[in] tick swaps=${swapsLen} chain=${String(chain ?? '')}`)
+                } else if (event === 'pair-stats') {
+                  const chain = (data as any)?.pair?.chain
+                  logWsInfo(`[in] pair-stats chain=${String(chain ?? '')}`)
+                } else if (event === 'wpeg-prices') {
+                  const n = (data && typeof data === 'object' && (data as any).prices && typeof (data as any).prices === 'object')
+                    ? Object.keys((data as any).prices).length
+                    : 0
+                  logWsInfo(`[in] wpeg-prices (${n})`)
+                }
+              } catch {}
               // Emit update bus events for components listening to per-key activity (UpdateRate, Row animations)
               try {
                 if (event === 'tick') {
