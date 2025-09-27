@@ -1,8 +1,6 @@
-import NumberCell from './NumberCell'
-import AuditIcons from './AuditIcons'
-import { useEffect, useMemo, useState, useRef } from 'react'
-import { Globe, MessageCircle, Send, ExternalLink, Eye, ChartNoAxesCombined, ArrowUp, ArrowDown } from 'lucide-react'
-import { BurnDetailsTooltip } from './BurnDetailsTooltip'
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
+import Row from './Row'
+import SortHeader, { type SortKey as HeaderSortKey } from './SortHeader'
 
 // Typed helper to find the last index matching a predicate (avoids using Array.prototype.findLastIndex for broader TS lib support)
 function findLastIndexSafe<T>(arr: T[], predicate: (v: T) => boolean): number {
@@ -14,26 +12,6 @@ function findLastIndexSafe<T>(arr: T[], predicate: (v: T) => boolean): number {
 
 // Shared Token type
 import type { Token as TokenRow } from '../models/Token'
-
-type SortKey =
-  | 'tokenName'
-  | 'exchange'
-  | 'priceUsd'
-  | 'mcap'
-  | 'volumeUsd'
-  | 'age'
-  | 'tx'
-  | 'liquidity'
-
-// Age formatter moved to shared helper for reuse
-import { formatAge } from '../helpers/format'
-
-function ellipsed(input: string, length = 5) {
-  if (length <= 0) return ''
-  if (input.length <= length) return input
-  // Use a single Unicode ellipsis character for compact display
-  return input.slice(0, Math.max(1, length - 1)) + '…'
-}
 
 export default function Table({
   title,
@@ -56,8 +34,8 @@ export default function Table({
   rows: TokenRow[]
   loading: boolean
   error: string | null
-  onSort: (k: SortKey) => void
-  sortKey: SortKey
+  onSort: (k: HeaderSortKey) => void
+  sortKey: HeaderSortKey
   sortDir: 'asc' | 'desc'
   onRowVisibilityChange?: (row: TokenRow, visible: boolean) => void
   onScrollStart?: () => void
@@ -150,22 +128,6 @@ export default function Table({
       /* no-op */
     }
   }, [rows, title])
-
-  const SortHeader = ({ label, k }: { label: string; k: SortKey }) => {
-    const active = sortKey === k
-    const upActive = active && sortDir === 'asc'
-    const downActive = active && sortDir === 'desc'
-    const upColor = upActive ? 'var(--accent-up)' : '#6b7280'
-    const downColor = downActive ? 'var(--accent-down)' : '#6b7280'
-    const labelColor = active ? (upActive ? 'var(--accent-up)' : 'var(--accent-down)') : undefined
-    return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: labelColor }}>
-        <span>{label}</span>
-        <ArrowUp size={12} color={upColor} />
-        <ArrowDown size={12} color={downColor} />
-      </span>
-    )
-  }
 
   // Export helpers
   const exportFormatOptions = ['csv', 'json'] as const
@@ -501,6 +463,27 @@ export default function Table({
   // State for burn tooltip hover
   const [showBurnTooltipIdx, setShowBurnTooltipIdx] = useState<number | null>(null)
 
+  // Stable ref-callback to register/unregister a row element with the IntersectionObserver
+  const registerRowCb = useCallback((el: HTMLTableRowElement | null, row: TokenRow) => {
+    const obs = observerRef.current
+    const map = rowMapRef.current
+    if (!el) {
+      for (const [k, v] of map.entries()) {
+        if (v === row) {
+          try {
+            obs?.unobserve(k)
+          } catch {}
+          map.delete(k)
+        }
+      }
+      return
+    }
+    map.set(el, row)
+    try {
+      obs?.observe(el)
+    } catch {}
+  }, [])
+
   return (
     <section>
       <div
@@ -564,112 +547,68 @@ export default function Table({
           <table className="tokens">
             <thead ref={theadRef}>
               <tr>
-                <th
-                  onClick={() => {
-                    onSort('tokenName')
-                  }}
-                  aria-sort={
-                    sortKey === 'tokenName'
-                      ? sortDir === 'asc'
-                        ? 'ascending'
-                        : 'descending'
-                      : 'none'
-                  }
-                >
-                  <SortHeader label="Token" k="tokenName" />
-                </th>
-                <th
-                  onClick={() => {
-                    onSort('exchange')
-                  }}
-                  aria-sort={
-                    sortKey === 'exchange'
-                      ? sortDir === 'asc'
-                        ? 'ascending'
-                        : 'descending'
-                      : 'none'
-                  }
+                <SortHeader
+                  label="Token"
+                  k="tokenName"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={onSort}
+                />
+                <SortHeader
+                  label="Exchange"
+                  k="exchange"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={onSort}
                   style={{ width: 30, minWidth: 30, maxWidth: 30 }}
-                >
-                  <SortHeader label="Exchange" k="exchange" />
-                </th>
-                <th
-                  onClick={() => {
-                    onSort('priceUsd')
-                  }}
-                  aria-sort={
-                    sortKey === 'priceUsd'
-                      ? sortDir === 'asc'
-                        ? 'ascending'
-                        : 'descending'
-                      : 'none'
-                  }
-                >
-                  <SortHeader label="Price" k="priceUsd" />
-                </th>
-                <th
-                  onClick={() => {
-                    onSort('mcap')
-                  }}
-                  aria-sort={
-                    sortKey === 'mcap' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
-                  }
-                >
-                  <SortHeader label="MCap" k="mcap" />
-                </th>
-                <th
-                  onClick={() => {
-                    onSort('volumeUsd')
-                  }}
-                  aria-sort={
-                    sortKey === 'volumeUsd'
-                      ? sortDir === 'asc'
-                        ? 'ascending'
-                        : 'descending'
-                      : 'none'
-                  }
-                >
-                  <SortHeader label="Volume" k="volumeUsd" />
-                </th>
+                />
+                <SortHeader
+                  label="Price"
+                  k="priceUsd"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={onSort}
+                />
+                <SortHeader
+                  label="MCap"
+                  k="mcap"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={onSort}
+                />
+                <SortHeader
+                  label="Volume"
+                  k="volumeUsd"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={onSort}
+                />
                 <th>
                   Chg (5m/1h
                   <br />
                   6h/24h)
                 </th>
-                <th
-                  onClick={() => {
-                    onSort('age')
-                  }}
-                  aria-sort={
-                    sortKey === 'age' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
-                  }
-                >
-                  <SortHeader label="Age" k="age" />
-                </th>
-                <th
-                  onClick={() => {
-                    onSort('tx')
-                  }}
-                  aria-sort={
-                    sortKey === 'tx' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
-                  }
-                >
-                  <SortHeader label="Buys/Sells" k="tx" />
-                </th>
-                <th
-                  onClick={() => {
-                    onSort('liquidity')
-                  }}
-                  aria-sort={
-                    sortKey === 'liquidity'
-                      ? sortDir === 'asc'
-                        ? 'ascending'
-                        : 'descending'
-                      : 'none'
-                  }
-                >
-                  <SortHeader label="Liquidity" k="liquidity" />
-                </th>
+                <SortHeader
+                  label="Age"
+                  k="age"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={onSort}
+                />
+                <SortHeader
+                  label="Buys/Sells"
+                  k="tx"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={onSort}
+                />
+                <SortHeader
+                  label="Liquidity"
+                  k="liquidity"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={onSort}
+                />
                 <th>Audit</th>
               </tr>
             </thead>
@@ -683,264 +622,19 @@ export default function Table({
                       : title.replace(/\s+/g, '-').toUpperCase()
                 const composedId = `${t.id}::${suffix}`
                 return (
-                  <tr
+                  <Row
                     key={composedId}
-                    data-row-id={composedId}
-                    ref={(el) => {
-                      registerRow(el, t)
-                    }}
-                    {...(idx === rows.length - 1
-                      ? ({ 'data-last-row': '1' } as Record<string, string>)
-                      : {})}
-                    {...(idx === Math.max(0, rows.length - 10)
-                      ? ({ 'data-scroll-trigger': '1' } as Record<string, string>)
-                      : {})}
-                  >
-                    <td>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span>
-                            <strong title={`${t.tokenName}/${t.tokenSymbol}/${t.chain}`}>
-                              {ellipsed(t.tokenName.toUpperCase() + '/' + t.tokenSymbol, 6)}
-                            </strong>
-                            /{t.chain}
-                          </span>
-                        </div>
-                        {/* Row 2: subscription indicator + chart icon */}
-                        <div
-                          className="muted"
-                          style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}
-                        >
-                          {(() => {
-                            const s = getRowStatus?.(t)
-                            if (s) {
-                              const size = 14
-                              const color =
-                                s.state === 'subscribed'
-                                  ? 'var(--accent-up)'
-                                  : s.state === 'disabled'
-                                    ? 'var(--accent-down)'
-                                    : undefined // neutral: inherit color
-                              const title = s.tooltip ?? ''
-                              const label =
-                                s.state === 'subscribed'
-                                  ? 'Subscribed (click to disable)'
-                                  : s.state === 'disabled'
-                                    ? 'Disabled (click to re-enable)'
-                                    : 'Unsubscribed (click to disable)'
-                              return (
-                                <span
-                                  title={title || label}
-                                  aria-label={label}
-                                  onClick={() => onToggleRowSubscription?.(t)}
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    cursor: 'pointer',
-                                    color: color,
-                                  }}
-                                >
-                                  <Eye size={size} color={color} />
-                                </span>
-                              )
-                            }
-                            return null
-                          })()}
-                          <button
-                            type="button"
-                            title="Open details"
-                            aria-label="Open details"
-                            onClick={() => {
-                              try {
-                                if (typeof onOpenRowDetails === 'function') {
-                                  ;(onOpenRowDetails as (row: TokenRow) => void)(t)
-                                }
-                              } catch {
-                                /* no-op */
-                              }
-                            }}
-                            style={{
-                              background: 'transparent',
-                              border: 'none',
-                              padding: 0,
-                              margin: 0,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              cursor: 'pointer',
-                              color: 'inherit',
-                            }}
-                          >
-                            <ChartNoAxesCombined size={14} />
-                          </button>
-                        </div>
-                        {/* Row 3: social icons */}
-                        {(() => {
-                          const { linkWebsite, linkTwitter, linkTelegram, linkDiscord } =
-                            t.audit ?? {}
-                          const hasAnyLink = [
-                            linkWebsite,
-                            linkTwitter,
-                            linkTelegram,
-                            linkDiscord,
-                          ].some(Boolean)
-                          if (!hasAnyLink) return null
-                          return (
-                            <div
-                              className="muted"
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 8,
-                                marginTop: 2,
-                              }}
-                            >
-                              {linkWebsite && (
-                                <a
-                                  href={linkWebsite}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title="Website"
-                                  aria-label="Website"
-                                  style={{ color: 'inherit' }}
-                                >
-                                  <Globe size={14} />
-                                </a>
-                              )}
-                              {linkTwitter && (
-                                <a
-                                  href={linkTwitter}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title="Twitter"
-                                  aria-label="Twitter"
-                                  style={{ color: 'inherit' }}
-                                >
-                                  <ExternalLink size={14} />
-                                </a>
-                              )}
-                              {linkTelegram && (
-                                <a
-                                  href={linkTelegram}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title="Telegram"
-                                  aria-label="Telegram"
-                                  style={{ color: 'inherit' }}
-                                >
-                                  <Send size={14} />
-                                </a>
-                              )}
-                              {linkDiscord && (
-                                <a
-                                  href={linkDiscord}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title="Discord"
-                                  aria-label="Discord"
-                                  style={{ color: 'inherit' }}
-                                >
-                                  <MessageCircle size={14} />
-                                </a>
-                              )}
-                            </div>
-                          )
-                        })()}
-                      </div>
-                    </td>
-                    <td style={{ width: 60, minWidth: 60, maxWidth: 60 }}>
-                      <div
-                        title={t.exchange}
-                        style={{
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          width: '100%',
-                          maxWidth: '100%',
-                        }}
-                      >
-                        {t.exchange}
-                      </div>
-                    </td>
-                    <td style={{ width: 50, minWidth: 50, maxWidth: 50 }}>
-                      <div
-                        title={`$${t.priceUsd}`}
-                        style={{
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          width: '100%',
-                          maxWidth: '100%',
-                        }}
-                      >
-                        <NumberCell value={t.priceUsd} prefix="$" />
-                      </div>
-                    </td>
-                    <td>
-                      <NumberCell value={t.mcap} prefix="$" />
-                    </td>
-                    <td>
-                      <NumberCell value={t.volumeUsd} prefix="$" />
-                    </td>
-                    <td>
-                      <NumberCell noFade value={t.priceChangePcs['5m']} suffix="%" />
-                      {' / '}
-                      <NumberCell noFade value={t.priceChangePcs['1h']} suffix="%" />
-                      <br />
-                      <NumberCell noFade value={t.priceChangePcs['6h']} suffix="%" />
-                      {' / '}
-                      <NumberCell noFade value={t.priceChangePcs['24h']} suffix="%" />
-                    </td>
-                    <td>{formatAge(t.tokenCreatedTimestamp)}</td>
-                    <td>
-                      B:
-                      <NumberCell value={t.transactions.buys} />
-                      <br />
-                      S:
-                      <NumberCell value={t.transactions.sells} />
-                    </td>
-                    <td>
-                      <NumberCell value={t.liquidity.current} prefix="$" />
-                    </td>
-                    <td>
-                      <AuditIcons
-                        flags={{
-                          verified: t.audit?.contractVerified,
-                          freezable: t.audit?.freezable,
-                          renounced: t.security?.renounced,
-                          locked: t.security?.locked,
-                          burned: t.security?.burned,
-                          honeypot: t.audit?.honeypot,
-                        }}
-                      />
-                      {t.security?.burned !== undefined && (
-                        <span style={{ position: 'relative', marginLeft: 4 }}>
-                          <span
-                            onMouseEnter={() => {
-                              setShowBurnTooltipIdx(idx)
-                            }}
-                            onMouseLeave={() => {
-                              setShowBurnTooltipIdx(null)
-                            }}
-                            style={{ display: 'inline-block', cursor: 'pointer' }}
-                          >
-                            {/* Burned icon overlay for tooltip trigger */}
-                          </span>
-                          {showBurnTooltipIdx === idx && (
-                            <div style={{ position: 'absolute', top: 22, left: 0, zIndex: 10000 }}>
-                              <BurnDetailsTooltip
-                                totalSupply={t.totalSupply}
-                                burnedSupply={t.burnedSupply}
-                                percentBurned={t.percentBurned}
-                                deadAddress={t.deadAddress}
-                                ownerAddress={t.ownerAddress}
-                                burnedStatus={t.security.burned}
-                              />
-                            </div>
-                          )}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
+                    row={t}
+                    idx={idx}
+                    rowsLen={rows.length}
+                    composedId={composedId}
+                    getRowStatus={getRowStatus}
+                    onOpenRowDetails={onOpenRowDetails}
+                    onToggleRowSubscription={onToggleRowSubscription}
+                    showBurnTooltipIdx={showBurnTooltipIdx}
+                    setShowBurnTooltipIdx={setShowBurnTooltipIdx}
+                    registerRow={registerRowCb}
+                  />
                 )
               })}
             </tbody>

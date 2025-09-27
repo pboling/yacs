@@ -67,6 +67,7 @@ function BoolIcon({
 }
 
 export default function AuditIcons({ flags }: { flags: AuditFlags }) {
+
   const size = 16
   return (
     <div

@@ -472,7 +472,12 @@ function App() {
                   ? (parsed as { data?: unknown }).data
                   : undefined
               try {
-                console.log('WS: message event', event)
+                if (import.meta.env.DEV) {
+                  msgLogCountRef.current += 1
+                  if (msgLogCountRef.current % 20 === 0) {
+                    console.log('WS: message event (sampled)', event)
+                  }
+                }
               } catch {
                 /* noop */
               }
@@ -515,11 +520,21 @@ function App() {
                 return
               }
               try {
-                console.log('WS: dispatching action', { type: (action as { type: string }).type })
+                if (import.meta.env.DEV) {
+                  msgLogCountRef.current += 1
+                  if (msgLogCountRef.current % 20 === 0) {
+                    console.log('WS: dispatching action (sampled)', {
+                      type: (action as { type: string }).type,
+                    })
+                  }
+                }
               } catch {
                 /* no-op */
               }
-              d(action)
+              // Defer dispatch to break up long tasks and allow paint
+              setTimeout(() => {
+                d(action)
+              }, 0)
               // Track readiness of main WS scanner streams per pane
               try {
                 if (event === 'scanner-pairs') {
@@ -761,6 +776,7 @@ function App() {
   const blurVersionRef = useRef<number | null>(null)
   const pendingApplyAfterBlurRef = useRef(false)
   const updatesCounterRef = useRef(0)
+  const msgLogCountRef = useRef(0)
   const [rateSeries, setRateSeries] = useState<number[]>([])
 
   // Dev-only touch to keep rateSeries referenced; retained for potential future diagnostics

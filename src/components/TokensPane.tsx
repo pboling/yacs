@@ -835,6 +835,91 @@ export default function TokensPane({
     }
   }, [])
 
+  // Stable props to prevent unnecessary re-renders in Table
+  const handleBothEndsVisible = useCallback((v: boolean) => {
+    setBothEndsVisible(v)
+  }, [])
+  const handleContainerRef = useCallback((el: HTMLDivElement | null) => {
+    scrollContainerRef.current = el
+  }, [])
+  const handleScrollStart = useCallback(() => {
+    // Enter scrolling; do not alter subscriptions anymore. We only mark scrolling state
+    // and let IntersectionObserver/onScrollStop handle precise visibility transitions.
+    scrollingRef.current = true
+  }, [])
+  const handleToggleRowSubscription = useCallback(
+    (row: TokenRow) => {
+      const dKey = disabledKeyFor(row)
+      if (!dKey) return
+      const set = disabledTokensRef.current
+      const wasDisabled = set.has(dKey)
+      if (wasDisabled) {
+        // Re-enable
+        set.delete(dKey)
+        persistDisabled()
+        try {
+          const ws = wsRef.current
+          const pair = row.pairAddress ?? ''
+          const tokenAddr = (row.tokenAddress ?? '').toLowerCase()
+          const id = toChainId(row.chain)
+          if (pair && tokenAddr) {
+            const keyNum = buildPairKey(pair, tokenAddr, id)
+            try {
+              SubscriptionQueue.setIgnored(keyNum, false, ws)
+            } catch {}
+          }
+        } catch {}
+        return
+      }
+      // Disable: add to set and unsubscribe any active subscriptions for this token
+      set.add(dKey)
+      persistDisabled()
+      try {
+        const ws = wsRef.current
+        const toRemove: string[] = []
+        for (const key of visibleKeysRef.current) {
+          const parts = key.split('|')
+          const token = parts[1]
+          const chain = parts[2]
+          if (`${token.toLowerCase()}|${chain}` === dKey) {
+            toRemove.push(key)
+          }
+        }
+        for (const key of toRemove) {
+          visibleKeysRef.current.delete(key)
+          const [pair, token, chain] = key.split('|')
+          const { next } = markHidden(key)
+          try {
+            SubscriptionQueue.setVisible(key, false, ws)
+          } catch {}
+          if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
+            try {
+              SubscriptionQueue.noteUnsubscribed(key)
+            } catch {}
+            try {
+              sendUnsubscribe(ws, { pair, token, chain })
+            } catch {}
+          }
+        }
+        // Mark this row's keys as ignored (both chain numeric and name variants)
+        try {
+          const pair = row.pairAddress ?? ''
+          const tokenAddr = (row.tokenAddress ?? '').toLowerCase()
+          const id = toChainId(row.chain)
+          if (pair && tokenAddr) {
+            const keyNum = buildPairKey(pair, tokenAddr, id)
+            try {
+              SubscriptionQueue.setIgnored(keyNum, true, ws)
+            } catch {}
+          }
+        } catch {}
+      } catch {
+        /* no-op */
+      }
+    },
+    [persistDisabled],
+  )
+
   return (
     <div>
       <Table
@@ -846,87 +931,11 @@ export default function TokensPane({
         sortKey={sort.key}
         sortDir={sort.dir}
         onRowVisibilityChange={onRowVisibilityChange}
-        onBothEndsVisible={(v) => {
-          setBothEndsVisible(v)
-        }}
-        onContainerRef={(el) => {
-          scrollContainerRef.current = el
-        }}
+        onBothEndsVisible={handleBothEndsVisible}
+        onContainerRef={handleContainerRef}
         onOpenRowDetails={onOpenRowDetails}
-        onScrollStart={() => {
-          // Enter scrolling; do not alter subscriptions anymore. We only mark scrolling state
-          // and let IntersectionObserver/onScrollStop handle precise visibility transitions.
-          scrollingRef.current = true
-        }}
-        onToggleRowSubscription={(row: TokenRow) => {
-          const dKey = disabledKeyFor(row)
-          if (!dKey) return
-          const set = disabledTokensRef.current
-          const wasDisabled = set.has(dKey)
-          if (wasDisabled) {
-            // Re-enable
-            set.delete(dKey)
-            persistDisabled()
-            try {
-              const ws = wsRef.current
-              const pair = row.pairAddress ?? ''
-              const tokenAddr = (row.tokenAddress ?? '').toLowerCase()
-              const id = toChainId(row.chain)
-              if (pair && tokenAddr) {
-                const keyNum = buildPairKey(pair, tokenAddr, id)
-                try {
-                  SubscriptionQueue.setIgnored(keyNum, false, ws)
-                } catch {}
-              }
-            } catch {}
-            return
-          }
-          // Disable: add to set and unsubscribe any active subscriptions for this token
-          set.add(dKey)
-          persistDisabled()
-          try {
-            const ws = wsRef.current
-            const toRemove: string[] = []
-            for (const key of visibleKeysRef.current) {
-              const parts = key.split('|')
-              const token = parts[1]
-              const chain = parts[2]
-              if (`${token.toLowerCase()}|${chain}` === dKey) {
-                toRemove.push(key)
-              }
-            }
-            for (const key of toRemove) {
-              visibleKeysRef.current.delete(key)
-              const [pair, token, chain] = key.split('|')
-              const { next } = markHidden(key)
-              try {
-                SubscriptionQueue.setVisible(key, false, ws)
-              } catch {}
-              if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
-                try {
-                  SubscriptionQueue.noteUnsubscribed(key)
-                } catch {}
-                try {
-                  sendUnsubscribe(ws, { pair, token, chain })
-                } catch {}
-              }
-            }
-            // Mark this row's keys as ignored (both chain numeric and name variants)
-            try {
-              const pair = row.pairAddress ?? ''
-              const tokenAddr = (row.tokenAddress ?? '').toLowerCase()
-              const id = toChainId(row.chain)
-              if (pair && tokenAddr) {
-                const keyNum = buildPairKey(pair, tokenAddr, id)
-                try {
-                  SubscriptionQueue.setIgnored(keyNum, true, ws)
-                } catch {}
-              }
-            } catch {}
-          } catch {
-            /* no-op */
-          }
-        }}
+        onScrollStart={handleScrollStart}
+        onToggleRowSubscription={handleToggleRowSubscription}
         getRowStatus={(row: TokenRow) => {
           const pair = row.pairAddress ?? ''
           const token = row.tokenAddress ?? ''

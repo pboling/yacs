@@ -126,7 +126,7 @@ function ensureQueueWithinQuota(ws: WebSocket | null) {
 
   // 3) If over quota, unsubscribe from head until we fit
   while (inactiveQueue.length > quota) {
-    const key = inactiveQueue.shift() as Key
+    const key = inactiveQueue.shift()!
     inactiveSet.delete(key)
     unsubscribeKey(ws, key)
   }
@@ -140,7 +140,7 @@ function tick(ws: WebSocket | null) {
   if (quota <= 0) {
     // No capacity for inactive subs; purge any queued
     while (inactiveQueue.length > 0) {
-      const k = inactiveQueue.shift() as Key
+      const k = inactiveQueue.shift()!
       inactiveSet.delete(k)
       unsubscribeKey(ws, k)
     }
@@ -212,7 +212,7 @@ export const SubscriptionQueue = {
         const inactive = getInactiveUniverse()
         const quota = computeQuota(inactive.length)
         while (inactiveQueue.length > quota) {
-          const k = inactiveQueue.shift() as Key
+          const k = inactiveQueue.shift()!
           inactiveSet.delete(k)
           unsubscribeKey(ws, k)
         }

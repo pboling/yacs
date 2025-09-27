@@ -20,7 +20,15 @@ import { debugLog as __debugLog__ } from './utils/debug.mjs'
 
 // History helpers for 1-hour rolling window
 const ONE_HOUR_MS = 60 * 60 * 1000
-const __emptyHistory__ = () => ({ ts: [], price: [], mcap: [], volume: [], buys: [], sells: [], liquidity: [] })
+const __emptyHistory__ = () => ({
+  ts: [],
+  price: [],
+  mcap: [],
+  volume: [],
+  buys: [],
+  sells: [],
+  liquidity: [],
+})
 
 export const initialState = {
   byId: {}, // id -> TokenData
@@ -171,7 +179,8 @@ export function tokensReducer(state = initialState, action) {
       // Append to 1-hour rolling history
       const now = Date.now()
       const cutoff = now - ONE_HOUR_MS
-      const prevHist = (token.history && typeof token.history === 'object') ? token.history : __emptyHistory__()
+      const prevHist =
+        token.history && typeof token.history === 'object' ? token.history : __emptyHistory__()
       // Copy arrays to avoid mutating existing references
       const hist = {
         ts: [...prevHist.ts, now],
