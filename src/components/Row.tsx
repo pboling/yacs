@@ -100,6 +100,16 @@ const Row = memo(
                 type="button"
                 className="link"
                 onClick={() => onOpenRowDetails?.(t)}
+                title={`Open details for row #${idx + 1}`}
+                aria-label={`Open details for row #${idx + 1}`}
+                style={{ padding: '0 6px', fontSize: 11 }}
+              >
+                {idx + 1}
+              </button>
+              <button
+                type="button"
+                className="link"
+                onClick={() => onOpenRowDetails?.(t)}
                 title="Open details"
                 aria-label="Open details"
               >
