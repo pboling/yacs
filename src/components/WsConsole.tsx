@@ -22,7 +22,14 @@ export default function WsConsole() {
   )
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const [copied, setCopied] = useState(false)
-  const [errorsOnly, setErrorsOnly] = useState(false)
+  // Filter checkboxes
+  const [showError, setShowError] = useState(true)
+  const [showSub, setShowSub] = useState(true)
+  const [showUnsub, setShowUnsub] = useState(true)
+  const [showScannerPairs, setShowScannerPairs] = useState(true)
+  const [showTick, setShowTick] = useState(true)
+  const [showPairStats, setShowPairStats] = useState(true)
+  const [showWpegPrices, setShowWpegPrices] = useState(true)
 
   // Install global sink so ws.mapper.js can stream here via __WS_CONSOLE_LOG__
   useEffect(() => {
@@ -53,9 +60,26 @@ export default function WsConsole() {
     })
   }, [])
 
+  // Helper to match entry text to filter type
+  function matchesFilter(e: WsConsoleEntry) {
+    // Error level
+    if (e.level === 'error' && !showError) return false
+    // Sub/Unsub detection
+    const txt = e.text.toLowerCase()
+    if (txt.includes('subscribe') && !txt.includes('unsubscribe') && !showSub) return false
+    if (txt.includes('unsubscribe') && !showUnsub) return false
+    // Event types
+    if (txt.includes('scanner-pairs') && !showScannerPairs) return false
+    if (txt.includes('tick') && !showTick) return false
+    if (txt.includes('pair-stats') && !showPairStats) return false
+    if (txt.includes('wpeg-prices') && !showWpegPrices) return false
+    // If none of the above, allow info/success if not filtered out
+    return true
+  }
+
   const visibleEntries = useMemo(() => {
-    return errorsOnly ? entries.filter((e) => e.level === 'error') : entries
-  }, [entries, errorsOnly])
+    return entries.filter(matchesFilter)
+  }, [entries, showError, showSub, showUnsub, showScannerPairs, showTick, showPairStats, showWpegPrices])
 
   const textBlob = useMemo(() => {
     return visibleEntries
@@ -89,6 +113,31 @@ export default function WsConsole() {
       <div className="ws-console__header">
         <div className="ws-console__title">WS Console</div>
         <div className="ws-console__actions">
+          {/* Filter checkboxes */}
+          <label style={{ marginLeft: 8 }}>
+            <input type="checkbox" checked={showError} onChange={e => setShowError(e.target.checked)} /> Err
+          </label>
+          <label style={{ marginLeft: 8 }}>
+            <input type="checkbox" checked={showSub} onChange={e => setShowSub(e.target.checked)} /> Sub
+          </label>
+          <label style={{ marginLeft: 8 }}>
+            <input type="checkbox" checked={showUnsub} onChange={e => setShowUnsub(e.target.checked)} /> Uns
+          </label>
+          <label style={{ marginLeft: 8 }}>
+            <input type="checkbox" checked={showScannerPairs} onChange={e => setShowScannerPairs(e.target.checked)} /> scan
+          </label>
+          <label style={{ marginLeft: 8 }}>
+            <input type="checkbox" checked={showTick} onChange={e => setShowTick(e.target.checked)} /> tick
+          </label>
+          <label style={{ marginLeft: 8 }}>
+            <input type="checkbox" checked={showPairStats} onChange={e => setShowPairStats(e.target.checked)} /> stat
+          </label>
+          <label style={{ marginLeft: 8 }}>
+            <input type="checkbox" checked={showWpegPrices} onChange={e => setShowWpegPrices(e.target.checked)} /> wpeg
+          </label>
+          <button type="button" className="btn" onClick={onCopyClick} title="Copy to clipboard">
+            {copied ? 'Copied' : 'Copy'}
+          </button>
           <button
             type="button"
             className="btn"
@@ -98,20 +147,6 @@ export default function WsConsole() {
             title="Clear history"
           >
             Clear
-          </button>
-          <button
-            type="button"
-            className="btn"
-            aria-pressed={errorsOnly}
-            onClick={() => {
-              setErrorsOnly((v) => !v)
-            }}
-            title="Show only error messages"
-          >
-            Errors Only
-          </button>
-          <button type="button" className="btn" onClick={onCopyClick} title="Copy to clipboard">
-            {copied ? 'Copied' : 'Copy'}
           </button>
         </div>
       </div>
