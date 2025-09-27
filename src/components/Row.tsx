@@ -601,7 +601,12 @@ const Row = memo(
                       aria-label={title2}
                       onClick={() => onToggleRowSubscription?.(t)}
                       ref={eyeRef}
-                      style={{ color: freshColor, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                      style={{
+                        color: freshColor,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
                     >
                       <Eye size={14} />
                       {isEnabled ? <Pause size={12} /> : <Play size={12} />}

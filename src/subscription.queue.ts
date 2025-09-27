@@ -3,8 +3,10 @@
 // Operates on keys in the `pair|token|chain` format.
 // Maintains a FIFO queue of inactive-subscribed tokens and rotates on tick.
 // Quotas:
-// - if inactive loaded < 100 → subscribe all inactive
-// - else → subscribe first 100 + ceil(1/10 of the remaining inactive)
+// - Default (no throttle set): if inactive loaded < 100 → subscribe all inactive
+//   else → subscribe first 100 + ceil(1/10 of the remaining inactive)
+// - When a throttle is set (max total subscriptions), inactive quota becomes:
+//   min(inactiveUniverse.length, max(0, throttleMax - visible.size))
 //
 // Scrolling/visibility policy:
 // - When a key becomes visible, it is subscribed by the pane and removed from the inactive queue.
@@ -13,12 +15,16 @@
 //   the queue fits. This guarantees: visible → active window; just-hidden → tail; rotation → head.
 
 import { sendSubscribe, sendUnsubscribe } from './ws.mapper.js'
+import { getDefaultInactiveBaseLimit } from './subscription.limit.bus.js'
 
 type Key = string // pair|token|chain
 
 const visible = new Set<Key>()
 const ignored = new Set<Key>()
 let universe: Key[] = [] // all keys known to the pane (deduped)
+
+// Global throttle: maximum total subscriptions (visible + inactive). 0 or undefined → use default policy
+let throttleMax: number | undefined = undefined
 
 // FIFO queue of currently subscribed inactive keys
 const inactiveQueue: Key[] = []
@@ -48,10 +54,17 @@ function getInactiveUniverse(): Key[] {
 
 function computeQuota(totalInactive: number) {
   if (totalInactive <= 0) return 0
-  if (totalInactive < 100) return totalInactive
-  const remaining = totalInactive - 100
+  // If throttle is set and > 0, compute inactive quota as (throttle - visibleCount)
+  if (typeof throttleMax === 'number' && throttleMax >= 0) {
+    const allowedInactive = Math.max(0, throttleMax - visible.size)
+    return Math.min(totalInactive, allowedInactive)
+  }
+  // Default heuristic quota (legacy behavior), but with dynamic base limit from global state
+  const base = Math.max(0, getDefaultInactiveBaseLimit())
+  if (totalInactive <= base) return totalInactive
+  const remaining = totalInactive - base
   const extra = Math.ceil(remaining / 10)
-  return 100 + extra
+  return base + extra
 }
 
 function pickOldestByUnsubscribed(keys: Key[], n: number): Key[] {
@@ -126,9 +139,13 @@ function ensureQueueWithinQuota(ws: WebSocket | null) {
 
   // 3) If over quota, unsubscribe from head until we fit
   while (inactiveQueue.length > quota) {
-    const key = inactiveQueue.shift()!
-    inactiveSet.delete(key)
-    unsubscribeKey(ws, key)
+    const key = inactiveQueue.shift()
+    if (key) {
+      inactiveSet.delete(key)
+      unsubscribeKey(ws, key)
+    } else {
+      break
+    }
   }
 }
 
@@ -140,19 +157,30 @@ function tick(ws: WebSocket | null) {
   if (quota <= 0) {
     // No capacity for inactive subs; purge any queued
     while (inactiveQueue.length > 0) {
-      const k = inactiveQueue.shift()!
+      const k = inactiveQueue.shift()
+      if (!k) break
       inactiveSet.delete(k)
       unsubscribeKey(ws, k)
     }
     return
   }
-  // Remove one from head (if any)
+  // If currently under quota, grow by adding one without removing any
+  if (inactiveQueue.length < quota) {
+    const candidates = inactive.filter((k) => !inactiveSet.has(k))
+    const toAdd = pickOldestByUnsubscribed(candidates, 1)[0]
+    if (toAdd) {
+      inactiveQueue.push(toAdd)
+      inactiveSet.add(toAdd)
+      subscribeKey(ws, toAdd)
+    }
+    return
+  }
+  // Otherwise rotate: remove one from head and add one candidate
   const toRemove = inactiveQueue.shift()
   if (toRemove) {
     inactiveSet.delete(toRemove)
     unsubscribeKey(ws, toRemove)
   }
-  // Add next candidate (oldest by lastUnsubscribed) that isn't visible/ignored/already queued
   const candidates = inactive.filter((k) => !inactiveSet.has(k))
   const toAdd = pickOldestByUnsubscribed(candidates, 1)[0]
   if (toAdd) {
@@ -212,7 +240,8 @@ export const SubscriptionQueue = {
         const inactive = getInactiveUniverse()
         const quota = computeQuota(inactive.length)
         while (inactiveQueue.length > quota) {
-          const k = inactiveQueue.shift()!
+          const k = inactiveQueue.shift()
+          if (!k) break
           inactiveSet.delete(k)
           unsubscribeKey(ws, k)
         }
@@ -247,6 +276,18 @@ export const SubscriptionQueue = {
     } catch {}
   },
   tick,
+  setThrottle(max: number | undefined, ws: WebSocket | null) {
+    try {
+      if (typeof max === 'number' && isFinite(max) && max >= 0) {
+        throttleMax = Math.floor(max)
+      } else {
+        throttleMax = undefined
+      }
+      ensureQueueWithinQuota(ws)
+    } catch {
+      // no-op
+    }
+  },
   // For testing/inspection
   __debug__: {
     getUniverse: () => [...universe],

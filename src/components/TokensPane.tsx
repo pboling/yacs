@@ -613,6 +613,7 @@ export default function TokensPane({
     page,
     bothEndsVisible,
     computePairPayloadsSafe,
+    title,
   ])
 
   // Load more when the scroll-trigger row (10 above the last) enters the viewport of the pane
@@ -691,66 +692,63 @@ export default function TokensPane({
   }, [lastRowId, triggerRowId, loadMore, bothEndsVisible])
 
   // Handler wired to Table row visibility
-  const onRowVisibilityChange = useCallback(
-    (row: TokenRow, visible: boolean) => {
-      if (scrollingRef.current) return
-      const pair = row.pairAddress
-      const token = row.tokenAddress
-      if (!pair || !token) return
-      const chain = toChainId(row.chain)
-      const key = buildPairKey(pair, token, chain)
-      const disabledKey = disabledKeyFor(row)
-      // If this token is disabled, ensure it's not tracked as visible and unsubscribe if needed
-      if (disabledKey && disabledTokensRef.current.has(disabledKey)) {
-        if (visibleKeysRef.current.has(key)) {
-          visibleKeysRef.current.delete(key)
-          try {
-            const { next } = markHidden(key)
-            const ws = wsRef.current
-            if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
-              sendUnsubscribe(ws, { pair, token, chain })
-            }
-          } catch {}
-        }
-        return
-      }
-      // If subscription lock is active and this key isn't allowed, stop tracking
-      if (lockActiveRef.current && !lockAllowedRef.current.has(key)) {
-        if (visibleKeysRef.current.delete(key)) {
-          try {
-            markHidden(key)
-          } catch {}
-        }
-        return
-      }
-      const set = visibleKeysRef.current
-      const ws = wsRef.current
-      if (visible) {
-        if (!set.has(key)) {
-          const { prev } = markVisible(key)
-          set.add(key)
-          try {
-            SubscriptionQueue.setVisible(key, true, ws)
-          } catch {}
-          if (prev === 0 && ws && ws.readyState === WebSocket.OPEN) {
-            try {
-              sendSubscribe(ws, { pair, token, chain })
-            } catch {}
+  const onRowVisibilityChange = useCallback((row: TokenRow, visible: boolean) => {
+    if (scrollingRef.current) return
+    const pair = row.pairAddress
+    const token = row.tokenAddress
+    if (!pair || !token) return
+    const chain = toChainId(row.chain)
+    const key = buildPairKey(pair, token, chain)
+    const disabledKey = disabledKeyFor(row)
+    // If this token is disabled, ensure it's not tracked as visible and unsubscribe if needed
+    if (disabledKey && disabledTokensRef.current.has(disabledKey)) {
+      if (visibleKeysRef.current.has(key)) {
+        visibleKeysRef.current.delete(key)
+        try {
+          const { next } = markHidden(key)
+          const ws = wsRef.current
+          if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
+            sendUnsubscribe(ws, { pair, token, chain })
           }
-        }
-      } else {
-        if (set.has(key)) {
-          set.delete(key)
+        } catch {}
+      }
+      return
+    }
+    // If subscription lock is active and this key isn't allowed, stop tracking
+    if (lockActiveRef.current && !lockAllowedRef.current.has(key)) {
+      if (visibleKeysRef.current.delete(key)) {
+        try {
           markHidden(key)
+        } catch {}
+      }
+      return
+    }
+    const set = visibleKeysRef.current
+    const ws = wsRef.current
+    if (visible) {
+      if (!set.has(key)) {
+        const { prev } = markVisible(key)
+        set.add(key)
+        try {
+          SubscriptionQueue.setVisible(key, true, ws)
+        } catch {}
+        if (prev === 0 && ws && ws.readyState === WebSocket.OPEN) {
           try {
-            SubscriptionQueue.setVisible(key, false, ws)
+            sendSubscribe(ws, { pair, token, chain })
           } catch {}
-          // Do not auto-unsubscribe on leaving viewport; let SubscriptionQueue manage inactive rows
         }
       }
-    },
-    [title],
-  )
+    } else {
+      if (set.has(key)) {
+        set.delete(key)
+        markHidden(key)
+        try {
+          SubscriptionQueue.setVisible(key, false, ws)
+        } catch {}
+        // Do not auto-unsubscribe on leaving viewport; let SubscriptionQueue manage inactive rows
+      }
+    }
+  }, [])
 
   // Unsubscribe all visible on unmount (outside dev optional)
   useEffect(() => {

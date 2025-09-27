@@ -455,31 +455,6 @@ export default function Table({
     }
   }, [onScrollStart, onScrollStop])
 
-  function registerRow(el: HTMLTableRowElement | null, row: TokenRow) {
-    const obs = observerRef.current
-    const map = rowMapRef.current
-    if (!el) {
-      // unobserve
-      for (const [k, v] of map.entries()) {
-        if (v === row) {
-          try {
-            obs?.unobserve(k)
-          } catch {
-            /* ignore unobserve errors */
-          }
-          map.delete(k)
-        }
-      }
-      return
-    }
-    map.set(el, row)
-    try {
-      obs?.observe(el)
-    } catch {
-      /* ignore observe errors */
-    }
-  }
-
   // State for burn tooltip hover
   const [showBurnTooltipIdx, setShowBurnTooltipIdx] = useState<number | null>(null)
 

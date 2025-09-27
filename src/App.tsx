@@ -39,6 +39,7 @@ import { emitFilterFocusStart, emitFilterApplyComplete } from './filter.bus.js'
 import { fetchScanner } from './scanner.client.js'
 import { getCount } from './visibility.bus.js'
 import { SubscriptionQueue } from './subscription.queue'
+import { setDefaultInactiveBaseLimit } from './subscription.limit.bus.js'
 import { emitUpdate } from './updates.bus'
 import { engageSubscriptionLock, releaseSubscriptionLock } from './subscription.lock.bus.js'
 import { onSubscriptionLockChange, isSubscriptionLockActive } from './subscription.lock.bus.js'
@@ -80,6 +81,10 @@ function TopBar({
   consoleVisible,
   onToggleConsole,
   onOpenDetail,
+  subThrottle,
+  setSubThrottle,
+  subBaseLimit,
+  setSubBaseLimit,
 }: {
   title: string
   version: number
@@ -96,6 +101,10 @@ function TopBar({
   consoleVisible: boolean
   onToggleConsole: () => void
   onOpenDetail: () => void
+  subThrottle: number
+  setSubThrottle: (n: number) => void
+  subBaseLimit: number
+  setSubBaseLimit: (n: number) => void
 }) {
   return (
     <div
@@ -177,6 +186,95 @@ function TopBar({
         </div>
         {/* Row B: Subs and WS event counters */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {/* Throttle selector: controls total allowed subscriptions */}
+          <label
+            className="muted"
+            title="Throttle: maximum total subscriptions (visible + inactive)."
+            style={{
+              fontSize: 11,
+              padding: '2px 6px',
+              border: '1px solid #4b5563',
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.06)',
+              letterSpacing: 0.5,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            Throttle
+            <input
+              type="number"
+              min={0}
+              max={1000}
+              step={50}
+              list="sub-throttle-options"
+              value={subThrottle}
+              onChange={(e) => {
+                const n = Math.max(0, Math.min(1000, Number(e.currentTarget.value) || 0))
+                setSubThrottle(n)
+              }}
+              style={{
+                width: 80,
+                background: 'transparent',
+                border: '1px solid #374151',
+                color: '#e5e7eb',
+                borderRadius: 8,
+                padding: '2px 6px',
+              }}
+            />
+            <datalist id="sub-throttle-options">
+              <option value="50" />
+              <option value="100" />
+              <option value="150" />
+              <option value="200" />
+              <option value="250" />
+              <option value="300" />
+              <option value="400" />
+              <option value="500" />
+              <option value="600" />
+              <option value="700" />
+              <option value="800" />
+              <option value="900" />
+              <option value="1000" />
+            </datalist>
+          </label>
+          <label
+            className="muted"
+            style={{
+              fontSize: 11,
+              padding: '2px 6px',
+              border: '1px solid #4b5563',
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.06)',
+              letterSpacing: 0.5,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+            title="Default base for inactive subs when Throttle is unset"
+          >
+            Base Limit
+            <input
+              type="number"
+              min={0}
+              max={1000}
+              step={25}
+              value={subBaseLimit}
+              onChange={(e) => {
+                const n = Math.max(0, Math.min(1000, Number(e.currentTarget.value) || 0))
+                ;(setSubBaseLimit as (n: number) => void)(n)
+              }}
+              style={{
+                width: 80,
+                background: 'transparent',
+                border: '1px solid #374151',
+                color: '#e5e7eb',
+                borderRadius: 8,
+                padding: '2px 6px',
+              }}
+            />
+          </label>
           <span
             className="muted"
             title="Active subscriptions across all panes"
@@ -520,6 +618,10 @@ function App() {
               openTimeout = null
             }
             console.log('WS: open', { url })
+            // apply current subscription throttle to queue on open
+            try {
+              SubscriptionQueue.setThrottle(subThrottle, ws)
+            } catch {}
             // expose WS to panes so they can send pair subscriptions without prop-drilling
             try {
               const glb = window as unknown as { __APP_WS__?: WebSocket }
@@ -541,11 +643,31 @@ function App() {
           }
           ws.onerror = (ev) => {
             try {
-              // @ts-expect-error WebSocketEvent typing minimal here
-              const errMsg = (ev as unknown as { message?: unknown })?.message
-              const safeMsg = typeof errMsg === 'string' ? errMsg : ''
+              const safeMsg = (() => {
+                try {
+                  const maybe = (ev as unknown as { message?: unknown; type?: unknown })?.message
+                  if (typeof maybe === 'string') return maybe
+                  const maybeType = (ev as unknown as { type?: unknown })?.type
+                  if (typeof maybeType === 'string') return `Event:${maybeType}`
+                  // Avoid base-to-string on plain objects
+                  if (typeof ev === 'string') return ev
+                  // As a last resort, try a compact JSON if possible
+                  if (ev && typeof ev === 'object') {
+                    try {
+                      return JSON.stringify(ev)
+                    } catch {
+                      return '[event]'
+                    }
+                  }
+                  return String(ev)
+                } catch {
+                  return '[event]'
+                }
+              })()
               logWsError('WebSocket error ' + safeMsg)
-            } catch {}
+            } catch {
+              /* no-op */
+            }
           }
           ws.onclose = (ev) => {
             try {
@@ -783,7 +905,8 @@ function App() {
               // Pair and pair-stats subscriptions are now gated by viewport
               // visibility inside TokensPane to reduce WS traffic.
             } catch (err) {
-              console.error('WS: failed to process message', err)
+              const safe = err instanceof Error ? err.message : String(err)
+              console.error('WS: failed to process message', safe)
             }
           }
           ws.onerror = () => {
@@ -932,6 +1055,36 @@ function App() {
   }
   // Live subscriptions count (polled)
   const [subCount, setSubCount] = useState<number>(0)
+  // Global throttle for total subscriptions (visible + inactive)
+  const [subThrottle, setSubThrottle] = useState<number>(300)
+  // Dynamic base limit used when no throttle is applied (affects default heuristic)
+  const [subBaseLimit, setSubBaseLimit] = useState<number>(100)
+  useEffect(() => {
+    try {
+      const safe = Math.max(0, Math.min(1000, subThrottle || 0))
+      const anyWin = window as unknown as { __APP_WS__?: WebSocket | null }
+      const ws = anyWin.__APP_WS__ ?? null
+      SubscriptionQueue.setThrottle(safe, ws)
+    } catch {
+      /* no-op */
+    }
+  }, [subThrottle])
+  useEffect(() => {
+    try {
+      const safe = Math.max(0, Math.min(1000, subBaseLimit || 0))
+      setDefaultInactiveBaseLimit(safe)
+    } catch {
+      /* no-op */
+    }
+  }, [subBaseLimit])
+  // Touch setter once to ensure it is recognized as used in all analysis passes
+  useEffect(() => {
+    try {
+      setSubBaseLimit((n) => n)
+    } catch {
+      /* no-op */
+    }
+  }, [])
   useEffect(() => {
     let raf = 0
     let timer: number | null = null
@@ -1259,6 +1412,14 @@ function App() {
           onOpenDetail={() => {
             setDetailRow(null)
             setDetailOpen(true)
+          }}
+          subThrottle={subThrottle}
+          setSubThrottle={(n) => {
+            setSubThrottle(n)
+          }}
+          subBaseLimit={subBaseLimit}
+          setSubBaseLimit={(n: number) => {
+            ;(setSubBaseLimit as (n: number) => void)(n)
           }}
         />
         {/* Filters Bar */}

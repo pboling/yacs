@@ -5,7 +5,8 @@ export default function SubscriptionDebugOverlay({ align = 'left' }: { align?: '
       style={{
         position: 'fixed',
         bottom: 8,
-        [align]: 8 as any,
+        left: align === 'left' ? 8 : undefined,
+        right: align === 'right' ? 8 : undefined,
         zIndex: 9999,
         fontSize: 11,
         background: 'rgba(17,24,39,0.85)',
