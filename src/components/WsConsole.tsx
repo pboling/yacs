@@ -22,6 +22,7 @@ export default function WsConsole() {
   )
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const [copied, setCopied] = useState(false)
+  const [errorsOnly, setErrorsOnly] = useState(false)
 
   // Install global sink so ws.mapper.js can stream here via __WS_CONSOLE_LOG__
   useEffect(() => {
@@ -52,14 +53,18 @@ export default function WsConsole() {
     })
   }, [])
 
+  const visibleEntries = useMemo(() => {
+    return errorsOnly ? entries.filter((e) => e.level === 'error') : entries
+  }, [entries, errorsOnly])
+
   const textBlob = useMemo(() => {
-    return entries
+    return visibleEntries
       .map((e) => {
         const ts = new Date(e.ts).toISOString()
         return `[${ts}] ${e.level.toUpperCase()} ${e.text}`
       })
       .join('\n')
-  }, [entries])
+  }, [visibleEntries])
 
   function onCopyClick() {
     // Wrap the async clipboard call to satisfy no-misused-promises on onClick
@@ -94,16 +99,27 @@ export default function WsConsole() {
           >
             Clear
           </button>
+          <button
+            type="button"
+            className="btn"
+            aria-pressed={errorsOnly}
+            onClick={() => {
+              setErrorsOnly((v) => !v)
+            }}
+            title="Show only error messages"
+          >
+            Errors Only
+          </button>
           <button type="button" className="btn" onClick={onCopyClick} title="Copy to clipboard">
             {copied ? 'Copied' : 'Copy'}
           </button>
         </div>
       </div>
       <div ref={scrollerRef} className="ws-console__scroll">
-        {entries.length === 0 ? (
+        {visibleEntries.length === 0 ? (
           <div className="ws-console__empty">No messages yet</div>
         ) : (
-          entries.map((e) => {
+          visibleEntries.map((e) => {
             const colorStyle =
               e.level === 'error'
                 ? { color: 'var(--accent-down)' }
