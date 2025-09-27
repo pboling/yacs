@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import NumberCell from './NumberCell'
 import AuditIcons from './AuditIcons'
-import { Globe, Eye, ChartNoAxesCombined } from 'lucide-react'
+import { Globe, Eye, ChartNoAxesCombined, Play, Pause } from 'lucide-react'
 import { formatAge } from '../helpers/format'
 import type { Token as TokenRow } from '../models/Token'
 import { onUpdate } from '../updates.bus'
@@ -584,20 +584,30 @@ const Row = memo(
               : freshness === 'degraded'
                 ? 'var(--accent-down)'
                 : '#e5e7eb'
-          const label = `Fresh (${freshness})`
           return (
             <>
               <td style={{ textAlign: 'center' }}>
-                <button
-                  type="button"
-                  title={label}
-                  aria-label={label}
-                  onClick={() => onToggleRowSubscription?.(t)}
-                  ref={eyeRef}
-                  style={{ color: freshColor }}
-                >
-                  <Eye size={14} />
-                </button>
+                {(() => {
+                  const st2 = getRowStatus?.(t)
+                  const isEnabled = st2?.state === 'subscribed'
+                  const instruction = isEnabled
+                    ? 'click to pause data subscription for this token'
+                    : 'click to re-enable data subscription for this token'
+                  const title2 = instruction
+                  return (
+                    <button
+                      type="button"
+                      title={title2}
+                      aria-label={title2}
+                      onClick={() => onToggleRowSubscription?.(t)}
+                      ref={eyeRef}
+                      style={{ color: freshColor, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                    >
+                      <Eye size={14} />
+                      {isEnabled ? <Pause size={12} /> : <Play size={12} />}
+                    </button>
+                  )
+                })()}
               </td>
               <td>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
