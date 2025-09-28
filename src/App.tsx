@@ -698,12 +698,7 @@ function App() {
                 typeof parsed?.data === 'object' && parsed?.data !== null ? parsed.data : undefined
               // Validation
               const validationStart = performance.now()
-              // Increment event counters immediately upon recognizing the event name,
-              // regardless of payload validity. Validation below may early-return
-              // for malformed payloads, but we still want to reflect that an event
-              // of this type arrived.
               try {
-                bumpEventCount(event)
                 // Debug: Log tick events specifically to help diagnose the issue
                 if (event === 'tick') {
                   console.log('[DEBUG] Tick event received:', parsed)
@@ -736,6 +731,10 @@ function App() {
                   console.error('WS: invalid tick payload: expected { pair, swaps[] }', parsed)
                   return
                 }
+                // Only increment counter for valid tick events
+                try {
+                  bumpEventCount(event)
+                } catch {}
               } else if (event === 'pair-stats') {
                 let ok = false
                 if (data && typeof data === 'object') {
