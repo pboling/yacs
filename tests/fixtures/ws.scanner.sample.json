@@ -1,0 +1,34 @@
+{
+  "id": "0x172fcD41E0913e95784454622d1c3724f546f849",
+  "pairAddress": "0x172fcD41E0913e95784454622d1c3724f546f849",
+  "chain": "BSC",
+  "exchange": "0x1b81D678ffb9C0263b24A97847620C99d213eB14",
+  "priceUsd": 1.0002675518428743,
+  "volumeUsd": 254956893.44,
+  "mcap": 7983866789.73,
+  "priceChangePcs": {
+    "5m": 0.01,
+    "1h": 0.02,
+    "6h": 0,
+    "24h": -0.02
+  },
+  "transactions": {
+    "buys": 159050,
+    "sells": 192081
+  },
+  "audit": {
+    "mintable": false,
+    "freezable": false,
+    "honeypot": false,
+    "contractVerified": true
+  },
+  "security": {
+    "renounced": false,
+    "locked": false
+  },
+  "tokenCreatedTimestamp": "2022-05-10T01:02:14.000Z",
+  "liquidity": {
+    "current": 25274183.72,
+    "changePc": 312.54
+  }
+}
