@@ -811,7 +811,11 @@ export default function Table({
                   colSpan={10}
                   className="muted"
                   style={{ fontSize: 12, textAlign: 'right', padding: '6px 8px' }}
-                  data-testid={`rows-count-${title === 'Trending Tokens' ? 'trending' : title === 'New Tokens' ? 'new' : title.replace(/\s+/g, '-').toLowerCase()}`}
+                  {...(title === 'Trending Tokens'
+                    ? { 'data-testid': 'rows-count-trending' }
+                    : title !== 'New Tokens'
+                      ? { 'data-testid': `rows-count-${title.replace(/\s+/g, '-').toLowerCase()}` }
+                      : {})}
                 >
                   Rows (non-hidden): <strong>{rows.length}</strong>
                 </td>

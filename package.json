@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "pnpm run test && vite",
+    "dev": "pnpm run format && pnpm run test && vite",
     "server": "TEST_FAST=0 node server/index.js",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

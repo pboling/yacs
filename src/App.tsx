@@ -23,12 +23,9 @@ import { initialState, tokensReducer } from './tokens.reducer.js'
 import {
   buildScannerSubscription,
   buildScannerUnsubscription,
-  buildPairSubscription,
-  buildPairStatsSubscription,
-  buildPairUnsubscription,
-  buildPairStatsUnsubscription,
   mapIncomingMessageToAction,
   isAllowedOutgoingEvent,
+  wsSendSubscribe,
 } from './ws.mapper.js'
 import { computePairPayloads } from './ws.subs.js'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -259,7 +256,7 @@ function TopBar({
           {/* Throttle selector: controls total allowed subscriptions */}
           <label
             className="muted"
-            title="Base Limit: maximum invisible subscriptions when Throttle is unset."
+            title="Default base for invisible subs when Throttle is unset"
             style={{
               fontSize: 11,
               padding: '2px 6px',
@@ -271,7 +268,6 @@ function TopBar({
               alignItems: 'center',
               gap: 6,
             }}
-            title="Default base for invisible subs when Throttle is unset"
           >
             Throttle
             <input
@@ -475,16 +471,12 @@ function App() {
     event: 'scanner-filter'
     data: GetScannerResultParams
   }
-  const buildPairSubscriptionSafe = buildPairSubscription as unknown as (p: {
+  // Typed alias for the JS helper that sends both pair + pair-stats subscribe messages
+  const wsSendSubscribeSafe = wsSendSubscribe as unknown as (p: {
     pair: string
     token: string
     chain: string
-  }) => { event: 'subscribe-pair'; data: { pair: string; token: string; chain: string } }
-  const buildPairStatsSubscriptionSafe = buildPairStatsSubscription as unknown as (p: {
-    pair: string
-    token: string
-    chain: string
-  }) => { event: 'subscribe-pair-stats'; data: { pair: string; token: string; chain: string } }
+  }) => void
   const buildScannerUnsubscriptionSafe = buildScannerUnsubscription as unknown as (
     params: GetScannerResultParams,
   ) => { event: 'unsubscribe-scanner-filter'; data: GetScannerResultParams }
@@ -749,6 +741,10 @@ function App() {
                   console.error('WS: invalid pair-stats payload: expected pair.pairAddress', parsed)
                   return
                 }
+                // Only increment counter for valid pair-stats events
+                try {
+                  bumpEventCount(event)
+                } catch {}
               }
               const validationEnd = performance.now()
               // WsConsole: log allowed incoming events with brief summaries
@@ -997,8 +993,7 @@ function App() {
     d,
     buildScannerSubscriptionSafe,
     mapIncomingMessageToActionSafe,
-    buildPairSubscriptionSafe,
-    buildPairStatsSubscriptionSafe,
+    wsSendSubscribeSafe,
     computePairPayloadsSafe,
     buildScannerUnsubscriptionSafe,
   ])
@@ -1547,17 +1542,10 @@ function App() {
     const token = row.tokenAddress ?? ''
     if (pair && token) {
       const chain = row.chain
-      // Ensure any existing subs for this pair are cleared, then add normal subs for the modal
-      if (!UNSUBSCRIPTIONS_DISABLED) {
-        wsSend(buildPairUnsubscription({ pair, token, chain }))
-        wsSend(buildPairStatsUnsubscription({ pair, token, chain }))
-      }
-      wsSend(buildPairSubscriptionSafe({ pair, token, chain }))
-      wsSend(buildPairStatsSubscriptionSafe({ pair, token, chain }))
+      wsSendSubscribeSafe({ pair, token, chain })
     }
   }
   const closeDetails = () => {
-    const row = detailRow
     setDetailRow(null)
     setDetailOpen(false)
     try {
@@ -1576,18 +1564,6 @@ function App() {
       wsSend(buildScannerSubscriptionSafe({ ...newFilters, page: NEW_PAGE }))
     } catch {
       /* no-op */
-    }
-    // Clean up modal-specific pair subscriptions; panes will manage visibility-based subs
-    if (row) {
-      const pair = row.pairAddress ?? ''
-      const token = row.tokenAddress ?? ''
-      if (pair && token) {
-        const chain = row.chain
-        if (!UNSUBSCRIPTIONS_DISABLED) {
-          wsSend(buildPairUnsubscription({ pair, token, chain }))
-          wsSend(buildPairStatsUnsubscription({ pair, token, chain }))
-        }
-      }
     }
   }
 

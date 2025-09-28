@@ -132,6 +132,23 @@ export function sendSubscribe(ws, { pair, token, chain }) {
     } catch {}
   }
 }
+
+// Convenience wrapper that looks up the global shared WebSocket and delegates
+// to `sendSubscribe`. This lets callers avoid plumbing the WS instance.
+export function wsSendSubscribe({ pair, token, chain }) {
+  try {
+    // In browser: use window.__APP_WS__; in other envs, fall back to globalThis.__APP_WS__ if present
+    const anyWin = typeof window !== 'undefined' ? window : globalThis
+    const ws = anyWin && anyWin.__APP_WS__ ? anyWin.__APP_WS__ : null
+    // Delegate to the existing helper which performs readiness checks and logging
+    sendSubscribe(ws, { pair, token, chain })
+  } catch (err) {
+    try {
+      console.error('[ws.wsSendSubscribe] delegation failed', err)
+    } catch {}
+  }
+}
+
 export function sendUnsubscribe(ws, { pair, token, chain }) {
   if (UNSUBSCRIPTIONS_DISABLED) {
     try {

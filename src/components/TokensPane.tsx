@@ -1442,6 +1442,12 @@ export default function TokensPane({
           visibleKeysRef.current = nextSet
         }}
       />
+      {/* Canary for test: show row count for New Tokens pane */}
+      {title === 'New Tokens' && (
+        <div data-testid="rows-count-new" style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+          Rows: {rows.length}
+        </div>
+      )}
       <div ref={sentinelRef} style={{ height: 1 }} />
       {loadingMore && <div className="status">Loading more…</div>}
       {limitReached && (
