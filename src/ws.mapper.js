@@ -99,36 +99,42 @@ export const UNSUBSCRIPTIONS_DISABLED = true
 export function sendSubscribe(ws, { pair, token, chain }) {
   const key = String(pair) + '|' + String(token) + '|' + String(chain)
   try {
-    ws &&
-      ws.readyState === 1 &&
-      isAllowedOutgoingEvent('subscribe-pair') &&
-      (ws.send(JSON.stringify(buildPairSubscription({ pair, token, chain }))),
-      __wsLog('success', 'subscribe-pair sent ' + key))
+    if (ws && ws.readyState === 1 && isAllowedOutgoingEvent('subscribe-pair')) {
+      try {
+        ws.send(JSON.stringify(buildPairSubscription({ pair, token, chain })))
+        __wsLog('success', 'subscribe-pair sent ' + key)
+      } catch (err) {
+        console.error('[ws.sendSubscribe] subscribe-pair failed', err)
+        __wsLog(
+          'error',
+          'subscribe-pair failed ' + key + ' — ' + String(err && err.message ? err.message : err),
+        )
+      }
+    }
   } catch (err) {
     try {
-      console.error('[ws.sendSubscribe] subscribe-pair failed', err)
-      __wsLog(
-        'error',
-        'subscribe-pair failed ' + key + ' — ' + String(err && err.message ? err.message : err),
-      )
+      console.error('[ws.sendSubscribe] subscribe-pair check failed', err)
     } catch {}
   }
   try {
-    ws &&
-      ws.readyState === 1 &&
-      isAllowedOutgoingEvent('subscribe-pair-stats') &&
-      (ws.send(JSON.stringify(buildPairStatsSubscription({ pair, token, chain }))),
-      __wsLog('success', 'subscribe-pair-stats sent ' + key))
+    if (ws && ws.readyState === 1 && isAllowedOutgoingEvent('subscribe-pair-stats')) {
+      try {
+        ws.send(JSON.stringify(buildPairStatsSubscription({ pair, token, chain })))
+        __wsLog('success', 'subscribe-pair-stats sent ' + key)
+      } catch (err) {
+        console.error('[ws.sendSubscribe] subscribe-pair-stats failed', err)
+        __wsLog(
+          'error',
+          'subscribe-pair-stats failed ' +
+            key +
+            ' — ' +
+            String(err && err.message ? err.message : err),
+        )
+      }
+    }
   } catch (err) {
     try {
-      console.error('[ws.sendSubscribe] subscribe-pair-stats failed', err)
-      __wsLog(
-        'error',
-        'subscribe-pair-stats failed ' +
-          key +
-          ' — ' +
-          String(err && err.message ? err.message : err),
-      )
+      console.error('[ws.sendSubscribe] subscribe-pair-stats check failed', err)
     } catch {}
   }
 }
@@ -159,36 +165,42 @@ export function sendUnsubscribe(ws, { pair, token, chain }) {
   }
   const key = String(pair) + '|' + String(token) + '|' + String(chain)
   try {
-    ws &&
-      ws.readyState === 1 &&
-      isAllowedOutgoingEvent('unsubscribe-pair') &&
-      (ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain }))),
-      __wsLog('info', 'unsubscribe-pair sent ' + key))
+    if (ws && ws.readyState === 1 && isAllowedOutgoingEvent('unsubscribe-pair')) {
+      try {
+        ws.send(JSON.stringify(buildPairUnsubscription({ pair, token, chain })))
+        __wsLog('info', 'unsubscribe-pair sent ' + key)
+      } catch (err) {
+        console.error('[ws.sendUnsubscribe] unsubscribe-pair failed', err)
+        __wsLog(
+          'error',
+          'unsubscribe-pair failed ' + key + ' — ' + String(err && err.message ? err.message : err),
+        )
+      }
+    }
   } catch (err) {
     try {
-      console.error('[ws.sendUnsubscribe] unsubscribe-pair failed', err)
-      __wsLog(
-        'error',
-        'unsubscribe-pair failed ' + key + ' — ' + String(err && err.message ? err.message : err),
-      )
+      console.error('[ws.sendUnsubscribe] unsubscribe-pair check failed', err)
     } catch {}
   }
   try {
-    ws &&
-      ws.readyState === 1 &&
-      isAllowedOutgoingEvent('unsubscribe-pair-stats') &&
-      (ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain }))),
-      __wsLog('info', 'unsubscribe-pair-stats sent ' + key))
+    if (ws && ws.readyState === 1 && isAllowedOutgoingEvent('unsubscribe-pair-stats')) {
+      try {
+        ws.send(JSON.stringify(buildPairStatsUnsubscription({ pair, token, chain })))
+        __wsLog('info', 'unsubscribe-pair-stats sent ' + key)
+      } catch (err) {
+        console.error('[ws.sendUnsubscribe] unsubscribe-pair-stats failed', err)
+        __wsLog(
+          'error',
+          'unsubscribe-pair-stats failed ' +
+            key +
+            ' — ' +
+            String(err && err.message ? err.message : err),
+        )
+      }
+    }
   } catch (err) {
     try {
-      console.error('[ws.sendUnsubscribe] unsubscribe-pair-stats failed', err)
-      __wsLog(
-        'error',
-        'unsubscribe-pair-stats failed ' +
-          key +
-          ' — ' +
-          String(err && err.message ? err.message : err),
-      )
+      console.error('[ws.sendUnsubscribe] unsubscribe-pair-stats check failed', err)
     } catch {}
   }
 }

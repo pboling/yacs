@@ -359,6 +359,9 @@ interface State {
     maxAgeHours?: number | null
     minMcap?: number
     limit?: number
+    tokenQuery?: string
+    includeStale?: boolean
+    includeDegraded?: boolean
   }
 }
 
@@ -366,6 +369,18 @@ interface State {
 interface ScannerPairsAction {
   type: 'scanner/pairs'
   payload: { page: number; scannerPairs: unknown[] }
+}
+interface ScannerWsAction {
+  type: 'scanner/ws'
+  payload: { page: number; scannerPairs: unknown[] }
+}
+interface ScannerPairsTokensAction {
+  type: 'scanner/pairsTokens'
+  payload: { page: number; tokens: TokenRow[] }
+}
+interface ScannerAppendTokensAction {
+  type: 'scanner/appendTokens'
+  payload: { page: number; tokens: TokenRow[] }
 }
 
 interface TickAction {
@@ -392,10 +407,21 @@ interface FiltersAction {
     maxAgeHours?: number | null
     minMcap?: number
     limit?: number
+    tokenQuery?: string
+    includeStale?: boolean
+    includeDegraded?: boolean
   }
 }
 
-type Action = ScannerPairsAction | TickAction | PairStatsAction | FiltersAction
+type Action =
+  | ScannerPairsAction
+  | ScannerWsAction
+  | ScannerPairsTokensAction
+  | ScannerAppendTokensAction
+  | ScannerAppendAction
+  | TickAction
+  | PairStatsAction
+  | FiltersAction
 
 /**
  * Table component
@@ -638,7 +664,7 @@ function App() {
                   const maybeType = (ev as unknown as { type?: unknown })?.type
                   if (typeof maybeType === 'string') return `Event:${maybeType}`
                   // Avoid base-to-string on plain objects
-                  if (typeof ev === 'string') return ev
+                  if (typeof (ev as unknown) === 'string') return ev as unknown as string
                   // As a last resort, try a compact JSON if possible
                   if (ev && typeof ev === 'object') {
                     try {
@@ -828,9 +854,13 @@ function App() {
                             },
                           )
                         } catch {}
-                        throw new Error('Invalid WS tick: missing token1Address/token or chain')
+                        // Don't throw here (was previously caught locally); log and abandon handling
+                        return
                       }
-                      const key = buildTickKey(tokenStr, chainVal)
+                      // Normalize token to lowercase for consistent keying across the app
+                      const tokenKey =
+                        typeof tokenStr === 'string' ? tokenStr.toLowerCase() : tokenStr
+                      const key = buildTickKey(tokenKey, chainVal)
                       emitUpdate({ key, type: 'tick', data })
                     }
                   }
@@ -847,7 +877,8 @@ function App() {
                           ? chainUnknown
                           : undefined
                       if (tokenStr && chainVal !== undefined) {
-                        const key = buildTickKey(tokenStr, chainVal)
+                        const tokenKey = tokenStr.toLowerCase()
+                        const key = buildTickKey(tokenKey, chainVal)
                         emitUpdate({ key, type: 'pair-stats', data })
                       }
                     }
@@ -1138,7 +1169,7 @@ function App() {
         const token1 = (pairObj?.token1Address as string) || (pairObj?.token as string)
         const chainVal = pairObj?.chain as string | number | undefined
         if (token1 && chainVal !== undefined) {
-          const key = buildTickKey(token1, chainVal)
+          const key = buildTickKey(token1.toLowerCase(), chainVal)
           emitUpdate({ key, type: 'tick', data: parsed.data })
         }
       } else if (parsed.event === 'pair-stats') {
@@ -1147,11 +1178,13 @@ function App() {
         const token1 = pairObj?.token1Address as string | undefined
         const chainVal = pairObj?.chain as string | number | undefined
         if (token1 && chainVal !== undefined) {
-          const key = buildTickKey(token1, chainVal)
+          const key = buildTickKey(token1.toLowerCase(), chainVal)
           emitUpdate({ key, type: 'pair-stats', data: parsed.data })
         }
       }
-    } catch {}
+    } catch {
+      /* no-op */
+    }
 
     // Map and dispatch via the same pathway as real messages
     const action = mapIncomingMessageToActionSafe(parsed)
@@ -2005,7 +2038,12 @@ function App() {
               dispatch={
                 ((action: { type?: unknown; payload?: unknown }) => {
                   ;(dispatch as unknown as React.Dispatch<Action>)(action as unknown as Action)
-                }) as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>
+                }) as unknown as React.Dispatch<
+                  | ScannerWsAction
+                  | ScannerPairsTokensAction
+                  | ScannerAppendAction
+                  | ScannerAppendTokensAction
+                >
               }
               defaultSort={initialSort ?? { key: 'tokenName', dir: 'asc' }}
               clientFilters={
@@ -2057,7 +2095,12 @@ function App() {
               dispatch={
                 ((action: { type?: unknown; payload?: unknown }) => {
                   ;(dispatch as unknown as React.Dispatch<Action>)(action as unknown as Action)
-                }) as unknown as React.Dispatch<ScannerPairsAction | ScannerAppendAction>
+                }) as unknown as React.Dispatch<
+                  | ScannerWsAction
+                  | ScannerPairsTokensAction
+                  | ScannerAppendAction
+                  | ScannerAppendTokensAction
+                >
               }
               defaultSort={initialSort ?? { key: 'tokenName', dir: 'asc' }}
               clientFilters={

@@ -99,9 +99,15 @@ const Row = memo(
       const token = (t as { tokenAddress?: string }).tokenAddress
       const chain = t.chain
       if (!token || !chain) return
-      const key = buildTickKey(token, chain)
+      const key = buildTickKey(String(token).toLowerCase(), chain)
       const off = onUpdate((e) => {
-        if (e.type !== 'tick' || e.key !== key) return
+        // Compare keys case-insensitively to be robust to upstream casing differences
+        try {
+          const incoming = typeof e.key === 'string' ? e.key.toLowerCase() : String(e.key)
+          if (e.type !== 'tick' || incoming !== String(key).toLowerCase()) return
+        } catch {
+          if (e.type !== 'tick' || e.key !== key) return
+        }
         // Only animate when the row is visible within the scrollpane viewport
         // Additionally, pause animations while the detail modal is open
         try {
