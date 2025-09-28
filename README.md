@@ -454,6 +454,119 @@ ws.send(
 
 All incoming WebSocket message types are defined in `test-task-types.ts`. See `IncomingWebSocketMessage` for the complete union type.
 
+### WebSocket subscription JSON (rooms used by the app)
+
+The app uses three outgoing subscription “rooms.” Below are the exact JSON payloads to send over the WebSocket. In development, connect to ws://localhost:5173/ws (Vite proxy). In production, use wss://api-rs.dexcelerate.com/ws.
+
+Notes
+- Chains are normalized by the client to one of: ETH, BSC, BASE, SOL. Numeric IDs are accepted and mapped: 1→ETH, 56→BSC, 8453→BASE, 900→SOL.
+- Unsubscribe messages are included for completeness. The current client build ships with a feature flag that suppresses actually sending unsubscriptions, but the API supports them.
+
+1) scanner-filter — bootstrap stream (per pane)
+- Purpose: request bulk datasets; server responds with scanner-pairs events for the same filter.
+- Trending pane (page 101) example:
+
+```json
+{
+  "event": "scanner-filter",
+  "data": {
+    "page": 101,
+    "chain": "ETH",
+    "rankBy": "volume",
+    "orderBy": "desc",
+    "minVol24H": 1000,
+    "isNotHP": true,
+    "maxAge": 604800
+  }
+}
+```
+
+- New pane (page 201) example:
+
+```json
+{
+  "event": "scanner-filter",
+  "data": {
+    "page": 201,
+    "chain": "ETH",
+    "rankBy": "age",
+    "orderBy": "desc",
+    "maxAge": 86400,
+    "isNotHP": true
+  }
+}
+```
+
+- Unsubscribe (same shape under data):
+
+```json
+{
+  "event": "unsubscribe-scanner-filter",
+  "data": {
+    "page": 101,
+    "chain": "ETH"
+  }
+}
+```
+
+2) subscribe-pair — per-row real-time ticks
+- Purpose: receive tick events for an individual pair shown in the table.
+- Subscribe:
+
+```json
+{
+  "event": "subscribe-pair",
+  "data": {
+    "pair": "0xPAIR_ADDRESS",
+    "token": "0xTOKEN_ADDRESS",
+    "chain": "ETH"
+  }
+}
+```
+
+- Unsubscribe:
+
+```json
+{
+  "event": "unsubscribe-pair",
+  "data": {
+    "pair": "0xPAIR_ADDRESS",
+    "token": "0xTOKEN_ADDRESS",
+    "chain": "ETH"
+  }
+}
+```
+
+3) subscribe-pair-stats — per-row audits/security/migration
+- Purpose: receive pair-stats events for the same pair as above.
+- Subscribe:
+
+```json
+{
+  "event": "subscribe-pair-stats",
+  "data": {
+    "pair": "0xPAIR_ADDRESS",
+    "token": "0xTOKEN_ADDRESS",
+    "chain": "ETH"
+  }
+}
+```
+
+- Unsubscribe:
+
+```json
+{
+  "event": "unsubscribe-pair-stats",
+  "data": {
+    "pair": "0xPAIR_ADDRESS",
+    "token": "0xTOKEN_ADDRESS",
+    "chain": "ETH"
+  }
+}
+```
+
+Tip: For manual testing in dev, you can open the browser console on the running app and use the global WebSocket instance (when exposed) or a new WebSocket('ws://localhost:5173/ws') and send the JSON above via ws.send(JSON.stringify(payload)).
+
 ### 6. Technical Requirements
 
 #### Real-time Updates

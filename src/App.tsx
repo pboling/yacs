@@ -520,7 +520,7 @@ function App() {
       /* no-op */
     }
 
-    // Use product WS endpoint by default in all environments. Allow override via VITE_WS_URL for testing/mocks.
+    // Use production WS endpoint by default in all environments. Allow override via VITE_WS_URL for testing/mocks.
     const prodUrl = 'wss://api-rs.dexcelerate.com/ws'
     const envUrl: string | null =
       typeof import.meta.env.VITE_WS_URL === 'string' ? import.meta.env.VITE_WS_URL : null

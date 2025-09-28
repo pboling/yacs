@@ -5,7 +5,16 @@ import SortHeader from '../src/components/SortHeader';
 
 describe('SortHeader', () => {
   it('renders without crashing', () => {
-    const { container } = render(<SortHeader label="Test" />);
+    const mockOnSort = () => {};
+    const { container } = render(
+      <SortHeader
+        label="Test"
+        k="mcap"
+        sortKey="mcap"
+        sortDir="desc"
+        onSort={mockOnSort}
+      />
+    );
     expect(container).toBeTruthy();
   });
 });
