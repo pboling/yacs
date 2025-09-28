@@ -48,6 +48,25 @@ It features robust filtering, sorting, and live updates via WebSocket, with a fo
 2. Start the app: `pnpm run dev`, or to run the local mock server as well: `pnpm run dev:serve`
 3. Run tests: `pnpm test`
 
+## © Copyright
+
+<ul>
+    <li>
+        Copyright (c) 2025 Peter H. Boling, of
+        <a href="https://discord.gg/3qme4XHNKN">
+            Galtzo.com
+            <picture>
+              <img src="https://logos.galtzo.com/assets/images/galtzo-floss/avatar-128px-blank.svg" alt="Galtzo.com Logo (Wordless) by Aboling0, CC BY-SA 4.0" width="24">
+            </picture>
+        </a>.
+    </li>
+</ul>
+
+## License
+
+This code is licensed under [CC BY-NC-SA](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en). If you'd like to use it in another way, please contact me.
+I may change the license in the future.
+
 ---
 
 For more details, see [DETAILS.md](DETAILS.md), inline documentation, and tests.
