@@ -464,15 +464,15 @@ export default function DetailModal({
         {/* Emphasize points with dots on both series */}
         {ptsB.length > 0 && (
           <g opacity={0.85}>
-            {ptsB.map((p, idx) => (
-              <circle key={`b-${p.x}-${p.y}-${idx}`} cx={p.x} cy={p.y} r={rB} fill={colorB} />
+            {ptsB.map((p) => (
+              <circle key={`b-${p.x}-${p.y}`} cx={p.x} cy={p.y} r={rB} fill={colorB} />
             ))}
           </g>
         )}
         {ptsA.length > 0 && (
           <g>
-            {ptsA.map((p, idx) => (
-              <circle key={`a-${p.x}-${p.y}-${idx}`} cx={p.x} cy={p.y} r={rA} fill={colorA} />
+            {ptsA.map((p) => (
+              <circle key={`a-${p.x}-${p.y}`} cx={p.x} cy={p.y} r={rA} fill={colorA} />
             ))}
           </g>
         )}

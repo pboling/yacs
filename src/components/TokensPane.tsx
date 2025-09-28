@@ -64,7 +64,7 @@ type Dir = 'asc' | 'desc'
 
 export default function TokensPane({
   title,
-  filters,
+  filters: _filters,
   page,
   state,
   dispatch,
@@ -289,10 +289,11 @@ export default function TokensPane({
     if (chainsProvidedEmpty) {
       try {
         // When chains are empty, clear the page with a tokens-based action (REST context)
-        dispatch({
+        const action: ScannerPairsTokensAction = {
           type: 'scanner/pairsTokens',
           payload: { page, tokens: [] },
-        }) as unknown as ScannerPairsTokensAction
+        }
+        dispatch(action)
       } catch (err) {
         logCatch(`[TokensPane:${title}] init: dispatch empty pairs on empty chains failed`, err)
       }
@@ -366,11 +367,11 @@ export default function TokensPane({
         // Debug: print first few tokens and their id values
         debugLog(
           '[TokensPane:' + title + '] mapped tokens sample:',
-          dedupedList.slice(0, 5).map((t) => ({
+          dedupedTokens.slice(0, 5).map((t) => ({
             id: t.id,
             pairAddress: t.pairAddress,
             token1Address: t.token1Address,
-            tokenName: t.token1Name,
+            tokenName: t.tokenName,
           })),
         )
         // Best-effort: compute subscription payloads and update universe after dispatch.
@@ -1132,7 +1133,7 @@ export default function TokensPane({
     setHasMore(true)
     setLoading(true)
     setError(null)
-    ;(async () => {
+    void (async () => {
       try {
         debugLog('[TokensPane:' + title + '] isNotHP changed → refetching page 1', { isNotHP })
         const res = await fetchScannerTyped({ ...serverParams, page: 1 })
@@ -1170,7 +1171,7 @@ export default function TokensPane({
         setError(e instanceof Error ? e.message : 'Refetch failed')
       }
     })()
-  }, [isNotHP, serverParams, title, page, computePairPayloadsSafe])
+  }, [isNotHP, serverParams, title, page, computePairPayloadsSafe, dispatch, fetchScannerTyped])
 
   const handleScrollStart = useCallback(() => {
     // Enter scrolling; do not alter subscriptions anymore. We only mark scrolling state

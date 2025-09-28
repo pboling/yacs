@@ -1002,15 +1002,13 @@ function App() {
     if (!k) return
     countsRef.current[k] = (countsRef.current[k] ?? 0) + 1
     // Coalesce flushes to avoid excessive setState under high throughput
-    if (flushTimerRef.current == null) {
-      flushTimerRef.current ??= window.setTimeout(() => {
-        try {
-          setEventCounts({ ...countsRef.current })
-        } finally {
-          flushTimerRef.current = null
-        }
-      }, 250)
-    }
+    flushTimerRef.current ??= window.setTimeout(() => {
+      try {
+        setEventCounts({ ...countsRef.current })
+      } finally {
+        flushTimerRef.current = null
+      }
+    }, 250)
   }
   // Live subscriptions count (polled)
   const [subCount, setSubCount] = useState<number>(0)

@@ -53,14 +53,8 @@ export default function Sparkline({
       {/* Emphasize real data points with dots */}
       {points.length > 0 && (
         <g>
-          {points.map((p, idx) => (
-            <circle
-              key={`${p.x}-${p.y}-${idx}`}
-              cx={p.x}
-              cy={p.y}
-              r={dotRadius}
-              fill={strokeColor}
-            />
+          {points.map((p) => (
+            <circle key={`${p.x}-${p.y}`} cx={p.x} cy={p.y} r={dotRadius} fill={strokeColor} />
           ))}
         </g>
       )}
