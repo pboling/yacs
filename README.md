@@ -565,6 +565,110 @@ Notes
 }
 ```
 
+### Real WebSocket subscription examples (from fixtures)
+
+The following examples use actual pair and token addresses from tests/fixtures/scanner.new.json so you can copy/paste and see live ticks on the public WS.
+
+- BASE — Elon Troll Face (ETF)
+
+Subscribe to pair ticks:
+```json
+{
+  "event": "subscribe-pair",
+  "data": {
+    "pair": "0x231478DF651aE4781de6b8457E10193BAAF1Ffaa",
+    "token": "0x2F78Bcd7eA3bc5793F571953951ae17633FBaFAE",
+    "chain": "BASE"
+  }
+}
+```
+Subscribe to pair stats:
+```json
+{
+  "event": "subscribe-pair-stats",
+  "data": {
+    "pair": "0x231478DF651aE4781de6b8457E10193BAAF1Ffaa",
+    "token": "0x2F78Bcd7eA3bc5793F571953951ae17633FBaFAE",
+    "chain": "BASE"
+  }
+}
+```
+
+- BSC — LABUBU
+
+Subscribe to pair ticks:
+```json
+{
+  "event": "subscribe-pair",
+  "data": {
+    "pair": "0xe643A1075C57624bd27df9caD4f90EA0A710598D",
+    "token": "0xA7cb31CB308870687b361409FDc7998266D51Bcd",
+    "chain": "BSC"
+  }
+}
+```
+Subscribe to pair stats:
+```json
+{
+  "event": "subscribe-pair-stats",
+  "data": {
+    "pair": "0xe643A1075C57624bd27df9caD4f90EA0A710598D",
+    "token": "0xA7cb31CB308870687b361409FDc7998266D51Bcd",
+    "chain": "BSC"
+  }
+}
+```
+
+- SOL — GOAT Network (GOATED)
+
+Subscribe to pair ticks:
+```json
+{
+  "event": "subscribe-pair",
+  "data": {
+    "pair": "9LaLRbRGEqUhQjmw3UCsSuqUHHCDMRbZcZsyuJYEvXyd",
+    "token": "EamYnXqSZ29HNAcenE5EBP4UujabRZgZzbHWKdA1h6Au",
+    "chain": "SOL"
+  }
+}
+```
+Subscribe to pair stats:
+```json
+{
+  "event": "subscribe-pair-stats",
+  "data": {
+    "pair": "9LaLRbRGEqUhQjmw3UCsSuqUHHCDMRbZcZsyuJYEvXyd",
+    "token": "EamYnXqSZ29HNAcenE5EBP4UujabRZgZzbHWKdA1h6Au",
+    "chain": "SOL"
+  }
+}
+```
+
+- SOL — Pandu Pandas (PANDU)
+
+Subscribe to pair ticks:
+```json
+{
+  "event": "subscribe-pair",
+  "data": {
+    "pair": "8MrcchKa3zo5cRpUsmjyKWM84v3ggkp6V3k9ACQkvDja",
+    "token": "69GXejCYUEht3AvBPreTBuh7jmyuS8UxSjNghgRdaos",
+    "chain": "SOL"
+  }
+}
+```
+Subscribe to pair stats:
+```json
+{
+  "event": "subscribe-pair-stats",
+  "data": {
+    "pair": "8MrcchKa3zo5cRpUsmjyKWM84v3ggkp6V3k9ACQkvDja",
+    "token": "69GXejCYUEht3AvBPreTBuh7jmyuS8UxSjNghgRdaos",
+    "chain": "SOL"
+  }
+}
+```
+
 Tip: For manual testing in dev, you can open the browser console on the running app and use the global WebSocket instance (when exposed) or a new WebSocket('ws://localhost:5173/ws') and send the JSON above via ws.send(JSON.stringify(payload)).
 
 ### 6. Technical Requirements
