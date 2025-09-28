@@ -28,6 +28,7 @@ export default defineConfig(() => {
       setupFiles: ['./tests/setup.ts'],
       include: ['tests/**/*.test.tsx'],
       globals: true,
+      tsconfig: './tsconfig.tests.json',
     },
   }
 })
