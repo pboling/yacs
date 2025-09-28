@@ -370,7 +370,7 @@ export default function TokensPane({
           dedupedTokens.slice(0, 5).map((t) => ({
             id: t.id,
             pairAddress: t.pairAddress,
-            token1Address: t.token1Address,
+            tokenAddress: t.tokenAddress,
             tokenName: t.tokenName,
           })),
         )
@@ -781,7 +781,7 @@ export default function TokensPane({
         clientFilters && typeof clientFilters.limit === 'number' && clientFilters.limit > 0
           ? clientFilters.limit
           : null
-      if (dedupedList.length === 0 || (limitVal != null && rowsRef.current.length >= limitVal)) {
+      if (dedupedTokens.length === 0 || (limitVal != null && rowsRef.current.length >= limitVal)) {
         setHasMore(false)
       }
     } catch (err) {
@@ -1425,11 +1425,6 @@ export default function TokensPane({
       />
       <div ref={sentinelRef} style={{ height: 1 }} />
       {loadingMore && <div className="status">Loading more…</div>}
-      {!hasMore && (
-        <div className="status muted" style={{ fontSize: 12 }}>
-          No more results
-        </div>
-      )}
       {limitReached && (
         <div
           role="status"
