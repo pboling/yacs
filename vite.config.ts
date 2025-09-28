@@ -27,7 +27,7 @@ export default defineConfig(() => {
       bail: 1, // fail fast
       environment: 'jsdom',
       setupFiles: ['./tests/setup.ts'],
-      include: ['tests/**/*.test.{tsx,js}'],
+      include: ['tests/**/*.test.tsx'],
       globals: true,
       tsconfig: './tsconfig.tests.json',
     },

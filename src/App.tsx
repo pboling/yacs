@@ -185,8 +185,14 @@ function TopBar({
                 type="button"
                 key={key}
                 className="muted"
-                title={disabled ? `${label}: need a visible token to inject` : `Inject a faux ${label} event`}
-                onClick={() => onInject(key)}
+                title={
+                  disabled
+                    ? `${label}: need a visible token to inject`
+                    : `Inject a faux ${label} event`
+                }
+                onClick={() => {
+                  onInject(key)
+                }}
                 disabled={disabled}
                 style={{
                   fontSize: 11,
@@ -820,9 +826,12 @@ function App() {
                       if (!tokenStr || chainVal === undefined) {
                         // Hard error: we expect token1Address or token and a chain for tick events
                         try {
-                          console.error('[WS tick] Missing token1Address/token or chain in pair object', {
-                            pairObj,
-                          })
+                          console.error(
+                            '[WS tick] Missing token1Address/token or chain in pair object',
+                            {
+                              pairObj,
+                            },
+                          )
                         } catch {}
                         throw new Error('Invalid WS tick: missing token1Address/token or chain')
                       }
@@ -1039,7 +1048,8 @@ function App() {
   // Live test: inject a faux WS event into the earliest pipeline (parsed message)
   const injectFauxWsEvent = (ev: WsEventName) => {
     // Helper: random from array
-    const pick = <T,>(arr: T[]): T | null => (arr.length ? arr[Math.floor(Math.random() * arr.length)] : null)
+    const pick = <T,>(arr: T[]): T | null =>
+      arr.length ? arr[Math.floor(Math.random() * arr.length)] : null
 
     // Per-token events require a visible key
     const visKeys = SubscriptionQueue.getVisibleKeys()
@@ -1090,7 +1100,7 @@ function App() {
       }
     } else if (ev === 'scanner-pairs') {
       // Build a tiny WS-like scanner payload with 2 items
-      const baseChain = (pick(['ETH', 'BSC', 'BASE', 'SOL']) as string) || 'ETH'
+      const baseChain = pick(['ETH', 'BSC', 'BASE', 'SOL'])! || 'ETH'
       const mk = (i: number) => ({
         id: `${baseChain}-FAUX-${Date.now()}-${i}`,
         tokenName: `Faux ${i}`,

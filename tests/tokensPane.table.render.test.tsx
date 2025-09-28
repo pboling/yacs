@@ -14,13 +14,30 @@ async function loadFixture(name: 'scanner.trending.json' | 'scanner.new.json') {
   return JSON.parse(txt)
 }
 
+function toChainName(v: any): string {
+  const n = Number(v)
+  if (v === 'ETH' || v === 'BSC' || v === 'BASE' || v === 'SOL') return v
+  switch (n) {
+    case 1:
+      return 'ETH'
+    case 56:
+      return 'BSC'
+    case 8453:
+      return 'BASE'
+    case 900:
+      return 'SOL'
+    default:
+      return 'ETH'
+  }
+}
+
 function mapScannerPage(raw: any) {
   return Array.isArray(raw.pairs)
     ? raw.pairs.map((pair: any) => ({
         id: pair.pairAddress,
         tokenName: pair.token1Name,
         tokenSymbol: pair.token1Symbol,
-        chain: pair.chainId,
+        chain: toChainName(pair.chainId),
         exchange: pair.routerAddress,
         priceUsd: Number(pair.price),
         mcap: Number(pair.currentMcap),

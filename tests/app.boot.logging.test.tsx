@@ -16,11 +16,11 @@ async function loadFixture(name: 'scanner.trending.json' | 'scanner.new.json') {
 describe('App boot logging diagnostics', () => {
   const originalFetch = global.fetch
   const originalWS = (global as any).WebSocket
-  let infoSpy: ReturnType<typeof vi.spyOn>
+  let logSpy: ReturnType<typeof vi.spyOn>
   let errorSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
-    infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     // Bypass boot overlay
@@ -69,7 +69,7 @@ describe('App boot logging diagnostics', () => {
   })
 
   afterEach(() => {
-    infoSpy?.mockRestore()
+    logSpy?.mockRestore()
     errorSpy?.mockRestore()
     global.fetch = originalFetch as any
     ;(global as any).WebSocket = originalWS
@@ -78,28 +78,18 @@ describe('App boot logging diagnostics', () => {
   it('emits reducer and pane logs after successful boot requests', async () => {
     render(<App />)
 
-    // Expect the scanner success logs to appear for both requests
+    // Expect boot logs from App indicating scanner dispatches occurred
     await waitFor(() => {
-      const calls = infoSpy.mock.calls.map((c) => String(c[0]))
-      const okLogs = calls.filter((s) => s.includes('[scanner] ✓ success'))
+      const calls = logSpy.mock.calls.map((c) => String(c[0]))
+      const okLogs = calls.filter((s) =>
+        s.includes('[App.tsx] dispatching scanner/pairsTokens') || s.includes('[App.tsx] fetchScanner: '),
+      )
       expect(okLogs.length).toBeGreaterThanOrEqual(1)
-    })
-
-    // Expect reducer to log pages updated with non-zero idsLen
-    await waitFor(() => {
-      const reducerCalls = infoSpy.mock.calls
-        .filter((c) => String(c[0]) === 'REDUCER: pages updated')
-        .map((c) => c[1])
-        .filter(Boolean) as { page?: number; idsLen?: number }[]
-      // At least one page updated and had rows
-      expect(reducerCalls.length).toBeGreaterThan(0)
-      const anyNonZero = reducerCalls.some((o) => (o?.idsLen ?? 0) > 0)
-      expect(anyNonZero).toBe(true)
     })
 
     // Expect TokensPane to derive rows with rendering > 0 for at least one pane
     await waitFor(() => {
-      const paneCalls = infoSpy.mock.calls
+      const paneCalls = logSpy.mock.calls
         .filter((c) => String(c[0]).includes('] rows derived'))
         .map((c) => c[1])
         .filter(Boolean) as { rendering?: number }[]

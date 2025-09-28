@@ -1097,7 +1097,9 @@ export default function TokensPane({
           if (universeKeys.length > 0) {
             SubscriptionQueue.updateUniverse(universeKeys, ws ?? null)
           }
-          debugLog(`[TokensPane:${title}] lock released → restored InvisSubs via universe=${universeKeys.length}`)
+          debugLog(
+            `[TokensPane:${title}] lock released → restored InvisSubs via universe=${universeKeys.length}`,
+          )
         } catch (err) {
           console.error(`[TokensPane:${title}] updateUniverse on lock release failed`, err)
         }
