@@ -156,9 +156,6 @@ export default function Table({
       chg6h: t.priceChangePcs['6h'],
       chg24h: t.priceChangePcs['24h'],
       tokenCreatedTimestamp: t.tokenCreatedTimestamp.toISOString(),
-      buys: t.transactions.buys,
-      sells: t.transactions.sells,
-      liquidity: t.liquidity.current,
     }))
   }, [rows])
 
@@ -533,10 +530,9 @@ export default function Table({
       cont?.removeEventListener('wheel', handleScrollOrWheel)
       if (stopTimerRef.current != null) window.clearTimeout(stopTimerRef.current)
     }
-  }, [onScrollStart, onScrollStop])
+  }, [onScrollStart, onScrollStop, title])
 
   // State for burn tooltip hover
-  const [showBurnTooltipIdx, setShowBurnTooltipIdx] = useState<number | null>(null)
 
   // Stable ref-callback to register/unregister a row element with the IntersectionObserver
   const registerRowCb = useCallback((el: HTMLTableRowElement | null, row: TokenRow) => {
@@ -763,8 +759,6 @@ export default function Table({
                       getRowStatus={getRowStatus}
                       onOpenRowDetails={onOpenRowDetails}
                       onToggleRowSubscription={onToggleRowSubscription}
-                      showBurnTooltipIdx={showBurnTooltipIdx}
-                      setShowBurnTooltipIdx={setShowBurnTooltipIdx}
                       registerRow={(el) => {
                         if (el) {
                           try {
@@ -805,8 +799,6 @@ export default function Table({
                       getRowStatus={getRowStatus}
                       onOpenRowDetails={onOpenRowDetails}
                       onToggleRowSubscription={onToggleRowSubscription}
-                      showBurnTooltipIdx={showBurnTooltipIdx}
-                      setShowBurnTooltipIdx={setShowBurnTooltipIdx}
                       registerRow={registerRowCb}
                     />
                   )

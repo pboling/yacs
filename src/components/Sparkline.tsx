@@ -54,7 +54,13 @@ export default function Sparkline({
       {points.length > 0 && (
         <g>
           {points.map((p, idx) => (
-            <circle key={idx} cx={p.x} cy={p.y} r={dotRadius} fill={strokeColor} />
+            <circle
+              key={`${p.x}-${p.y}-${idx}`}
+              cx={p.x}
+              cy={p.y}
+              r={dotRadius}
+              fill={strokeColor}
+            />
           ))}
         </g>
       )}

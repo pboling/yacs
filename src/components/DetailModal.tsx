@@ -465,14 +465,14 @@ export default function DetailModal({
         {ptsB.length > 0 && (
           <g opacity={0.85}>
             {ptsB.map((p, idx) => (
-              <circle key={`b-${idx}`} cx={p.x} cy={p.y} r={rB} fill={colorB} />
+              <circle key={`b-${p.x}-${p.y}-${idx}`} cx={p.x} cy={p.y} r={rB} fill={colorB} />
             ))}
           </g>
         )}
         {ptsA.length > 0 && (
           <g>
             {ptsA.map((p, idx) => (
-              <circle key={`a-${idx}`} cx={p.x} cy={p.y} r={rA} fill={colorA} />
+              <circle key={`a-${p.x}-${p.y}-${idx}`} cx={p.x} cy={p.y} r={rA} fill={colorA} />
             ))}
           </g>
         )}

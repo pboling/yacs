@@ -1468,10 +1468,10 @@ function App() {
         })
         console.log('[App.tsx] fetchScanner: Trending Tokens result', trendingRes)
         if (!cancelled) {
-          console.log('[App.tsx] dispatching scanner/pairs for Trending', trendingRes.tokens)
+          console.log('[App.tsx] dispatching scanner/pairsTokens for Trending', trendingRes.tokens)
           d({
-            type: 'scanner/pairs',
-            payload: { page: TRENDING_PAGE, scannerPairs: trendingRes.tokens },
+            type: 'scanner/pairsTokens',
+            payload: { page: TRENDING_PAGE, tokens: trendingRes.tokens },
           })
         }
       } catch (err) {
@@ -1486,10 +1486,10 @@ function App() {
         })
         console.log('[App.tsx] fetchScanner: New Tokens result', newRes)
         if (!cancelled) {
-          console.log('[App.tsx] dispatching scanner/pairs for New', newRes.tokens)
+          console.log('[App.tsx] dispatching scanner/pairsTokens for New', newRes.tokens)
           d({
-            type: 'scanner/pairs',
-            payload: { page: NEW_PAGE, scannerPairs: newRes.tokens },
+            type: 'scanner/pairsTokens',
+            payload: { page: NEW_PAGE, tokens: newRes.tokens },
           })
         }
       } catch (err) {

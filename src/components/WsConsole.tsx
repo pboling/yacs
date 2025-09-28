@@ -3,7 +3,7 @@
   Developer console UI for streaming WebSocket logs. Subscribes to ws.console.bus
   to render a rolling, filterable list of messages and provides copy-to-clipboard.
 */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   clearWsConsole,
   getWsConsoleHistory,
@@ -67,35 +67,28 @@ export default function WsConsole() {
   }, [])
 
   // Helper to match entry text to filter type
-  function matchesFilter(e: WsConsoleEntry) {
-    // Error level
-    if (e.level === 'error' && !showError) return false
-    // Sub/Unsub detection
-    const txt = e.text.toLowerCase()
-    if (txt.includes('subscribe') && !txt.includes('unsubscribe') && !showSub) return false
-    if (txt.includes('unsubscribe') && !showUnsub) return false
-    // Event types
-    if (txt.includes('scanner-pairs') && !showScannerPairs) return false
-    if (txt.includes('tick') && !showTick) return false
-    if (txt.includes('pair-stats') && !showPairStats) return false
-    if (txt.includes('wpeg-prices') && !showWpegPrices) return false
-    // If none of the above, allow info/success if not filtered out
-    return true
-  }
+  const matchesFilter = useCallback(
+    (e: WsConsoleEntry) => {
+      // Error level
+      if (e.level === 'error' && !showError) return false
+      // Sub/Unsub detection
+      const txt = e.text.toLowerCase()
+      if (txt.includes('subscribe') && !txt.includes('unsubscribe') && !showSub) return false
+      if (txt.includes('unsubscribe') && !showUnsub) return false
+      // Event types
+      if (txt.includes('scanner-pairs') && !showScannerPairs) return false
+      if (txt.includes('tick') && !showTick) return false
+      if (txt.includes('pair-stats') && !showPairStats) return false
+      if (txt.includes('wpeg-prices') && !showWpegPrices) return false
+      // If none of the above, allow info/success if not filtered out
+      return true
+    },
+    [showError, showSub, showUnsub, showScannerPairs, showTick, showPairStats, showWpegPrices],
+  )
 
   const visibleEntries = useMemo(() => {
     return entries.filter(matchesFilter)
-  }, [
-    entries,
-    showError,
-    showSub,
-    showUnsub,
-    showScannerPairs,
-    showTick,
-    showPairStats,
-    showWpegPrices,
-    matchesFilter,
-  ])
+  }, [entries, matchesFilter])
 
   const textBlob = useMemo(() => {
     return visibleEntries

@@ -450,7 +450,7 @@ export interface TimeFramePairStatsRef {
  * Full dataset updates - this replaces your current data
  */
 export interface ScannerPairsEventPayload {
-  // ...existing fields...
+  tokens: WsScannerPairsItem[]
 }
 
 /**
@@ -460,7 +460,7 @@ export interface ScannerPairsEventPayload {
 export interface WsScannerPairsItem {
   id: string
   pairAddress: string
-  chain: SupportedChainName | string
+  chain: SupportedChainName
   exchange: string
   priceUsd: number
   volumeUsd: number

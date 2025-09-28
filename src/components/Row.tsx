@@ -435,8 +435,8 @@ const Row = memo(
               for (let i = 0; i < len; i++) {
                 const x = pad + i * xStep
                 const y = pad + (height - pad * 2) * (1 - (data[i] - min) / range)
-                pts.push(`${x},${y}`)
                 ptsNum.push({ x, y })
+                pts.push(`${x},${y}`)
               }
               const d = pts.length ? 'M ' + pts.join(' L ') : ''
               const trendUp = data[len - 1] >= data[0]
@@ -482,26 +482,26 @@ const Row = memo(
                       <polyline
                         points={`${pad},${height - pad} ${w - pad},${height - pad}`}
                         stroke="#374151"
-                        strokeWidth={1}
                         fill="none"
                       />
-                      {d && (
-                        <>
-                          <path
-                            d={d}
-                            stroke={color}
-                            strokeWidth={strokeWidth}
-                            fill="none"
-                            transform={`translate(${-offset}, 0)`}
+                      <path
+                        d={d}
+                        stroke={color}
+                        strokeWidth={strokeWidth}
+                        fill="none"
+                        transform={`translate(${-offset}, 0)`}
+                      />
+                      <g transform={`translate(${-offset}, 0)`}>
+                        {ptsNum.map((p) => (
+                          <circle
+                            key={`${p.x}-${p.y}`}
+                            cx={p.x}
+                            cy={p.y}
+                            r={dotRadius}
+                            fill={color}
                           />
-                          {/* Emphasize real data points with dots aligned to the path */}
-                          <g transform={`translate(${-offset}, 0)`}>
-                            {ptsNum.map((p, idx) => (
-                              <circle key={idx} cx={p.x} cy={p.y} r={dotRadius} fill={color} />
-                            ))}
-                          </g>
-                        </>
-                      )}
+                        ))}
+                      </g>
                     </svg>
                   </button>
                 </div>

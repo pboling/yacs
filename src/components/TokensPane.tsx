@@ -889,76 +889,73 @@ export default function TokensPane({
     }
   }, [lastRowId, triggerRowId, loadMore, bothEndsVisible, clientFilters, rows.length])
 
-  // Handler wired to Table row visibility
-  const _onRowVisibilityChange = useCallback(
-    (row: TokenRow, visible: boolean) => {
-      if (scrollingRef.current) return
-      const pair = row.pairAddress
-      const token = row.tokenAddress
-      if (!pair || !token) return
-      const key = buildPairKey(pair, token.toLowerCase(), row.chain)
-      const disabledKey = disabledKeyFor(row)
-      // If this token is disabled, ensure it's not tracked as visible and unsubscribe if needed
-      if (disabledKey && disabledTokensRef.current.has(disabledKey)) {
-        if (visibleKeysRef.current.has(key)) {
-          visibleKeysRef.current.delete(key)
-          try {
-            const { next } = markHidden(key)
-            const ws = wsRef.current
-            if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
-              try {
-                const stack = new Error('unsubscribe trace').stack
-                debugLog('[TokensPane] UNSUB', {
-                  key,
-                  reason: 'disabled-token visibility change',
-                  pane: title,
-                  when: new Date().toISOString(),
-                  stack,
-                })
-              } catch {}
-              sendUnsubscribe(ws, { pair, token, chain: row.chain })
-            }
-          } catch {}
-        }
-        return
-      }
-      // If subscription lock is active and this key isn't allowed, stop tracking
-      if (lockActiveRef.current && !lockAllowedRef.current.has(key)) {
-        if (visibleKeysRef.current.delete(key)) {
-          try {
-            markHidden(key)
-          } catch {}
-        }
-        return
-      }
-      const set = visibleKeysRef.current
-      const ws = wsRef.current
-      if (visible) {
-        if (!set.has(key)) {
-          const { prev } = markVisible(key)
-          set.add(key)
-          try {
-            SubscriptionQueue.setVisible(key, true, ws, 'TokensPane:onRowVisibilityChange/show')
-          } catch {}
-          if (prev === 0 && ws && ws.readyState === WebSocket.OPEN) {
-            try {
-              sendSubscribe(ws, { pair, token, chain: row.chain })
-            } catch {}
-          }
-        }
-      } else {
-        if (set.has(key)) {
-          set.delete(key)
-          markHidden(key)
-          try {
-            SubscriptionQueue.setVisible(key, false, ws, 'TokensPane:onRowVisibilityChange/hide')
-          } catch {}
-          // Do not auto-unsubscribe on leaving viewport; let SubscriptionQueue manage inactive rows
-        }
-      }
-    },
-    [title],
-  )
+  // // Handler wired to Table row visibility
+  // const _onRowVisibilityChange = useCallback((row: TokenRow, visible: boolean) => {
+  //   if (scrollingRef.current) return
+  //   const pair = row.pairAddress
+  //   const token = row.tokenAddress
+  //   if (!pair || !token) return
+  //   const key = buildPairKey(pair, token.toLowerCase(), row.chain)
+  //   const disabledKey = disabledKeyFor(row)
+  //   // If this token is disabled, ensure it's not tracked as visible and unsubscribe if needed
+  //   if (disabledKey && disabledTokensRef.current.has(disabledKey)) {
+  //     if (visibleKeysRef.current.has(key)) {
+  //       visibleKeysRef.current.delete(key)
+  //       try {
+  //         const { next } = markHidden(key)
+  //         const ws = wsRef.current
+  //         if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
+  //           try {
+  //             const stack = new Error('unsubscribe trace').stack
+  //             debugLog('[TokensPane] UNSUB', {
+  //               key,
+  //               reason: 'disabled-token visibility change',
+  //               pane: title,
+  //               when: new Date().toISOString(),
+  //               stack,
+  //             })
+  //           } catch {}
+  //           sendUnsubscribe(ws, { pair, token, chain: row.chain })
+  //         }
+  //       } catch {}
+  //     }
+  //     return
+  //   }
+  //   // If subscription lock is active and this key isn't allowed, stop tracking
+  //   if (lockActiveRef.current && !lockAllowedRef.current.has(key)) {
+  //     if (visibleKeysRef.current.delete(key)) {
+  //       try {
+  //         markHidden(key)
+  //       } catch {}
+  //     }
+  //     return
+  //   }
+  //   const set = visibleKeysRef.current
+  //   const ws = wsRef.current
+  //   if (visible) {
+  //     if (!set.has(key)) {
+  //       const { prev } = markVisible(key)
+  //       set.add(key)
+  //       try {
+  //         SubscriptionQueue.setVisible(key, true, ws, 'TokensPane:onRowVisibilityChange/show')
+  //       } catch {}
+  //       if (prev === 0 && ws && ws.readyState === WebSocket.OPEN) {
+  //         try {
+  //           sendSubscribe(ws, { pair, token, chain: row.chain })
+  //         } catch {}
+  //       }
+  //     }
+  //   } else {
+  //     if (set.has(key)) {
+  //       set.delete(key)
+  //       markHidden(key)
+  //       try {
+  //         SubscriptionQueue.setVisible(key, false, ws, 'TokensPane:onRowVisibilityChange/hide')
+  //       } catch {}
+  //       // Do not auto-unsubscribe on leaving viewport; let SubscriptionQueue manage inactive rows
+  //     }
+  //   }
+  // }, [title])
 
   // Handler for row visibility changes (per-row): only update local refs and counters.
   // Central reconciliation happens in onScrollStop via SubscriptionQueue.setTableVisible.
