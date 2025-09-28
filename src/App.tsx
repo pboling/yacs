@@ -83,6 +83,8 @@ function TopBar({
   setSubBaseLimit,
   onInject,
   perTokenDisabled,
+  isAutoPlaying,
+  onToggleAutoPlay,
 }: {
   title: string
   version: number
@@ -104,6 +106,8 @@ function TopBar({
   setSubBaseLimit: (n: number) => void
   onInject: (ev: 'scanner-pairs' | 'tick' | 'pair-stats' | 'wpeg-prices') => void
   perTokenDisabled: boolean
+  isAutoPlaying: boolean
+  onToggleAutoPlay: () => void
 }) {
   return (
     <div
@@ -291,6 +295,24 @@ function TopBar({
               }}
             />
           </label>
+          <button
+            type="button"
+            className="btn"
+            aria-pressed={isAutoPlaying}
+            onClick={onToggleAutoPlay}
+            title={isAutoPlaying ? 'Stop auto Tick' : 'Start auto Tick'}
+            style={{
+              background: '#111827',
+              color: '#e5e7eb',
+              border: '1px solid #374151',
+              borderRadius: 12,
+              padding: '2px 8px',
+              fontSize: 11,
+              letterSpacing: 0.5,
+            }}
+          >
+            AutoTick: {isAutoPlaying ? 'On' : 'Off'}
+          </button>
           <button
             type="button"
             className="btn"
@@ -1123,10 +1145,14 @@ function App() {
         ? (ev as WsEventName)
         : null
     if (!k) return
+    try {
+      console.log('[App] bumpEventCount called for', k)
+    } catch {}
     countsRef.current[k] = (countsRef.current[k] ?? 0) + 1
     // Coalesce flushes to avoid excessive setState under high throughput
     flushTimerRef.current ??= window.setTimeout(() => {
       try {
+        console.log('[App] flushing eventCounts', countsRef.current)
         setEventCounts({ ...countsRef.current })
       } finally {
         flushTimerRef.current = null
@@ -1327,6 +1353,25 @@ function App() {
   const [rateSeries, setRateSeries] = useState<number[]>([])
   // WebSocket console visibility (default hidden)
   const [consoleVisible, setConsoleVisible] = useState(false)
+
+  // Auto-play faux tick events (Play/Pause). Minimal: emit a tick every 1s when enabled.
+  const [autoPlaying, setAutoPlaying] = useState(false)
+  useEffect(() => {
+    if (!autoPlaying) return
+    const id = window.setInterval(() => {
+      try {
+        injectFauxWsEvent('tick')
+      } catch {
+        /* no-op */
+      }
+    }, 1000)
+    return () => {
+      try {
+        window.clearInterval(id)
+      } catch {}
+    }
+    // only depends on autoPlaying and injectFauxWsEvent reference
+  }, [autoPlaying])
 
   // Dev-only touch to keep rateSeries referenced; retained for potential future diagnostics
   useEffect(() => {
@@ -1802,6 +1847,10 @@ function App() {
           }}
           onInject={injectFauxWsEvent}
           perTokenDisabled={SubscriptionQueue.getVisibleKeys().length === 0}
+          isAutoPlaying={autoPlaying}
+          onToggleAutoPlay={() => {
+            setAutoPlaying((s) => !s)
+          }}
         />
         {/* Filters Bar */}
         <div className="filters">

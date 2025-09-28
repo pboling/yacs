@@ -518,43 +518,46 @@ const Row = memo(
               })
 
               const now = Date.now()
-              const MINUTE = 60_000
-              const endBucket = Math.floor(now / MINUTE) * MINUTE
-              const WINDOW_POINTS = 5
-              const startBucket = endBucket - (WINDOW_POINTS - 1) * MINUTE
+              // Build a higher-resolution series: include all raw history points inside the
+              // recent WINDOW_MS (default 5 minutes) without coarse bucketing so short bursts
+              // of ticks produce volatility in the sparkline. Cap total points to avoid
+              // excessively large arrays (downsample deterministically when needed).
+              const WINDOW_MS = 5 * 60_000 // 5 minutes
+              const MAX_POINTS = 120
 
-              // Walk the history once and build a carry-forward series for each minute bucket
-              const data: number[] = []
-              let idx = 0
-              let lastVal: number | null = null
-
-              // Initialize lastVal with the latest known price before the startBucket
+              let data: number[] = []
               if (tsArr.length > 0 && pricesArr.length === tsArr.length) {
-                while (idx < tsArr.length && tsArr[idx] <= startBucket) {
-                  lastVal = pricesArr[idx]
-                  idx++
+                for (let i = 0; i < tsArr.length; i++) {
+                  const ts = tsArr[i]
+                  const p = pricesArr[i]
+                  if (!Number.isFinite(ts) || !Number.isFinite(p)) continue
+                  if (ts >= now - WINDOW_MS) data.push(p)
                 }
               }
-              lastVal ??= t.priceUsd
 
-              // For each minute bucket, advance idx while history timestamp <= bucket, updating lastVal
-              for (let bucket = startBucket; bucket <= endBucket; bucket += MINUTE) {
-                while (idx < tsArr.length && tsArr[idx] <= bucket) {
-                  lastVal = pricesArr[idx]
-                  idx++
+              // If no recent points were found, fall back to a small tail from history
+              if (data.length === 0 && tsArr.length > 0 && pricesArr.length === tsArr.length) {
+                const take = Math.min(5, pricesArr.length)
+                data = pricesArr.slice(Math.max(0, pricesArr.length - take))
+              }
+
+              // Final fallback: use the current price as a tiny flat series so the sparkline renders
+              if (data.length === 0) {
+                const base = Number(t.priceUsd)
+                data = Array.from({ length: 5 }, () => base)
+              }
+
+              // Downsample deterministically when we have too many points
+              if (data.length > MAX_POINTS) {
+                const out: number[] = []
+                const step = data.length / MAX_POINTS
+                for (let i = 0; i < MAX_POINTS; i++) {
+                  out.push(data[Math.floor(i * step)])
                 }
-                data.push(lastVal)
+                data = out
               }
 
-              // Ensure we have exactly WINDOW_POINTS points
-              if (data.length !== WINDOW_POINTS) {
-                // Fallback: build a flat series from current price
-                const base = t.priceUsd
-                while (data.length < WINDOW_POINTS) data.unshift(base)
-                if (data.length > WINDOW_POINTS) data.splice(0, data.length - WINDOW_POINTS)
-              }
-
-              // If we have a fresh live override (from incoming tick), apply it to the last bucket
+              // If we have a fresh live override (from incoming tick), apply it to the last point
               try {
                 const ov = latestOverride
                 if (ov && now - ov.at < 60_000) {
@@ -580,6 +583,7 @@ const Row = memo(
                 }
               } catch {}
               // Fractional left-shift so the chart advances smoothly each second
+              const MINUTE = 60_000
               const secsFrac = (now % MINUTE) / MINUTE
               const offset = secsFrac * xStep
               return (
