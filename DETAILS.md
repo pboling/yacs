@@ -687,48 +687,6 @@ Subscribe to pair stats:
 
 Tip: For manual testing in dev, you can open the browser console on the running app and use the global WebSocket instance (when exposed) or a new WebSocket('ws://localhost:5173/ws') and send the JSON above via ws.send(JSON.stringify(payload)).
 
-### 6. Technical Requirements
-
-#### Real-time Updates
-
-- Subscribe to relevant WebSocket events
-- Update token data when price/volume changes occur
-- Handle new tokens being added
-- Maintain proper sorting when data updates
-
-#### Filtering & Sorting
-
-- Implement client-side filtering controls:
-  - Chain selection (ETH, SOL, BASE, BSC)
-  - Minimum volume filter
-  - Maximum age filter
-  - Minimum Market Cap filter
-  - Exclude honeypot checkbox
-- Server-side sorting via API parameters
-
-#### UI/UX
-
-- Loading states
-- Error states
-- Empty states
-- Color coding for price changes (green/red)
-
-### 7. Deliverables
-
-1. **React App** - Runnable single-page React/Next/Vite app with just the tables and filters
-2. **API Integration** - Working REST API calls
-3. **WebSocket Integration** - Real-time data updates
-4. **Styling** - You can use whatever you want for the UI as long as it looks decent
-5. **Documentation** - Brief README explaining your approach
-6. **Error Handling** - Proper error states and recovery
-
-### 8. Bonus Points
-
-- Unit tests
-- Chart integration (mini price charts)
-- Export functionality
-- Advanced filtering options
-
 ### API Base URL
 
 `https://api-rs.dexcelerate.com`;
