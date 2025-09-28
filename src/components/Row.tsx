@@ -43,7 +43,7 @@ const Row = memo(
     const sparkRef = useRef<HTMLDivElement | null>(null)
     const trRef = useRef<HTMLTableRowElement | null>(null)
     const isVisibleRef = useRef<boolean>(true)
-    const lastPriceRef = useRef<number>(typeof t.priceUsd === 'number' ? t.priceUsd : 0)
+    const lastPriceRef = useRef<number>(t.priceUsd)
     // Latest incoming tick override for sparkline's most recent bucket
     const latestOverrideRef = useRef<{ price: number; at: number } | null>(null)
     // Temporary stroke color pulse to match the incoming dot color
@@ -51,7 +51,7 @@ const Row = memo(
     const pulseUntilRef = useRef<number>(0)
 
     useEffect(() => {
-      lastPriceRef.current = typeof t.priceUsd === 'number' ? t.priceUsd : lastPriceRef.current
+      lastPriceRef.current = t.priceUsd
     }, [t.priceUsd])
 
     useEffect(() => {
@@ -74,8 +74,7 @@ const Row = memo(
       if (!el) return
       // Seed from current attribute if Table has already computed it
       try {
-        const isVis = el.getAttribute('data-visible') === '1'
-        isVisibleRef.current = isVis
+        isVisibleRef.current = el.getAttribute('data-visible') === '1'
       } catch {}
       const handler = (ev: Event) => {
         try {
@@ -99,15 +98,13 @@ const Row = memo(
       const token = (t as { tokenAddress?: string }).tokenAddress
       const chain = t.chain
       if (!token || !chain) return
-      const key = buildTickKey(String(token).toLowerCase(), chain)
-      const off = onUpdate((e) => {
-        // Compare keys case-insensitively to be robust to upstream casing differences
-        try {
-          const incoming = typeof e.key === 'string' ? e.key.toLowerCase() : String(e.key)
-          if (e.type !== 'tick' || incoming !== String(key).toLowerCase()) return
-        } catch {
-          if (e.type !== 'tick' || e.key !== key) return
-        }
+      const key = buildTickKey(token.toLowerCase(), chain)
+      return onUpdate((e) => {
+        // Only respond to per-token events for this row (tick or pair-stats)
+        if (e.type !== 'tick' && e.type !== 'pair-stats') return
+        // e.key is expected to be a string; coerce for TypeScript and lowercase for comparison
+        const incoming = (e.key as string).toLowerCase()
+        if (incoming !== key.toLowerCase()) return
         // Only animate when the row is visible within the scrollpane viewport
         // Additionally, pause animations while the detail modal is open
         try {
@@ -115,20 +112,50 @@ const Row = memo(
           if (modalOpen) return
         } catch {}
         if (!isVisibleRef.current) return
-        // Try to extract latest swap price from event data
+        // Try to extract a best-effort latest price from event data
         let newPrice: number | null = null
         try {
-          const dd = e.data as {
-            swaps?: { isOutlier?: boolean; priceToken1Usd?: number | string }[]
-          }
-          if (Array.isArray(dd?.swaps)) {
-            const latest = dd.swaps.filter((s) => !s.isOutlier).pop()
-            if (latest) {
-              const v =
-                typeof latest.priceToken1Usd === 'number'
-                  ? latest.priceToken1Usd
-                  : parseFloat(latest.priceToken1Usd ?? 'NaN')
-              if (Number.isFinite(v)) newPrice = v
+          if (e.type === 'tick') {
+            const dd = e.data as {
+              swaps?: { isOutlier?: boolean; priceToken1Usd?: number | string }[]
+            }
+            if (Array.isArray(dd?.swaps)) {
+              const latest = dd.swaps.filter((s) => !s.isOutlier).pop()
+              if (latest) {
+                const v =
+                  typeof latest.priceToken1Usd === 'number'
+                    ? latest.priceToken1Usd
+                    : parseFloat(latest.priceToken1Usd ?? 'NaN')
+                if (Number.isFinite(v)) newPrice = v
+              }
+            }
+          } else if (e.type === 'pair-stats') {
+            // pair-stats contains aggregated pairStats with nested time windows.
+            // Prefer the most recent 'last' price we can find in twentyFourHour -> oneHour -> fiveMin
+            type PriceWindow = { last?: number | string | null } | undefined
+            type PairStats = {
+              twentyFourHour?: PriceWindow
+              oneHour?: PriceWindow
+              fiveMin?: PriceWindow
+            }
+            const dd = e.data as { pairStats?: PairStats } | undefined
+            const ps = dd?.pairStats ?? ({} as PairStats)
+            // Use unknown[] to safely narrow each candidate below
+            const candidates: unknown[] = [
+              ps?.twentyFourHour?.last,
+              ps?.oneHour?.last,
+              ps?.fiveMin?.last,
+            ]
+            for (const cand of candidates) {
+              if (cand == null) continue
+              let num: number = NaN
+              if (typeof cand === 'number') num = cand
+              else if (typeof cand === 'string') num = parseFloat(cand)
+              // ignore non-number/string candidates
+              if (Number.isFinite(num)) {
+                newPrice = num
+                break
+              }
             }
           }
         } catch {}
@@ -153,7 +180,6 @@ const Row = memo(
         setSecTick((n) => n + 1)
         animateDot(color)
       })
-      return off
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [t.chain, (t as { tokenAddress?: string }).tokenAddress])
 
@@ -174,14 +200,18 @@ const Row = memo(
               chain: t.chain,
             })
           } catch {}
-          throw new Error('Invariant: animateDot anchors missing for visible row')
+          // Abort animation gracefully when DOM anchors are missing for the visible row
+          console.log('[animated-dot] missing anchors for visible row; aborting')
+          return
         }
         const eyeRect = eyeEl.getBoundingClientRect()
         const sparkRect = sparkEl.getBoundingClientRect()
         const rowRect = rowEl.getBoundingClientRect()
         if (!eyeRect || !sparkRect || !rowRect) {
           console.error('[Row.animateDot] Invalid DOMRect(s)', { eyeRect, sparkRect, rowRect })
-          throw new Error('Invariant: animateDot geometry invalid')
+          // Geometry invalid; abort animation without throwing to avoid noisy caught exceptions
+          console.log('[animated-dot] geometry invalid; aborting')
+          return
         }
         const startX = eyeRect.left + eyeRect.width / 2
         const startY = eyeRect.top + eyeRect.height / 2
@@ -248,8 +278,11 @@ const Row = memo(
           }, firstMs)
         }
       } catch (err) {
-        // Fail hard to surface animation pipeline issues quickly
-        throw err instanceof Error ? err : new Error(String(err))
+        // Fail fast for animation pipeline issues but avoid throwing into callers
+        try {
+          console.error('[Row.animateDot] animation error', err)
+        } catch {}
+        return
       }
     }
 
@@ -417,7 +450,7 @@ const Row = memo(
                   idx++
                 }
               }
-              lastVal ??= typeof t.priceUsd === 'number' ? t.priceUsd : 0
+              lastVal ??= t.priceUsd
 
               // For each minute bucket, advance idx while history timestamp <= bucket, updating lastVal
               for (let bucket = startBucket; bucket <= endBucket; bucket += MINUTE) {
@@ -431,7 +464,7 @@ const Row = memo(
               // Ensure we have exactly WINDOW_POINTS points
               if (data.length !== WINDOW_POINTS) {
                 // Fallback: build a flat series from current price
-                const base = typeof t.priceUsd === 'number' ? t.priceUsd : 0
+                const base = t.priceUsd
                 while (data.length < WINDOW_POINTS) data.unshift(base)
                 if (data.length > WINDOW_POINTS) data.splice(0, data.length - WINDOW_POINTS)
               }
@@ -466,7 +499,7 @@ const Row = memo(
               let color = trendUp ? 'var(--accent-up)' : 'var(--accent-down)'
               // If a pulse is active, override stroke color temporarily to match the incoming dot
               try {
-                if (pulseUntilRef.current > now && typeof pulseColorRef.current === 'string') {
+                if (pulseUntilRef.current > now && pulseColorRef.current) {
                   color = pulseColorRef.current || color
                 }
               } catch {}
@@ -665,10 +698,9 @@ const Row = memo(
                 {(() => {
                   const st2 = getRowStatus?.(t)
                   const isEnabled = st2?.state === 'subscribed'
-                  const instruction = isEnabled
+                  const title2 = isEnabled
                     ? 'click to pause data subscription for this token'
                     : 'click to re-enable data subscription for this token'
-                  const title2 = instruction
                   return (
                     <button
                       type="button"

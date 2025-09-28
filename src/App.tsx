@@ -529,6 +529,71 @@ function App() {
   } catch {
     /* no-op */
   }
+  // Dev helper: only expose the fixture injector in development builds. Ensure no leakage to prod.
+  try {
+    if (import.meta.env.DEV) {
+      ;(
+        window as unknown as { __INJECT_WS_FIXTURE__?: (msg: unknown) => void }
+      ).__INJECT_WS_FIXTURE__ = (parsed: unknown) => {
+        try {
+          if (!parsed || typeof parsed !== 'object') return
+          // Mirror the onmessage pipeline: bump counters, emit per-key updates, then dispatch mapped action
+          const event = (parsed as any).event
+          try {
+            if (event === 'tick' || event === 'pair-stats') bumpEventCount(event)
+          } catch {}
+          try {
+            if (event === 'tick') {
+              const d = (parsed as any).data || {}
+              const pairObj = d.pair || {}
+              const token1 = pairObj.token1Address || pairObj.token
+              const chainVal = pairObj.chain
+              if (
+                typeof token1 === 'string' &&
+                (typeof chainVal === 'string' || typeof chainVal === 'number')
+              ) {
+                const key = buildTickKey(token1.toLowerCase(), chainVal)
+                emitUpdate({ key, type: 'tick', data: d })
+              }
+            } else if (event === 'pair-stats') {
+              const d = (parsed as any).data || {}
+              const pairObj = d.pair || {}
+              const token1 = pairObj.token1Address
+              const chainVal = pairObj.chain
+              if (
+                typeof token1 === 'string' &&
+                (typeof chainVal === 'string' || typeof chainVal === 'number')
+              ) {
+                const key = buildTickKey(token1.toLowerCase(), chainVal)
+                emitUpdate({ key, type: 'pair-stats', data: d })
+              }
+            }
+          } catch {}
+          const action = mapIncomingMessageToActionSafe(parsed)
+          if (action) d(action as Action)
+        } catch (err) {
+          try {
+            console.error('[__INJECT_WS_FIXTURE__] failed', err)
+          } catch {}
+        }
+      }
+    } else {
+      // Ensure the hook is not present in non-DEV environments
+      try {
+        const anyWin = window as unknown as { __INJECT_WS_FIXTURE__?: unknown }
+        if (anyWin && '__INJECT_WS_FIXTURE__' in anyWin) {
+          try {
+            // delete the dev helper if present to avoid leakage to production
+            delete (anyWin as any).__INJECT_WS_FIXTURE__
+          } catch {
+            try {
+              anyWin.__INJECT_WS_FIXTURE__ = undefined
+            } catch {}
+          }
+        }
+      } catch {}
+    }
+  } catch {}
 
   // WebSocket connection with fallback and subscriptions
   useEffect(() => {
@@ -858,8 +923,7 @@ function App() {
                         return
                       }
                       // Normalize token to lowercase for consistent keying across the app
-                      const tokenKey =
-                        typeof tokenStr === 'string' ? tokenStr.toLowerCase() : tokenStr
+                      const tokenKey = tokenStr.toLowerCase()
                       const key = buildTickKey(tokenKey, chainVal)
                       emitUpdate({ key, type: 'tick', data })
                     }
