@@ -528,7 +528,6 @@ export const NEW_TOKENS_FILTERS: GetScannerResultParams = {
   isNotHP: true,
 }
 
-
 /**
  * Minimal WS scanner-pairs snapshot shape observed in production.
  * This differs from WsScannerPairsItem and only includes a subset of fields

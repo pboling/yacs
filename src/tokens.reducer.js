@@ -25,7 +25,11 @@
 // Pure tokens reducer to manage scanner pages, ticks, and pair-stats
 // Model typedef for JS consumers
 /** @typedef {import('./models/Token').Token} Token */
-import { mapRESTScannerResultToToken, mapWSPairsItemToToken, applyTickToToken } from './tdd.runtime.js'
+import {
+  mapRESTScannerResultToToken,
+  mapWSPairsItemToToken,
+  applyTickToToken,
+} from './tdd.runtime.js'
 
 import { debugLog as __debugLog__ } from './utils/debug.mjs'
 
@@ -69,7 +73,9 @@ function assertValidTokenMinimal(token, context) {
   }
   // For pre-mapped Token objects and REST-mapped tokens, validate tokenName.
   if (typeof token?.tokenName !== 'string' || token.tokenName.trim() === '') {
-    try { console.error('[tokensReducer] Invalid tokenName', { context, token }); } catch {}
+    try {
+      console.error('[tokensReducer] Invalid tokenName', { context, token })
+    } catch {}
     throw new Error('Invalid Token: tokenName must be a non-empty string')
   }
 }
@@ -97,7 +103,10 @@ function processTokens({ tokens, state, page, mapFn, contextAction }) {
   for (const tRaw of Array.isArray(tokens) ? tokens : []) {
     const tNew = mapFn ? mapFn(tRaw) : tRaw
     // Validate minimal Token shape (must have proper tokenName)
-    assertValidTokenMinimal(tNew, { page, action: contextAction || (mapFn ? 'scanner/ws' : 'scanner/pairsTokens') })
+    assertValidTokenMinimal(tNew, {
+      page,
+      action: contextAction || (mapFn ? 'scanner/ws' : 'scanner/pairsTokens'),
+    })
     const id = tNew.id
     const idLower = String(id || '').toLowerCase()
     ids.push(id)

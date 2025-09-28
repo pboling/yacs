@@ -71,11 +71,15 @@ export function mapRESTScannerResultToToken(scanner) {
   // Strict validation: token1Name and token1Symbol must be present and non-empty strings.
   if (typeof scanner.token1Name !== 'string' || scanner.token1Name.trim() === '') {
     // Log full context to aid investigation, then crash hard as per policy
-    try { console.error('[mapRESTScannerResultToToken] Invalid token1Name', { scanner }); } catch {}
+    try {
+      console.error('[mapRESTScannerResultToToken] Invalid token1Name', { scanner })
+    } catch {}
     throw new Error('Invalid Token data: token1Name must be a non-empty string')
   }
   if (typeof scanner.token1Symbol !== 'string' || scanner.token1Symbol.trim() === '') {
-    try { console.error('[mapRESTScannerResultToToken] Invalid token1Symbol', { scanner }); } catch {}
+    try {
+      console.error('[mapRESTScannerResultToToken] Invalid token1Symbol', { scanner })
+    } catch {}
     throw new Error('Invalid Token data: token1Symbol must be a non-empty string')
   }
   return {

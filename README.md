@@ -459,10 +459,12 @@ All incoming WebSocket message types are defined in `test-task-types.ts`. See `I
 The app uses three outgoing subscription “rooms.” Below are the exact JSON payloads to send over the WebSocket. In development, connect to ws://localhost:5173/ws (Vite proxy). In production, use wss://api-rs.dexcelerate.com/ws.
 
 Notes
+
 - Chains are normalized by the client to one of: ETH, BSC, BASE, SOL. Numeric IDs are accepted and mapped: 1→ETH, 56→BSC, 8453→BASE, 900→SOL.
 - Unsubscribe messages are included for completeness. The current client build ships with a feature flag that suppresses actually sending unsubscriptions, but the API supports them.
 
-1) scanner-filter — bootstrap stream (per pane)
+1. scanner-filter — bootstrap stream (per pane)
+
 - Purpose: request bulk datasets; server responds with scanner-pairs events for the same filter.
 - Trending pane (page 101) example:
 
@@ -509,7 +511,8 @@ Notes
 }
 ```
 
-2) subscribe-pair — per-row real-time ticks
+2. subscribe-pair — per-row real-time ticks
+
 - Purpose: receive tick events for an individual pair shown in the table.
 - Subscribe:
 
@@ -537,7 +540,8 @@ Notes
 }
 ```
 
-3) subscribe-pair-stats — per-row audits/security/migration
+3. subscribe-pair-stats — per-row audits/security/migration
+
 - Purpose: receive pair-stats events for the same pair as above.
 - Subscribe:
 
@@ -572,6 +576,7 @@ The following examples use actual pair and token addresses from tests/fixtures/s
 - BASE — Elon Troll Face (ETF)
 
 Subscribe to pair ticks:
+
 ```json
 {
   "event": "subscribe-pair",
@@ -582,7 +587,9 @@ Subscribe to pair ticks:
   }
 }
 ```
+
 Subscribe to pair stats:
+
 ```json
 {
   "event": "subscribe-pair-stats",
@@ -597,6 +604,7 @@ Subscribe to pair stats:
 - BSC — LABUBU
 
 Subscribe to pair ticks:
+
 ```json
 {
   "event": "subscribe-pair",
@@ -607,7 +615,9 @@ Subscribe to pair ticks:
   }
 }
 ```
+
 Subscribe to pair stats:
+
 ```json
 {
   "event": "subscribe-pair-stats",
@@ -622,6 +632,7 @@ Subscribe to pair stats:
 - SOL — GOAT Network (GOATED)
 
 Subscribe to pair ticks:
+
 ```json
 {
   "event": "subscribe-pair",
@@ -632,7 +643,9 @@ Subscribe to pair ticks:
   }
 }
 ```
+
 Subscribe to pair stats:
+
 ```json
 {
   "event": "subscribe-pair-stats",
@@ -647,6 +660,7 @@ Subscribe to pair stats:
 - SOL — Pandu Pandas (PANDU)
 
 Subscribe to pair ticks:
+
 ```json
 {
   "event": "subscribe-pair",
@@ -657,7 +671,9 @@ Subscribe to pair ticks:
   }
 }
 ```
+
 Subscribe to pair stats:
+
 ```json
 {
   "event": "subscribe-pair-stats",

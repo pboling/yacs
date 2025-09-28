@@ -81,7 +81,9 @@ export default function TokensPane({
     byId: Record<string, TokenRow | undefined>
     pages: Partial<Record<number, string[]>>
   } & { version?: number }
-  dispatch: React.Dispatch<ScannerWsAction | ScannerPairsTokensAction | ScannerAppendAction | ScannerAppendTokensAction>
+  dispatch: React.Dispatch<
+    ScannerWsAction | ScannerPairsTokensAction | ScannerAppendAction | ScannerAppendTokensAction
+  >
   defaultSort: { key: SortKey; dir: Dir }
   clientFilters?: {
     chains?: string[]
@@ -112,7 +114,10 @@ export default function TokensPane({
   const [bothEndsVisible, setBothEndsVisible] = useState(false)
 
   // Build fixed server query params per pane, overriding only isNotHP from the client checkbox
-  const isNotHP = useMemo(() => (clientFilters?.excludeHoneypots !== false), [clientFilters?.excludeHoneypots])
+  const isNotHP = useMemo(
+    () => clientFilters?.excludeHoneypots !== false,
+    [clientFilters?.excludeHoneypots],
+  )
   const serverParams = useMemo(() => {
     const base = title === 'Trending Tokens' ? TRENDING_TOKENS_FILTERS : NEW_TOKENS_FILTERS
     return { ...base, isNotHP }
@@ -208,9 +213,7 @@ export default function TokensPane({
     wsRef.current = anyWin.__APP_WS__ ?? null
     try {
       const rs = wsRef.current?.readyState
-      debugLog(
-        '[TokensPane:' + title + '] mount; discovered __APP_WS__ readyState=' + String(rs),
-      )
+      debugLog('[TokensPane:' + title + '] mount; discovered __APP_WS__ readyState=' + String(rs))
     } catch {
       /* no-op */
     }
@@ -286,7 +289,10 @@ export default function TokensPane({
     if (chainsProvidedEmpty) {
       try {
         // When chains are empty, clear the page with a tokens-based action (REST context)
-        dispatch({ type: 'scanner/pairsTokens', payload: { page, tokens: [] } }) as unknown as ScannerPairsTokensAction
+        dispatch({
+          type: 'scanner/pairsTokens',
+          payload: { page, tokens: [] },
+        }) as unknown as ScannerPairsTokensAction
       } catch (err) {
         logCatch(`[TokensPane:${title}] init: dispatch empty pairs on empty chains failed`, err)
       }
@@ -327,20 +333,30 @@ export default function TokensPane({
       setError(null)
       armFailsafe()
       try {
-        debugLog('[TokensPane:' + title + '] fetching initial scanner page with fixed server params', {
-          ...serverParams,
-          page: 1,
-        })
+        debugLog(
+          '[TokensPane:' + title + '] fetching initial scanner page with fixed server params',
+          {
+            ...serverParams,
+            page: 1,
+          },
+        )
         const res = await fetchScannerTyped({ ...serverParams, page: 1 })
         if (cancelled) return
-        const mappedTokens = Array.isArray((res as any).tokens) ? ((res as any).tokens as TokenRow[]) : []
+        const mappedTokens = Array.isArray((res as any).tokens)
+          ? ((res as any).tokens as TokenRow[])
+          : []
         // Deduplicate by pairAddress (case-insensitive) before computing payloads/dispatching
-        const dedupedTokens = dedupeByPairAddress(mappedTokens as unknown as ScannerResult[]) as unknown as TokenRow[]
+        const dedupedTokens = dedupeByPairAddress(
+          mappedTokens as unknown as ScannerResult[],
+        ) as unknown as TokenRow[]
         debugLog('[TokensPane:' + title + '] dispatching scanner/pairsTokens:', {
           page,
           count: dedupedTokens.length,
         })
-        dispatch({ type: 'scanner/pairsTokens', payload: { page, tokens: dedupedTokens } } as ScannerPairsTokensAction)
+        dispatch({
+          type: 'scanner/pairsTokens',
+          payload: { page, tokens: dedupedTokens },
+        } as ScannerPairsTokensAction)
         try {
           debugLog(
             `[Loading:${title}] clearing after initial fetch success; rows will derive shortly`,
@@ -360,7 +376,11 @@ export default function TokensPane({
         // Best-effort: compute subscription payloads and update universe after dispatch.
         try {
           const payloads = dedupedTokens
-            .map((t) => ({ pair: t.pairAddress, token: (t.tokenAddress ?? '').toLowerCase(), chain: t.chain }))
+            .map((t) => ({
+              pair: t.pairAddress,
+              token: (t.tokenAddress ?? '').toLowerCase(),
+              chain: t.chain,
+            }))
             .filter((p) => p.pair && p.token && p.chain)
           payloadsRef.current = payloads
           try {
@@ -689,15 +709,20 @@ export default function TokensPane({
       const sentinel = root?.querySelector('[data-scroll-sentinel="1"]') as HTMLElement | null
       const attrVal = sentinel?.getAttribute('data-rest-page') || ''
       const curPageFromDom = Number.parseInt(attrVal || '', 10)
-      const curPage = Number.isFinite(curPageFromDom) && curPageFromDom > 0 ? curPageFromDom : currentPage
+      const curPage =
+        Number.isFinite(curPageFromDom) && curPageFromDom > 0 ? curPageFromDom : currentPage
       const nextPage = curPage + 1
       try {
-        debugLog(`[TokensPane:${title}] loading more: page ${String(nextPage)} (from DOM=${String(curPageFromDom)} state=${String(currentPage)})`)
+        debugLog(
+          `[TokensPane:${title}] loading more: page ${String(nextPage)} (from DOM=${String(curPageFromDom)} state=${String(currentPage)})`,
+        )
       } catch {}
       const res = await fetchScannerTyped({ ...serverParams, page: nextPage })
       const mapped = Array.isArray((res as any).tokens) ? ((res as any).tokens as TokenRow[]) : []
       // Deduplicate by pairAddress (case-insensitive)
-      const dedupedTokens = dedupeByPairAddress(mapped as unknown as ScannerResult[]) as unknown as TokenRow[]
+      const dedupedTokens = dedupeByPairAddress(
+        mapped as unknown as ScannerResult[],
+      ) as unknown as TokenRow[]
       // Merge new payloads into our cumulative payloadsRef and update SubscriptionQueue universe
       // Dispatch append EARLY to ensure rows appear even if later steps fail.
       dispatch({
@@ -714,7 +739,11 @@ export default function TokensPane({
       // Best-effort: compute/update subscription universe after dispatch
       try {
         const newPayloads = dedupedTokens
-          .map((t) => ({ pair: t.pairAddress, token: (t.tokenAddress ?? '').toLowerCase(), chain: t.chain }))
+          .map((t) => ({
+            pair: t.pairAddress,
+            token: (t.tokenAddress ?? '').toLowerCase(),
+            chain: t.chain,
+          }))
           .filter((p) => p.pair && p.token && p.chain)
         const all = [...(payloadsRef.current || []), ...newPayloads]
         // Deduplicate by full key pair|token|chain
@@ -861,90 +890,96 @@ export default function TokensPane({
   }, [lastRowId, triggerRowId, loadMore, bothEndsVisible, clientFilters, rows.length])
 
   // Handler wired to Table row visibility
-  const _onRowVisibilityChange = useCallback((row: TokenRow, visible: boolean) => {
-    if (scrollingRef.current) return
-    const pair = row.pairAddress
-    const token = row.tokenAddress
-    if (!pair || !token) return
-    const key = buildPairKey(pair, token.toLowerCase(), row.chain)
-    const disabledKey = disabledKeyFor(row)
-    // If this token is disabled, ensure it's not tracked as visible and unsubscribe if needed
-    if (disabledKey && disabledTokensRef.current.has(disabledKey)) {
-      if (visibleKeysRef.current.has(key)) {
-        visibleKeysRef.current.delete(key)
-        try {
-          const { next } = markHidden(key)
-          const ws = wsRef.current
-          if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
-            try {
-              const stack = new Error('unsubscribe trace').stack
-              debugLog('[TokensPane] UNSUB', {
-                key,
-                reason: 'disabled-token visibility change',
-                pane: title,
-                when: new Date().toISOString(),
-                stack,
-              })
-            } catch {}
-            sendUnsubscribe(ws, { pair, token, chain: row.chain })
-          }
-        } catch {}
-      }
-      return
-    }
-    // If subscription lock is active and this key isn't allowed, stop tracking
-    if (lockActiveRef.current && !lockAllowedRef.current.has(key)) {
-      if (visibleKeysRef.current.delete(key)) {
-        try {
-          markHidden(key)
-        } catch {}
-      }
-      return
-    }
-    const set = visibleKeysRef.current
-    const ws = wsRef.current
-    if (visible) {
-      if (!set.has(key)) {
-        const { prev } = markVisible(key)
-        set.add(key)
-        try {
-          SubscriptionQueue.setVisible(key, true, ws, 'TokensPane:onRowVisibilityChange/show')
-        } catch {}
-        if (prev === 0 && ws && ws.readyState === WebSocket.OPEN) {
+  const _onRowVisibilityChange = useCallback(
+    (row: TokenRow, visible: boolean) => {
+      if (scrollingRef.current) return
+      const pair = row.pairAddress
+      const token = row.tokenAddress
+      if (!pair || !token) return
+      const key = buildPairKey(pair, token.toLowerCase(), row.chain)
+      const disabledKey = disabledKeyFor(row)
+      // If this token is disabled, ensure it's not tracked as visible and unsubscribe if needed
+      if (disabledKey && disabledTokensRef.current.has(disabledKey)) {
+        if (visibleKeysRef.current.has(key)) {
+          visibleKeysRef.current.delete(key)
           try {
-            sendSubscribe(ws, { pair, token, chain: row.chain })
+            const { next } = markHidden(key)
+            const ws = wsRef.current
+            if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
+              try {
+                const stack = new Error('unsubscribe trace').stack
+                debugLog('[TokensPane] UNSUB', {
+                  key,
+                  reason: 'disabled-token visibility change',
+                  pane: title,
+                  when: new Date().toISOString(),
+                  stack,
+                })
+              } catch {}
+              sendUnsubscribe(ws, { pair, token, chain: row.chain })
+            }
           } catch {}
         }
+        return
       }
-    } else {
-      if (set.has(key)) {
-        set.delete(key)
-        markHidden(key)
-        try {
-          SubscriptionQueue.setVisible(key, false, ws, 'TokensPane:onRowVisibilityChange/hide')
-        } catch {}
-        // Do not auto-unsubscribe on leaving viewport; let SubscriptionQueue manage inactive rows
+      // If subscription lock is active and this key isn't allowed, stop tracking
+      if (lockActiveRef.current && !lockAllowedRef.current.has(key)) {
+        if (visibleKeysRef.current.delete(key)) {
+          try {
+            markHidden(key)
+          } catch {}
+        }
+        return
       }
-    }
-  }, [title])
+      const set = visibleKeysRef.current
+      const ws = wsRef.current
+      if (visible) {
+        if (!set.has(key)) {
+          const { prev } = markVisible(key)
+          set.add(key)
+          try {
+            SubscriptionQueue.setVisible(key, true, ws, 'TokensPane:onRowVisibilityChange/show')
+          } catch {}
+          if (prev === 0 && ws && ws.readyState === WebSocket.OPEN) {
+            try {
+              sendSubscribe(ws, { pair, token, chain: row.chain })
+            } catch {}
+          }
+        }
+      } else {
+        if (set.has(key)) {
+          set.delete(key)
+          markHidden(key)
+          try {
+            SubscriptionQueue.setVisible(key, false, ws, 'TokensPane:onRowVisibilityChange/hide')
+          } catch {}
+          // Do not auto-unsubscribe on leaving viewport; let SubscriptionQueue manage inactive rows
+        }
+      }
+    },
+    [title],
+  )
 
   // Handler for row visibility changes (per-row): only update local refs and counters.
   // Central reconciliation happens in onScrollStop via SubscriptionQueue.setTableVisible.
-  const handleRowVisibilityChange = useCallback((row: TokenRow, visible: boolean) => {
-    const key = buildPairKey(row.pairAddress, (row.tokenAddress ?? '').toLowerCase(), row.chain)
-    if (!key) return
-    if (visible) {
-      try {
-        markVisible(key)
-        visibleKeysRef.current.add(key)
-      } catch {}
-    } else {
-      try {
-        markHidden(key)
-        visibleKeysRef.current.delete(key)
-      } catch {}
-    }
-  }, [title])
+  const handleRowVisibilityChange = useCallback(
+    (row: TokenRow, visible: boolean) => {
+      const key = buildPairKey(row.pairAddress, (row.tokenAddress ?? '').toLowerCase(), row.chain)
+      if (!key) return
+      if (visible) {
+        try {
+          markVisible(key)
+          visibleKeysRef.current.add(key)
+        } catch {}
+      } else {
+        try {
+          markHidden(key)
+          visibleKeysRef.current.delete(key)
+        } catch {}
+      }
+    },
+    [title],
+  )
 
   // Unsubscribe all visible on unmount (outside dev optional)
   useEffect(() => {
@@ -1104,16 +1139,29 @@ export default function TokensPane({
       try {
         debugLog('[TokensPane:' + title + '] isNotHP changed → refetching page 1', { isNotHP })
         const res = await fetchScannerTyped({ ...serverParams, page: 1 })
-        const mappedTokens = Array.isArray((res as any).tokens) ? ((res as any).tokens as TokenRow[]) : []
-        const dedupedTokens = dedupeByPairAddress(mappedTokens as unknown as ScannerResult[]) as unknown as TokenRow[]
-        dispatch({ type: 'scanner/pairsTokens', payload: { page, tokens: dedupedTokens } } as ScannerPairsTokensAction)
+        const mappedTokens = Array.isArray((res as any).tokens)
+          ? ((res as any).tokens as TokenRow[])
+          : []
+        const dedupedTokens = dedupeByPairAddress(
+          mappedTokens as unknown as ScannerResult[],
+        ) as unknown as TokenRow[]
+        dispatch({
+          type: 'scanner/pairsTokens',
+          payload: { page, tokens: dedupedTokens },
+        } as ScannerPairsTokensAction)
         // Update subscriptions universe
         try {
           const payloads = dedupedTokens
-            .map((t) => ({ pair: t.pairAddress, token: (t.tokenAddress ?? '').toLowerCase(), chain: t.chain }))
+            .map((t) => ({
+              pair: t.pairAddress,
+              token: (t.tokenAddress ?? '').toLowerCase(),
+              chain: t.chain,
+            }))
             .filter((p) => p.pair && p.token && p.chain)
           payloadsRef.current = payloads
-          const keys = payloads.map((p) => buildPairKey(p.pair, (p.token ?? '').toLowerCase(), p.chain))
+          const keys = payloads.map((p) =>
+            buildPairKey(p.pair, (p.token ?? '').toLowerCase(), p.chain),
+          )
           SubscriptionQueue.updateUniverse(keys, wsRef.current ?? null)
         } catch (err) {
           logCatch(`[TokensPane:${title}] updateUniverse (isNotHP change) failed`, err)
