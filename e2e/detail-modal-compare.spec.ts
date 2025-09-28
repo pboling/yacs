@@ -1,5 +1,6 @@
 // filepath: /home/pboling/WebstormProjects/dexcelerate-fe-test/e2e/detail-modal-compare.spec.ts
-import { test, expect, Page } from '@playwright/test'
+import { test, expect } from '@playwright/test'
+import type { Page } from '@playwright/test'
 
 type TableName = 'Trending Tokens' | 'New Tokens'
 

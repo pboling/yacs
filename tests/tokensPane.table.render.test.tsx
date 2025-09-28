@@ -6,6 +6,7 @@ import TokensPane from '../src/components/TokensPane'
 import { tokensReducer, initialState } from '../src/tokens.reducer.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { useReducer } from 'react'
 
 async function loadFixture(name: 'scanner.trending.json' | 'scanner.new.json') {
   const p = path.resolve(process.cwd(), 'tests', 'fixtures', name)
@@ -88,10 +89,6 @@ describe.skip('TokensPane→Table integration: renders DOM rows post-fetch', () 
     ;(global as any).IntersectionObserver = origIO
     ;(global as any).ResizeObserver = origRO
   })
-
-  function makeState() {
-    return { byId: {}, pages: {}, version: 0 }
-  }
 
   it('mounts, fetches, dispatches, and renders > 0 rows', async () => {
     function Host() {

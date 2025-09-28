@@ -135,7 +135,7 @@ describe.skip('Tick Counter', () => {
 
   it('should increment tick counter when receiving tick events', async () => {
     // Render the App component
-    const { container } = render(<App />)
+    render(<App />)
 
     // Wait for the component to mount and WebSocket to be established
     await waitFor(() => {
@@ -191,7 +191,7 @@ describe.skip('Tick Counter', () => {
   })
 
   it('should not increment counter for malformed tick events', async () => {
-    const { container } = render(<App />)
+    render(<App />)
 
     await waitFor(() => {
       expect(mockWs).toBeDefined()

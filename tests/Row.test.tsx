@@ -23,15 +23,14 @@ const mockToken: Token = {
 };
 
 beforeAll(() => {
-  function MockIntersectionObserver() {}
-  MockIntersectionObserver.prototype.root = null;
-  MockIntersectionObserver.prototype.rootMargin = '';
-  MockIntersectionObserver.prototype.thresholds = [];
-  MockIntersectionObserver.prototype.observe = function () {};
-  MockIntersectionObserver.prototype.unobserve = function () {};
-  MockIntersectionObserver.prototype.disconnect = function () {};
-  MockIntersectionObserver.prototype.takeRecords = function () { return []; };
-  window.IntersectionObserver = MockIntersectionObserver;
+  class MockIntersectionObserver {
+    constructor() {}
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() { return []; }
+  }
+  window.IntersectionObserver = MockIntersectionObserver as any;
 });
 
 describe('Row', () => {

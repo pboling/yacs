@@ -22,7 +22,7 @@ type Key = string // pair|token|chain
 
 // Runtime validator: ensure keys follow pair|token|chain
 function isValidKey(key: Key): boolean {
-  if (typeof key !== 'string') return false
+  // Removed unnecessary typeof check; Key is always string
   const parts = key.split('|')
   if (parts.length !== 3) return false
   const [pair, token, chain] = parts
@@ -282,14 +282,7 @@ function tick(ws: WebSocket | null) {
 const tableVisible = new Map<string, Set<Key>>() // per-table current visible keys
 
 export const SubscriptionQueue = {
-  getSubscribedCount(): number {
-    try {
-      // Total subscribed = visible (pane-managed) + invisibleSet (queue-managed)
-      return visible.size + invisibleSet.size
-    } catch {
-      return 0
-    }
-  },
+  // Removed unused getSubscribedCount
   getVisibleCount() {
     try {
       // Count keys with non-empty TableId sets
@@ -508,10 +501,7 @@ export const SubscriptionQueue = {
   },
   // For testing/inspection
   __debug__: {
-    getUniverse: () => [...universe],
-    getInactiveQueue: () => [...invisibleQueue],
-    getVisible: () => Array.from(visible),
-    getLastUnsubscribedAt: (k: Key) => lastUnsubscribedAt.get(k) ?? 0,
+    // Removed unused getUniverse, getInactiveQueue, getVisible, getLastUnsubscribedAt
     reset() {
       universe = []
       visible.clear()
@@ -519,6 +509,6 @@ export const SubscriptionQueue = {
       invisibleQueue.length = 0
       invisibleSet.clear()
       lastUnsubscribedAt.clear()
-    },
+    }
   },
 }
