@@ -1,6 +1,11 @@
 # Dexcelerate FE Test
 
+[![CI](https://github.com/pboling/yacs/actions/workflows/ci.yml/badge.svg)](https://github.com/pboling/yacs/actions/workflows/ci.yml)
+
+# YACS - Yet Another Crypto Scanner
+
 ## Overview
+
 This app is a single-page React application (Rolldown-Vite-based) designed to display and manage real-time token data.
 It features robust filtering, sorting, and live updates via WebSocket, with a focus on usability and responsiveness.
 
@@ -46,4 +51,3 @@ It features robust filtering, sorting, and live updates via WebSocket, with a fo
 ---
 
 For more details, see [DETAILS.md](DETAILS.md), inline documentation, and tests.
-
