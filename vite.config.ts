@@ -19,6 +19,7 @@ export default defineConfig(() => {
   }
 
   return {
+    base: '/yacs/',
     plugins,
     server: {
       proxy,
