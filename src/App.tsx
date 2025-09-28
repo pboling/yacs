@@ -669,9 +669,11 @@ function App() {
                 buildScannerSubscriptionSafe({ ...trendingFilters, page: TRENDING_PAGE }),
               ),
             )
-            logWsInfo('scanner-filter sent (Trending) page ' + String(TRENDING_PAGE))
+            console.log(
+              `[${new Date().toISOString()}] scanner-filter sent (Trending) page ${TRENDING_PAGE}`,
+            )
             ws.send(JSON.stringify(buildScannerSubscriptionSafe({ ...newFilters, page: NEW_PAGE })))
-            logWsInfo('scanner-filter sent (New) page ' + String(NEW_PAGE))
+            console.log(`[${new Date().toISOString()}] scanner-filter sent (New) page ${NEW_PAGE}`)
           }
           ws.onerror = (ev) => {
             try {
@@ -1141,6 +1143,19 @@ function App() {
       } catch {}
     }
   }, [])
+  // Log when VisSubs changes from the UI polling perspective to correlate with SubscriptionQueue logs
+  useEffect(() => {
+    try {
+      const any = SubscriptionQueue as unknown as { __debug__?: { getVisible?: () => string[] } }
+      const vis = any.__debug__?.getVisible ? any.__debug__?.getVisible() : []
+      console.log('[App] VisSubs changed', {
+        next: subCount,
+        invis: invisCount,
+        sample: (vis || []).slice(0, 10),
+        time: new Date().toISOString(),
+      })
+    } catch {}
+  }, [subCount])
   const [rateSeries, setRateSeries] = useState<number[]>([])
   // WebSocket console visibility (default hidden)
   const [consoleVisible, setConsoleVisible] = useState(false)

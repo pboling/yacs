@@ -595,7 +595,7 @@ export default function TokensPane({
             visibleKeysRef.current.delete(key)
             // Let SubscriptionQueue enforce quotas for now-hidden rows
             try {
-              SubscriptionQueue.setVisible(key, false, ws)
+              SubscriptionQueue.setVisible(key, false, ws, 'TokensPane:rowsEffect/remove')
             } catch {}
           } catch (err) {
             console.error(
@@ -859,6 +859,16 @@ export default function TokensPane({
           const { next } = markHidden(key)
           const ws = wsRef.current
           if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
+            try {
+              const stack = new Error('unsubscribe trace').stack
+              console.log('[TokensPane] UNSUB', {
+                key,
+                reason: 'disabled-token visibility change',
+                pane: title,
+                when: new Date().toISOString(),
+                stack,
+              })
+            } catch {}
             sendUnsubscribe(ws, { pair, token, chain: row.chain })
           }
         } catch {}
@@ -881,7 +891,7 @@ export default function TokensPane({
         const { prev } = markVisible(key)
         set.add(key)
         try {
-          SubscriptionQueue.setVisible(key, true, ws)
+          SubscriptionQueue.setVisible(key, true, ws, 'TokensPane:onRowVisibilityChange/show')
         } catch {}
         if (prev === 0 && ws && ws.readyState === WebSocket.OPEN) {
           try {
@@ -894,7 +904,7 @@ export default function TokensPane({
         set.delete(key)
         markHidden(key)
         try {
-          SubscriptionQueue.setVisible(key, false, ws)
+          SubscriptionQueue.setVisible(key, false, ws, 'TokensPane:onRowVisibilityChange/hide')
         } catch {}
         // Do not auto-unsubscribe on leaving viewport; let SubscriptionQueue manage inactive rows
       }
@@ -919,6 +929,16 @@ export default function TokensPane({
             if (next === 0) {
               try {
                 SubscriptionQueue.noteUnsubscribed(key)
+              } catch {}
+              try {
+                const stack = new Error('unsubscribe trace').stack
+                console.log('[TokensPane] UNSUB', {
+                  key,
+                  reason: 'unmount: no more visible panes for key',
+                  pane: title,
+                  when: new Date().toISOString(),
+                  stack,
+                })
               } catch {}
               sendUnsubscribe(ws, { pair, token, chain })
             }
@@ -1062,11 +1082,21 @@ export default function TokensPane({
           const [pair, token, chain] = key.split('|')
           const { next } = markHidden(key)
           try {
-            SubscriptionQueue.setVisible(key, false, ws)
+            SubscriptionQueue.setVisible(key, false, ws, 'TokensPane:toggleDisable/hide')
           } catch {}
           if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
             try {
               SubscriptionQueue.noteUnsubscribed(key)
+            } catch {}
+            try {
+              const stack = new Error('unsubscribe trace').stack
+              console.log('[TokensPane] UNSUB', {
+                key,
+                reason: 'toggleDisable: no more visible panes for key',
+                pane: title,
+                when: new Date().toISOString(),
+                stack,
+              })
             } catch {}
             try {
               sendUnsubscribe(ws, { pair, token, chain })
@@ -1179,20 +1209,43 @@ export default function TokensPane({
           scrollingRef.current = false
           // Compute keys that should be visible (subscribed)
           const nextVisible: string[] = []
+          let skippedDisabled = 0
+          let skippedLocked = 0
           for (const row of visibleRows) {
             const pair = row.pairAddress ?? ''
             const token = row.tokenAddress ?? ''
             if (!pair || !token) continue
             const key = buildPairKey(pair, token.toLowerCase(), row.chain)
             // Respect modal lock: only subscribe allowed keys when lock is active
-            if (lockActiveRef.current && !lockAllowedRef.current.has(key)) continue
+            if (lockActiveRef.current && !lockAllowedRef.current.has(key)) {
+              skippedLocked++
+              continue
+            }
             // Skip disabled tokens
             const dKey = buildTickKey(token.toLowerCase(), row.chain)
-            if (disabledTokensRef.current.has(dKey)) continue
+            if (disabledTokensRef.current.has(dKey)) {
+              skippedDisabled++
+              continue
+            }
             nextVisible.push(key)
           }
           const nextSet = new Set(nextVisible)
           const prevSet = new Set<string>(visibleKeysRef.current)
+          try {
+            const added = Array.from(nextSet).filter((k) => !prevSet.has(k))
+            const removed = Array.from(prevSet).filter((k) => !nextSet.has(k))
+            console.log(`[TokensPane:${title}] onScrollStop diff`, {
+              next: nextVisible.length,
+              prev: prevSet.size,
+              addedCount: added.length,
+              removedCount: removed.length,
+              addedSample: added.slice(0, 5),
+              removedSample: removed.slice(0, 5),
+              skippedDisabled,
+              skippedLocked,
+              time: new Date().toISOString(),
+            })
+          } catch {}
 
           if (ws && ws.readyState === WebSocket.OPEN) {
             // Update visibility for keys no longer visible in this pane (no direct unsubscribe)
@@ -1201,7 +1254,7 @@ export default function TokensPane({
               try {
                 markHidden(key)
                 try {
-                  SubscriptionQueue.setVisible(key, false, ws)
+                  SubscriptionQueue.setVisible(key, false, ws, 'TokensPane:onScrollStop/hide')
                 } catch {}
               } catch (err) {
                 console.error(
@@ -1218,7 +1271,7 @@ export default function TokensPane({
               try {
                 const { prev } = markVisible(key)
                 try {
-                  SubscriptionQueue.setVisible(key, true, ws)
+                  SubscriptionQueue.setVisible(key, true, ws, 'TokensPane:onScrollStop/show')
                 } catch {}
                 if (prev === 0) {
                   sendSubscribe(ws, { pair, token, chain })

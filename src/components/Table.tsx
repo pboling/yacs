@@ -269,6 +269,21 @@ export default function Table({
           // Notify the row element directly so it can gate animations without new props
           const evt = new CustomEvent('dex:row-visibility', { detail: { visible } })
           el.dispatchEvent(evt)
+          // Diagnostics: log each visibility entry with geometry to trace flapping
+          try {
+            const r = el.getBoundingClientRect()
+            const rootBounds = (e.rootBounds as DOMRect | null) ?? null
+            console.log(`[Table:${title}] IO entry`, {
+              rowId: row.id,
+              visible,
+              ratio: e.intersectionRatio,
+              time: new Date().toISOString(),
+              rect: { top: r.top, bottom: r.bottom, height: r.height },
+              root: rootBounds
+                ? { top: rootBounds.top, bottom: rootBounds.bottom, height: rootBounds.height }
+                : null,
+            })
+          } catch {}
         } catch {
           /* no-op */
         }
@@ -280,6 +295,17 @@ export default function Table({
       rootMargin: '100px 0px',
       threshold: 0,
     })
+    try {
+      const rootRect = rootEl?.getBoundingClientRect() || null
+      console.log(`[Table:${title}] IO created`, {
+        rootMargin: '100px 0px',
+        threshold: 0,
+        rootRect: rootRect
+          ? { top: rootRect.top, bottom: rootRect.bottom, height: rootRect.height }
+          : null,
+        time: new Date().toISOString(),
+      })
+    } catch {}
     observerRef.current = obs
     // Observe any rows already registered
     for (const el of rowMapRef.current.keys()) {
@@ -340,6 +366,12 @@ export default function Table({
         // Fire a synthetic scroll stop with expanded rows
         if (onScrollStop) {
           try {
+            const sample = expandedRows.slice(0, 5).map((r) => r.id)
+            console.log(`[Table:${title}] onScrollStop(seed)`, {
+              count: expandedRows.length,
+              sample,
+              time: new Date().toISOString(),
+            })
             onScrollStop(expandedRows)
           } catch {
             /* no-op */
@@ -470,6 +502,12 @@ export default function Table({
               const end = Math.min(ordered.length - 1, Math.max(...visibleIdxs) + 3)
               for (let i = start; i <= end; i++) expanded.push(ordered[i].row)
             }
+            const sample = expanded.slice(0, 5).map((r) => r.id)
+            console.log(`[Table:${title}] onScrollStop`, {
+              count: expanded.length,
+              sample,
+              time: new Date().toISOString(),
+            })
             onScrollStop(expanded)
           }
         } catch {

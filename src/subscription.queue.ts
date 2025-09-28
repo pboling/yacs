@@ -29,8 +29,60 @@ function isValidKey(key: Key): boolean {
   return !!pair && !!token && !!chain
 }
 
-const visible = new Set<Key>()
-const ignored = new Set<Key>()
+// Instrumented Set wrapper: monkey-patch mutators to guarantee logs on any change
+function instrumentSet<T>(set: Set<T>, name: string) {
+  try {
+    type MutableSet<U> = Set<U> & {
+      add: (value: U) => Set<U>
+      delete: (value: U) => boolean
+      clear: () => void
+      __instrumented__?: boolean
+    }
+    const mutable = set as unknown as MutableSet<T>
+    if (mutable.__instrumented__ === true) return set
+    const origAdd = mutable.add.bind(mutable)
+    const origDelete = mutable.delete.bind(mutable)
+    const origClear = mutable.clear.bind(mutable)
+    function logChange(action: string, key?: unknown) {
+      try {
+        const stack = new Error('set change trace').stack
+        console.log(`[SubscriptionQueue] ${name} changed`, {
+          action,
+          key,
+          size: mutable.size,
+          sample: Array.from(mutable).slice(0, 10),
+          time: new Date().toISOString(),
+          stack,
+        })
+      } catch {}
+    }
+    mutable.add = (value: T) => {
+      const before = mutable.size
+      const res = origAdd(value)
+      if (mutable.size !== before) logChange('add', value)
+      return res
+    }
+    mutable.delete = (value: T) => {
+      const before = mutable.size
+      const res = origDelete(value)
+      if (mutable.size !== before) logChange('delete', value)
+      return res
+    }
+    mutable.clear = () => {
+      const had = mutable.size
+      origClear()
+      if (had > 0) logChange('clear')
+    }
+    mutable.__instrumented__ = true
+    try {
+      console.log(`[SubscriptionQueue] Instrumented Set '${name}'`)
+    } catch {}
+  } catch {}
+  return set
+}
+
+const visible = new Map<Key, Set<string>>() // key -> set of tableIds
+const ignored = instrumentSet(new Set<Key>(), 'ignored')
 let universe: Key[] = [] // all keys known to the pane (deduped)
 
 // Global throttle: maximum total subscriptions (visible + invisible). 0 or undefined → use default policy
@@ -38,7 +90,7 @@ let throttleMax: number | undefined = undefined
 
 // FIFO queue of currently subscribed invisible keys
 const invisibleQueue: Key[] = []
-const invisibleSet = new Set<Key>() // mirror of queue for O(1) lookup
+const invisibleSet = instrumentSet(new Set<Key>(), 'invisibleSet') // mirror of queue for O(1) lookup
 
 // Aging: last time key was unsubscribed
 const lastUnsubscribedAt = new Map<Key, number>()
@@ -85,14 +137,30 @@ function pickOldestByUnsubscribed(keys: Key[], n: number): Key[] {
   return copy.slice(0, n)
 }
 
-function unsubscribeKey(ws: WebSocket | null, key: Key) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
+function unsubscribeKey(
+  ws: WebSocket | null,
+  key: Key,
+  reason: string,
+  details?: Record<string, unknown>,
+) {
+  try {
+    lastUnsubscribedAt.set(key, Date.now())
+    const { pair, token, chain } = splitKey(key)
     try {
-      lastUnsubscribedAt.set(key, Date.now())
-      const { pair, token, chain } = splitKey(key)
-      sendUnsubscribe(ws, { pair, token, chain })
+      const stack = new Error('unsubscribe trace').stack
+      console.log('[SubscriptionQueue] UNSUB', {
+        key,
+        reason,
+        details,
+        when: new Date().toISOString(),
+        wsOpen: !!(ws && ws.readyState === WebSocket.OPEN),
+        stack,
+      })
     } catch {}
-  }
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      sendUnsubscribe(ws, { pair, token, chain })
+    }
+  } catch {}
 }
 
 function subscribeKey(ws: WebSocket | null, key: Key) {
@@ -129,7 +197,10 @@ function ensureQueueWithinQuota(ws: WebSocket | null) {
       // No longer in universe or user-disabled → unsubscribe immediately
       invisibleQueue.splice(i, 1)
       invisibleSet.delete(key)
-      unsubscribeKey(ws, key)
+      const reason = !invisibleSetUniverse.has(key)
+        ? 'not-in-invisible-universe (likely removed from universe or became visible/ignored)'
+        : 'ignored=true'
+      unsubscribeKey(ws, key, reason, { phase: 'ensureQueueWithinQuota/eligibility' })
       continue
     }
     i++
@@ -152,7 +223,11 @@ function ensureQueueWithinQuota(ws: WebSocket | null) {
     const key = invisibleQueue.shift()
     if (key) {
       invisibleSet.delete(key)
-      unsubscribeKey(ws, key)
+      unsubscribeKey(ws, key, 'over-invisible-quota', {
+        phase: 'ensureQueueWithinQuota/shrink',
+        quota,
+        queueLen: invisibleQueue.length,
+      })
     } else {
       break
     }
@@ -170,7 +245,7 @@ function tick(ws: WebSocket | null) {
       const k = invisibleQueue.shift()
       if (!k) break
       invisibleSet.delete(k)
-      unsubscribeKey(ws, k)
+      unsubscribeKey(ws, k, 'no-invisible-quota (quota<=0)', { phase: 'tick/purge', quota })
     }
     return
   }
@@ -189,7 +264,7 @@ function tick(ws: WebSocket | null) {
   const toRemove = invisibleQueue.shift()
   if (toRemove) {
     invisibleSet.delete(toRemove)
-    unsubscribeKey(ws, toRemove)
+    unsubscribeKey(ws, toRemove, 'rotation', { phase: 'tick/rotate' })
   }
   const candidates = invisible.filter((k) => !invisibleSet.has(k))
   const toAdd = pickOldestByUnsubscribed(candidates, 1)[0]
@@ -211,8 +286,13 @@ export const SubscriptionQueue = {
   },
   getVisibleCount() {
     try {
-      console.log('[SubscriptionQueue] getVisibleCount:', visible.size, Array.from(visible))
-      return visible.size
+      // Count keys with non-empty TableId sets
+      let count = 0
+      for (const ids of visible.values()) {
+        if (ids.size > 0) count++
+      }
+      console.log('[SubscriptionQueue] getVisibleCount:', count, Array.from(visible.entries()))
+      return count
     } catch {
       return 0
     }
@@ -238,7 +318,7 @@ export const SubscriptionQueue = {
     for (const key of [...invisibleQueue]) {
       if (!nextSet.has(key)) {
         removeFromQueue(key)
-        unsubscribeKey(ws, key)
+        unsubscribeKey(ws, key, 'removed-from-universe', { phase: 'updateUniverse/remove' })
       }
     }
     // Suppress removal of visible keys from visible set
@@ -255,42 +335,55 @@ export const SubscriptionQueue = {
     universe = next
     ensureQueueWithinQuota(ws)
   },
-  setVisible(key: Key, isVisible: boolean, ws: WebSocket | null, source?: string) {
+  setVisible(key: Key, isVisible: boolean, ws: WebSocket | null, tableId?: string) {
     if (!isValidKey(key)) {
       try {
-        console.warn('[SubscriptionQueue] setVisible: invalid key', key, 'source:', source)
+        console.warn('[SubscriptionQueue] setVisible: invalid key', key, 'tableId:', tableId)
       } catch {}
       return
     }
+    if (!tableId) {
+      console.warn('[SubscriptionQueue] setVisible: missing tableId for key', key)
+      return
+    }
+    let ids = visible.get(key)
+    if (!ids) {
+      ids = instrumentSet(new Set<string>(), `visible.ids:${key}`)
+      visible.set(key, ids)
+    }
     if (isVisible) {
-      visible.add(key)
+      ids.add(tableId)
       removeFromQueue(key)
       // Debug log
       try {
         console.log(
           '[SubscriptionQueue] setVisible: added',
           key,
+          'tableId:',
+          tableId,
+          'ids:',
+          Array.from(ids),
           'visible.size:',
           visible.size,
-          Array.from(visible),
-          'source:',
-          source,
         )
       } catch {}
     } else {
-      visible.delete(key)
-      // Debug log
-      try {
-        console.log(
-          '[SubscriptionQueue] setVisible: removed',
-          key,
-          'visible.size:',
-          visible.size,
-          Array.from(visible),
-          'source:',
-          source,
-        )
-      } catch {}
+      ids.delete(tableId)
+      // Only remove key if no tables report it as visible
+      if (ids.size === 0) {
+        visible.delete(key)
+        // Debug log
+        try {
+          console.log(
+            '[SubscriptionQueue] setVisible: removed',
+            key,
+            'tableId:',
+            tableId,
+            'visible.size:',
+            visible.size,
+          )
+        } catch {}
+      }
     }
   },
   setIgnored(key: Key, isIgnored: boolean, ws: WebSocket | null) {
@@ -300,10 +393,10 @@ export const SubscriptionQueue = {
       visible.delete(key)
       if (invisibleSet.has(key)) {
         removeFromQueue(key)
-        unsubscribeKey(ws, key)
+        unsubscribeKey(ws, key, 'ignored=true (in-queue)', { phase: 'setIgnored/true' })
       } else {
         // If not in queue, still proactively unsubscribe for safety
-        unsubscribeKey(ws, key)
+        unsubscribeKey(ws, key, 'ignored=true (not-in-queue)', { phase: 'setIgnored/true' })
       }
     } else {
       ignored.delete(key)
@@ -334,6 +427,7 @@ export const SubscriptionQueue = {
   __debug__: {
     getUniverse: () => [...universe],
     getInactiveQueue: () => [...invisibleQueue],
+    getVisible: () => Array.from(visible),
     getLastUnsubscribedAt: (k: Key) => lastUnsubscribedAt.get(k) ?? 0,
     reset() {
       universe = []

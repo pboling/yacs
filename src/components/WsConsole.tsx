@@ -51,13 +51,16 @@ export default function WsConsole() {
   }, [])
 
   useEffect(() => {
-    return onWsConsoleChange((list) => {
-      setEntries(list as WsConsoleEntry[])
-      try {
-        const el = scrollerRef.current
-        if (el) el.scrollTop = el.scrollHeight
-      } catch {}
-    })
+    const handleChange = (next: WsConsoleEntry[]) => {
+      // Only keep the most recent 100 logs
+      setEntries(next.slice(-100))
+    }
+    const off = onWsConsoleChange(handleChange)
+    // Initial trim in case getWsConsoleHistory returns more than 100
+    setEntries((prev) => prev.slice(-100))
+    return () => {
+      off()
+    }
   }, [])
 
   // Helper to match entry text to filter type
