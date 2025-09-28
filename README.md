@@ -4,6 +4,8 @@
 
 # YACS - Yet Another Crypto Scanner
 
+<img width="2855" height="1569" alt="pboling-yacs" src="https://github.com/user-attachments/assets/352fcfee-75b4-4582-a583-332b826dca31" />
+
 ## Overview
 
 This app is a single-page React application (Rolldown-Vite-based) designed to display and manage real-time token data.
