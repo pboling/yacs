@@ -311,9 +311,27 @@ export default function DetailModal({
     sells: '#b91c1c',
     liquidity: '#d97706',
   }
-  // Choose stable token colors for Base vs Compare (these drive legend + all minispark lines)
-  const tokenColorBase = palette.price
-  const tokenColorCompare = palette2.price
+
+  // Deterministic color generator for tokens: produce an HSL color based on the token symbol/name
+  function tokenColorFromString(s: string | undefined | null) {
+    try {
+      const str = String(s ?? '').trim() || 'x'
+      let h = 0
+      for (let i = 0; i < str.length; i++) {
+        h = (h * 31 + str.charCodeAt(i)) | 0
+      }
+      // map to 0..359
+      const hue = Math.abs(h) % 360
+      // use fixed saturation/lightness for good contrast
+      return `hsl(${hue}deg 65% 52%)`
+    } catch {
+      return palette.price
+    }
+  }
+
+  // token colors for legend and minisparks (derive from token symbol/name for visual differentiation)
+  const tokenColorBase = tokenColorFromString(primaryRow?.tokenSymbol ?? primaryRow?.tokenName)
+  const tokenColorCompare = tokenColorFromString(compareRow?.tokenSymbol ?? compareRow?.tokenName)
   // Filter compare options (extracted to pure util for testability)
   const filteredCompareOptions = computeFilteredCompareOptions<DetailModalRow>(
     ({
@@ -1281,35 +1299,44 @@ export default function DetailModal({
                       {/* Three minisparks horizontally, each fills available width */}
                       <div style={{ display: 'flex', gap: 12 }}>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>Volume</div>
+                          <div style={{ width: '100%' }}>
+                            <div style={{ marginTop: 6 }}>
+                              <span style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>Volume&nbsp;</span>
+                              <span>&nbsp;Base:&nbsp;</span><NumberCell value={history.volume.at(-1) ?? '—'} prefix="$" />
+                              <span style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>&mdash;</span>
+                              <span>&nbsp;Compare:&nbsp;</span><NumberCell value={history2.volume.at(-1) ?? '—'} prefix="$" />
+                            </div>
+                          </div>
                           <div style={{ width: '100%' }}>
                             {miniSpark(history.volume, history2.volume, tokenColorBase, tokenColorCompare, 'fill', 40)}
                           </div>
-                          <div style={{ marginTop: 6 }}>
-                            Base: <NumberCell value={history.volume.at(-1) ?? '—'} prefix="$" />
-                            Compare: <NumberCell value={history2.volume.at(-1) ?? '—'} prefix="$" />
-                          </div>
                         </div>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>Buys</div>
+                          <div style={{ width: '100%' }}>
+                            <div style={{ marginTop: 6 }}>
+                              <span style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>Buys&nbsp;</span>
+                              <span>&nbsp;Base:&nbsp;</span><NumberCell value={history.buys.at(-1) ?? '—'} prefix="" />
+                              <span style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>&mdash;</span>
+                              <span>&nbsp;Compare:&nbsp;</span><NumberCell value={history2.buys.at(-1) ?? '—'} prefix="" />
+                            </div>
+                          </div>
                           <div style={{ width: '100%' }}>
                             {miniSpark(history.buys, history2.buys, tokenColorBase, tokenColorCompare, 'fill', 40)}
                           </div>
-                          <div style={{ marginTop: 6 }}>
-                            Base: <NumberCell value={history.buys.at(-1) ?? '—'} />
-                            Compare: <NumberCell value={history2.buys.at(-1) ?? '—'} />
-                          </div>
                         </div>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>Sells</div>
                           <div style={{ width: '100%' }}>
+                            <div style={{ marginTop: 6 }}>
+                              <span style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>Sells&nbsp;</span>
+                              <span>&nbsp;Base:&nbsp;</span><NumberCell value={history.sells.at(-1) ?? '—'} prefix="" />
+                              <span style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>&mdash;</span>
+                              <span>&nbsp;Compare:&nbsp;</span><NumberCell value={history2.sells.at(-1) ?? '—'} prefix="" />
+                            </div>
+                          </div>
+                         <div style={{ width: '100%' }}>
                             {miniSpark(history.sells, history2.sells, tokenColorBase, tokenColorCompare, 'fill', 40)}
                           </div>
-                          <div style={{ marginTop: 6 }}>
-                            Base: <NumberCell value={history.sells.at(-1) ?? '—'} />
-                            Compare: <NumberCell value={history2.sells.at(-1) ?? '—'} />
-                          </div>
-                        </div>
+                         </div>
                       </div>
                     </div>
                   </div>
