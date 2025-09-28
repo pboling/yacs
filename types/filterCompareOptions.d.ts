@@ -9,6 +9,8 @@ export interface ComputeFilteredParams<T extends CompareRowLike> {
   allRows: T[]
   currentRow: T | null | undefined
   compareSearch: string | null | undefined
+  includeStale?: boolean
+  includeDegraded?: boolean
 }
 
 export declare function computeFilteredCompareOptions<T extends CompareRowLike>(

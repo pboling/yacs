@@ -311,23 +311,30 @@ export default function DetailModal({
     sells: '#b91c1c',
     liquidity: '#d97706',
   }
+  // Choose stable token colors for Base vs Compare (these drive legend + all minispark lines)
+  const tokenColorBase = palette.price
+  const tokenColorCompare = palette2.price
   // Filter compare options (extracted to pure util for testability)
-  const filteredCompareOptions = computeFilteredCompareOptions<DetailModalRow>({
-    open,
-    allRows,
-    currentRow: primaryRow ?? null,
-    compareSearch,
-    includeStale,
-    includeDegraded,
-  })
-  const filteredBaseOptions = computeFilteredCompareOptions<DetailModalRow>({
-    open,
-    allRows,
-    currentRow: null,
-    compareSearch: baseSearch,
-    includeStale,
-    includeDegraded,
-  })
+  const filteredCompareOptions = computeFilteredCompareOptions<DetailModalRow>(
+    ({
+      open,
+      allRows,
+      currentRow: primaryRow ?? null,
+      compareSearch,
+      includeStale,
+      includeDegraded,
+    } as unknown) as any,
+  )
+  const filteredBaseOptions = computeFilteredCompareOptions<DetailModalRow>(
+    ({
+      open,
+      allRows,
+      currentRow: null,
+      compareSearch: baseSearch,
+      includeStale,
+      includeDegraded,
+    } as unknown) as any,
+  )
 
   // Debug updates panel: capture raw JSON updates for this row
   const [updatesLog, setUpdatesLog] = useState<{ id: number; text: string }[]>([])
@@ -410,12 +417,20 @@ export default function DetailModal({
   }, [])
 
   // Inline dual-series micro spark for differential (Volume / Buys / Sells)
-  function miniSpark(a: number[] = [], b: number[] = [], colorA: string, colorB: string) {
-    const width = 56
-    const height = 20
+  function miniSpark(
+    a: number[] = [],
+    b: number[] = [],
+    colorA: string,
+    colorB: string,
+    widthParam: number | 'fill' = 56,
+    height = 20,
+  ) {
     const pad = 2
+    // Use a logical internal width for point calculations when using 'fill'
+    const logicalWidth = widthParam === 'fill' ? 200 : widthParam
+    const widthAttr = widthParam === 'fill' ? '100%' : String(widthParam)
     const len = Math.max(a.length, b.length)
-    if (!len) return <span style={{ width, height }} />
+    if (!len) return <span style={{ width: widthAttr, height }} />
     const merged: number[] = []
     for (let i = 0; i < len; i++) {
       if (i < a.length) merged.push(a[i])
@@ -424,7 +439,7 @@ export default function DetailModal({
     const max = Math.max(...merged, 1e-6)
     const min = Math.min(...merged)
     const range = Math.max(1e-6, max - min)
-    const xStep = len > 1 ? (width - pad * 2) / (len - 1) : 0
+    const xStep = len > 1 ? (logicalWidth - pad * 2) / (len - 1) : 0
     const toPts = (vals: number[]) => {
       if (!vals.length) return [] as { x: number; y: number }[]
       const pts: { x: number; y: number }[] = []
@@ -446,15 +461,15 @@ export default function DetailModal({
     const rB = strokeB
     return (
       <svg
-        width={width}
+        width={widthAttr}
         height={height}
-        viewBox={`0 0 ${width} ${height}`}
+        viewBox={`0 0 ${logicalWidth} ${height}`}
         aria-hidden="true"
         focusable="false"
         style={{ display: 'block' }}
       >
         <polyline
-          points={`${pad},${height - pad} ${width - pad},${height - pad}`}
+          points={`${pad},${height - pad} ${logicalWidth - pad},${height - pad}`}
           stroke="#374151"
           strokeWidth={1}
           fill="none"
@@ -1191,87 +1206,113 @@ export default function DetailModal({
                   <div style={{ fontWeight: 600, marginBottom: 6 }}>
                     Differential (Base vs Compare)
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18 }}>
-                    {diffs.map((d) => (
-                      <div key={d.k} style={{ minWidth: 160 }}>
-                        <div style={{ color: palette[d.k] }}>{seriesLabels[d.k]}</div>
-                        <div style={{ fontSize: 12 }}>
-                          {(() => {
-                            if (d.a == null || d.b == null) return '—'
-                            const isCurrency =
-                              d.k === 'price' || d.k === 'mcap' || d.k === 'liquidity'
-                            const prefixSymbol = isCurrency ? '$' : ''
-                            const delta = d.delta ?? 0
-                            const pct = d.pct
-                            const ratio = d.ratio
-                            return (
-                              <span>
-                                <span>
-                                  <NumberCell value={d.a} prefix={prefixSymbol} /> vs{' '}
-                                  <NumberCell value={d.b} prefix={prefixSymbol} /> (
-                                </span>
-                                <NumberCell value={delta} noFade prefix={delta >= 0 ? '+' : ''} />
-                                {pct != null && (
-                                  <>
-                                    <span>, </span>
-                                    <NumberCell
-                                      value={pct}
-                                      noFade
-                                      prefix={pct >= 0 ? '+' : ''}
-                                      suffix="%"
-                                    />
-                                  </>
-                                )}
-                                {ratio != null && (
-                                  <>
-                                    <span> ratio {ratio.toFixed(3)}</span>
-                                  </>
-                                )}
-                                <span>)</span>
-                              </span>
-                            )
-                          })()}
+                  {/* Two-column layout: left=vertical text (Price/Mcap/Liquidity), right=three responsive mini-sparks */}
+                  <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                    {/* Left column: Price / Market Cap / Liquidity vertical stack */}
+                    <div style={{ minWidth: 240, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {['price', 'mcap', 'liquidity'].map((key) => {
+                        const d = (diffs as any).find((x: any) => x.k === key)
+                        return (
+                          <div key={key} style={{ minWidth: 160 }}>
+                            <div style={{ color: palette[key as SeriesKey], fontWeight: 600 }}>
+                              {seriesLabels[key as SeriesKey]}
+                            </div>
+                            <div style={{ fontSize: 12 }}>
+                              {(() => {
+                                if (!d || d.a == null || d.b == null) return '—'
+                                const isCurrency = key === 'price' || key === 'mcap' || key === 'liquidity'
+                                const prefixSymbol = isCurrency ? '$' : ''
+                                const delta = d.delta ?? 0
+                                const pct = d.pct
+                                const ratio = d.ratio
+                                return (
+                                  <span>
+                                    <span>
+                                      <NumberCell value={d.a} prefix={prefixSymbol} /> vs{' '}
+                                      <NumberCell value={d.b} prefix={prefixSymbol} /> (
+                                    </span>
+                                    <NumberCell value={delta} noFade prefix={delta >= 0 ? '+' : ''} />
+                                    {pct != null && (
+                                      <>
+                                        <span>, </span>
+                                        <NumberCell
+                                          value={pct}
+                                          noFade
+                                          prefix={pct >= 0 ? '+' : ''}
+                                          suffix="%"
+                                        />
+                                      </>
+                                    )}
+                                    {ratio != null && (
+                                      <>
+                                        <span> ratio {ratio.toFixed(3)}</span>
+                                      </>
+                                    )}
+                                    <span>)</span>
+                                  </span>
+                                )
+                              })()}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Right column: responsive mini-sparks with legend */}
+                    <div style={{ flex: 1, minWidth: 320 }}>
+                      {/* Legend showing colored lines for base/compare token names */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              {/* tokenColorBase: solid colored bar to indicate Base token color */}
+                              <span style={{ display: 'inline-block', width: 28, height: 8, background: tokenColorBase, borderRadius: 3 }} />
+                              <span style={{ fontSize: 12 }}>{primaryRow?.tokenName ?? 'Base'}</span>
+                            </div>
+                            {/* tokenColorCompare: solid colored bar to indicate Compare token color */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ display: 'inline-block', width: 28, height: 8, background: tokenColorCompare, borderRadius: 3 }} />
+                              <span style={{ fontSize: 12 }}>{compareRow?.tokenName ?? 'Compare'}</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                  {compareRow && (
-                    <div style={{ marginTop: 12 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
-                        Additional Metrics (Volume / Buys / Sells)
-                      </div>
-                      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          <div style={{ fontSize: 11, color: '#9ca3af' }}>Base</div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 11 }}>Vol</span>
-                            {miniSpark(
-                              history.volume,
-                              history2.volume,
-                              palette.volume,
-                              palette2.volume,
-                            )}
-                            <NumberCell value={history.volume.at(-1) ?? '—'} prefix="$" />
+
+                      {/* Three minisparks horizontally, each fills available width */}
+                      <div style={{ display: 'flex', gap: 12 }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>Volume</div>
+                          <div style={{ width: '100%' }}>
+                            {miniSpark(history.volume, history2.volume, tokenColorBase, tokenColorCompare, 'fill', 40)}
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 11 }}>Buys</span>
-                            {miniSpark(history.buys, history2.buys, palette.buys, palette2.buys)}
-                            <NumberCell value={history.buys.at(-1) ?? '—'} />
+                          <div style={{ marginTop: 6 }}>
+                            Base: <NumberCell value={history.volume.at(-1) ?? '—'} prefix="$" />
+                            Compare: <NumberCell value={history2.volume.at(-1) ?? '—'} prefix="$" />
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 11 }}>Sells</span>
-                            {miniSpark(
-                              history.sells,
-                              history2.sells,
-                              palette.sells,
-                              palette2.sells,
-                            )}
-                            <NumberCell value={history.sells.at(-1) ?? '—'} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>Buys</div>
+                          <div style={{ width: '100%' }}>
+                            {miniSpark(history.buys, history2.buys, tokenColorBase, tokenColorCompare, 'fill', 40)}
+                          </div>
+                          <div style={{ marginTop: 6 }}>
+                            Base: <NumberCell value={history.buys.at(-1) ?? '—'} />
+                            Compare: <NumberCell value={history2.buys.at(-1) ?? '—'} />
+                          </div>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>Sells</div>
+                          <div style={{ width: '100%' }}>
+                            {miniSpark(history.sells, history2.sells, tokenColorBase, tokenColorCompare, 'fill', 40)}
+                          </div>
+                          <div style={{ marginTop: 6 }}>
+                            Base: <NumberCell value={history.sells.at(-1) ?? '—'} />
+                            Compare: <NumberCell value={history2.sells.at(-1) ?? '—'} />
                           </div>
                         </div>
                       </div>
                     </div>
-                  )}
+                  </div>
                 </div>
               )}
               {second}
