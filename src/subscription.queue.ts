@@ -306,6 +306,17 @@ export const SubscriptionQueue = {
   getInvisCount() {
     return invisibleQueue.length
   },
+  getVisibleKeys(): string[] {
+    try {
+      const out: string[] = []
+      for (const [key, ids] of visible.entries()) {
+        if (ids && ids.size > 0) out.push(key)
+      }
+      return out
+    } catch {
+      return []
+    }
+  },
   updateUniverse(keys: Key[], ws: WebSocket | null) {
     const nextRaw = Array.isArray(keys) ? [...new Set(keys)] : []
     // Filter and warn on malformed keys

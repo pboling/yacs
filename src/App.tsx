@@ -84,6 +84,8 @@ function TopBar({
   onOpenDetail,
   subBaseLimit,
   setSubBaseLimit,
+  onInject,
+  perTokenDisabled,
 }: {
   title: string
   version: number
@@ -103,6 +105,8 @@ function TopBar({
   onOpenDetail: () => void
   subBaseLimit: number
   setSubBaseLimit: (n: number) => void
+  onInject: (ev: 'scanner-pairs' | 'tick' | 'pair-stats' | 'wpeg-prices') => void
+  perTokenDisabled: boolean
 }) {
   return (
     <div
@@ -174,23 +178,31 @@ function TopBar({
               ['pair-stats', 'Pair Stats'],
               ['wpeg-prices', 'WPEG'],
             ] as const
-          ).map(([key, label]) => (
-            <span
-              key={key}
-              className="muted"
-              title={`${label} events received`}
-              style={{
-                fontSize: 11,
-                padding: '2px 6px',
-                border: '1px solid #4b5563',
-                borderRadius: 12,
-                background: 'rgba(255,255,255,0.06)',
-                letterSpacing: 0.5,
-              }}
-            >
-              {label}: <strong style={{ marginLeft: 4 }}>{eventCounts[key]}</strong>
-            </span>
-          ))}
+          ).map(([key, label]) => {
+            const disabled = (key === 'tick' || key === 'pair-stats') && perTokenDisabled
+            return (
+              <button
+                type="button"
+                key={key}
+                className="muted"
+                title={disabled ? `${label}: need a visible token to inject` : `Inject a faux ${label} event`}
+                onClick={() => onInject(key)}
+                disabled={disabled}
+                style={{
+                  fontSize: 11,
+                  padding: '2px 6px',
+                  border: '1px solid #4b5563',
+                  borderRadius: 12,
+                  background: disabled ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.06)',
+                  letterSpacing: 0.5,
+                  cursor: disabled ? 'not-allowed' : 'pointer',
+                  color: 'inherit',
+                }}
+              >
+                {label}: <strong style={{ marginLeft: 4 }}>{eventCounts[key]}</strong>
+              </button>
+            )
+          })}
         </h2>
       </div>
       {/* Middle column: two rows */}
@@ -1023,6 +1035,126 @@ function App() {
       }
     }, 250)
   }
+
+  // Live test: inject a faux WS event into the earliest pipeline (parsed message)
+  const injectFauxWsEvent = (ev: WsEventName) => {
+    // Helper: random from array
+    const pick = <T,>(arr: T[]): T | null => (arr.length ? arr[Math.floor(Math.random() * arr.length)] : null)
+
+    // Per-token events require a visible key
+    const visKeys = SubscriptionQueue.getVisibleKeys()
+    const randKey = pick(visKeys)
+    const parseKey = (key: string | null) => {
+      if (!key) return null
+      const parts = key.split('|')
+      if (parts.length !== 3) return null
+      const [pair, token, chain] = parts
+      return { pair, token, chain }
+    }
+
+    let parsed: Record<string, unknown> | null = null
+    const nowIso = new Date().toISOString()
+
+    if (ev === 'tick') {
+      const ptc = parseKey(randKey)
+      if (!ptc) return
+      const price = 1 + Math.random() * 0.5
+      parsed = {
+        event: 'tick',
+        data: {
+          pair: { pair: ptc.pair, token: ptc.token, chain: ptc.chain },
+          swaps: [
+            {
+              tokenInAddress: ptc.token,
+              tokenOutAddress: ptc.token,
+              amountToken1: Math.random() * 100,
+              priceToken1Usd: price,
+              isOutlier: false,
+              ts: Date.now(),
+            },
+          ],
+        },
+      }
+    } else if (ev === 'pair-stats') {
+      const ptc = parseKey(randKey)
+      if (!ptc) return
+      parsed = {
+        event: 'pair-stats',
+        data: {
+          pair: { pairAddress: ptc.pair, token1Address: ptc.token, chain: ptc.chain },
+          audit: { isHoneypot: false, isMintable: false, isFreezable: false },
+          migration: { progressPc: Math.floor(Math.random() * 100) },
+          liquidity: { usd: Math.floor(Math.random() * 1_000_000) },
+          updatedAt: nowIso,
+        },
+      }
+    } else if (ev === 'scanner-pairs') {
+      // Build a tiny WS-like scanner payload with 2 items
+      const baseChain = (pick(['ETH', 'BSC', 'BASE', 'SOL']) as string) || 'ETH'
+      const mk = (i: number) => ({
+        id: `${baseChain}-FAUX-${Date.now()}-${i}`,
+        tokenName: `Faux ${i}`,
+        tokenSymbol: `FX${i}`,
+        tokenAddress: `0x${(Math.random() * 1e16).toString(16).slice(0, 16).padEnd(16, '0')}`,
+        pairAddress: `0x${(Math.random() * 1e16).toString(16).slice(0, 16).padEnd(16, '0')}`,
+        chain: baseChain,
+        exchange: 'DEX',
+        priceUsd: Math.random() * 2,
+        volumeUsd: Math.random() * 10_000,
+        mcap: Math.random() * 1_000_000,
+        priceChangePcs: { '5m': 0, '1h': 0, '6h': 0, '24h': 0 },
+        transactions: { buys: 0, sells: 0 },
+        liquidity: { current: Math.random() * 100_000, changePc: 0 },
+        tokenCreatedTimestamp: nowIso,
+      })
+      parsed = {
+        event: 'scanner-pairs',
+        data: {
+          filter: { page: TRENDING_PAGE },
+          results: { pairs: [mk(1), mk(2)] },
+        },
+      }
+    } else if (ev === 'wpeg-prices') {
+      parsed = {
+        event: 'wpeg-prices',
+        data: { prices: { ETH: 1, BSC: 1, BASE: 1, SOL: 1 } },
+      }
+    }
+
+    if (!parsed) return
+
+    // Bump counters immediately (same behavior as real onmessage)
+    bumpEventCount(parsed.event)
+
+    // Emit update bus events for per-token types for UI gizmos
+    try {
+      if (parsed.event === 'tick') {
+        const d = parsed.data as Record<string, unknown>
+        const pairObj = d?.pair as Record<string, unknown>
+        const token1 = (pairObj?.token1Address as string) || (pairObj?.token as string)
+        const chainVal = pairObj?.chain as string | number | undefined
+        if (token1 && chainVal !== undefined) {
+          const key = buildTickKey(token1, chainVal)
+          emitUpdate({ key, type: 'tick', data: parsed.data })
+        }
+      } else if (parsed.event === 'pair-stats') {
+        const d = parsed.data as Record<string, unknown>
+        const pairObj = d?.pair as Record<string, unknown>
+        const token1 = pairObj?.token1Address as string | undefined
+        const chainVal = pairObj?.chain as string | number | undefined
+        if (token1 && chainVal !== undefined) {
+          const key = buildTickKey(token1, chainVal)
+          emitUpdate({ key, type: 'pair-stats', data: parsed.data })
+        }
+      }
+    } catch {}
+
+    // Map and dispatch via the same pathway as real messages
+    const action = mapIncomingMessageToActionSafe(parsed)
+    if (action) {
+      d(action as Action)
+    }
+  }
   // Live subscriptions count (polled)
   const [subCount, setSubCount] = useState<number>(0)
   // Invisible subs count (polled)
@@ -1578,6 +1710,8 @@ function App() {
           setSubBaseLimit={(n: number) => {
             ;(setSubBaseLimit as (n: number) => void)(n)
           }}
+          onInject={injectFauxWsEvent}
+          perTokenDisabled={SubscriptionQueue.getVisibleKeys().length === 0}
         />
         {/* Filters Bar */}
         <div className="filters">
