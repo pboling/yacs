@@ -1177,12 +1177,20 @@ function App() {
     } else if (ev === 'pair-stats') {
       const ptc = parseKey(randKey)
       if (!ptc) return
+      const price = (1 + Math.random() * 0.5).toFixed(8)
       parsed = {
         event: 'pair-stats',
         data: {
           pair: { pairAddress: ptc.pair, token1Address: ptc.token, chain: ptc.chain },
+          // Provide pairStats windows similar to real server events so reducer/Row can pick up prices
+          pairStats: {
+            twentyFourHour: { last: price, first: null, change: null, diff: null },
+            oneHour: { last: price, first: null, change: null, diff: null },
+            fiveMin: { last: price, first: null, change: null, diff: null },
+          },
+          // Backwards-compatible migration progress field expected by reducer
+          migrationProgress: String(Math.floor(Math.random() * 100)),
           audit: { isHoneypot: false, isMintable: false, isFreezable: false },
-          migration: { progressPc: Math.floor(Math.random() * 100) },
           liquidity: { usd: Math.floor(Math.random() * 1_000_000) },
           updatedAt: nowIso,
         },

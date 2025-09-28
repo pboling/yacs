@@ -6,6 +6,7 @@ import { formatAge } from '../helpers/format'
 import type { Token as TokenRow } from '../models/Token'
 import { onUpdate } from '../updates.bus'
 import { buildTickKey } from '../utils/key_builder'
+import Sparkline from './Sparkline'
 
 export interface RowProps {
   row: TokenRow
@@ -46,6 +47,11 @@ const Row = memo(
     const lastPriceRef = useRef<number>(t.priceUsd)
     // Latest incoming tick override for sparkline's most recent bucket (use state to trigger renders)
     const [latestOverride, setLatestOverride] = useState<{ price: number; at: number } | null>(null)
+    // Computed sparkline height based on row line-height and multiplier (default 2x)
+    const [sparkHeight, setSparkHeight] = useState<number>(34)
+    const [sparkMultiplier, setSparkMultiplier] = useState<number>(2)
+    // Measured sparkline container width (viewBox width) so SVG can span full cell width
+    const [sparkWidth, setSparkWidth] = useState<number>(120)
     // Temporary stroke color pulse to match the incoming dot color
     const pulseColorRef = useRef<string>('')
     const pulseUntilRef = useRef<number>(0)
@@ -53,6 +59,83 @@ const Row = memo(
     useEffect(() => {
       lastPriceRef.current = t.priceUsd
     }, [t.priceUsd])
+
+    // Measure the row's computed line-height and compute sparkHeight = 2x lineHeight
+    useEffect(() => {
+      function measure() {
+        try {
+          const el = trRef.current
+          const base = document.documentElement
+          const target = el || base
+          const cs = window.getComputedStyle(target as Element)
+          // Try to read multiplier from CSS variable --sparkline-multiplier (per-row or root)
+          const cssMulRaw = cs.getPropertyValue('--sparkline-multiplier') ?? ''
+          const cssMul = parseFloat(cssMulRaw ?? '')
+          const mult = Number.isFinite(cssMul) && cssMul > 0 ? cssMul : 2
+          setSparkMultiplier(mult)
+
+          let lh = parseFloat(cs.lineHeight) || NaN
+          if (!Number.isFinite(lh) || lh <= 0) {
+            const fs = parseFloat(cs.fontSize) || 16
+            lh = Math.round(fs * 1.2)
+          }
+          // Sparkline should be multiplier * line height (default multiplier=2)
+          const desired = Math.max(24, Math.round(lh * mult))
+          setSparkHeight(desired)
+        } catch {
+          // ignore measurement failures and keep default
+        }
+      }
+      measure()
+      // Also measure the spark container width; prefer ResizeObserver for accuracy
+      const measureSpark = () => {
+        try {
+          const el = sparkRef.current
+          if (el) {
+            const w = Math.max(60, Math.floor(el.getBoundingClientRect().width))
+            setSparkWidth(w)
+          }
+        } catch {}
+      }
+
+      measureSpark()
+      // Use ResizeObserver when available to watch the spark container size
+      let ro: ResizeObserver | null = null
+      // Access ResizeObserver in a type-safe way (avoid `any`) and only if available
+      const RO = (window as unknown as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver
+      // Capture current elements so cleanup can unobserve the exact nodes we observed
+      const observedSpark = sparkRef.current
+      const observedTr = trRef.current
+      if (typeof RO === 'function') {
+        try {
+          const localRo = new RO(() => {
+            measure()
+            measureSpark()
+          })
+          if (observedSpark) localRo.observe(observedSpark)
+          if (observedTr) localRo.observe(observedTr)
+          ro = localRo
+        } catch {
+          ro = null
+        }
+      }
+      // Fallback: listen for window resize
+      const onW = () => {
+        measure()
+        measureSpark()
+      }
+      window.addEventListener('resize', onW)
+      return () => {
+        window.removeEventListener('resize', onW)
+        try {
+          if (ro) {
+            if (observedSpark) ro.unobserve(observedSpark)
+            if (observedTr) ro.unobserve(observedTr)
+            ro.disconnect()
+          }
+        } catch {}
+      }
+    }, [])
 
     useEffect(() => {
       const handler = () => {
@@ -479,24 +562,15 @@ const Row = memo(
                 }
               } catch {}
 
-              const width = undefined // auto width via viewBox and CSS
-              const height = 34 // ~1.5x line-height visual
+              const height = sparkHeight
               const pad = 2
               const max = Math.max(...data)
               const min = Math.min(...data)
-              const range = Math.max(1e-6, max - min)
+              // const range = Math.max(1e-6, max - min) // unused; kept computation removed
               const len = data.length
-              const w = Math.max(60, len * 2) // ensure some width in viewBox for smoothing
+              // Prefer the measured sparkWidth so the graph spans the full available cell width
+              const w = sparkWidth && sparkWidth > 0 ? sparkWidth : Math.max(60, len * 2)
               const xStep = len > 1 ? (w - pad * 2) / (len - 1) : 0
-              const pts: string[] = []
-              const ptsNum: { x: number; y: number }[] = []
-              for (let i = 0; i < len; i++) {
-                const x = pad + i * xStep
-                const y = pad + (height - pad * 2) * (1 - (data[i] - min) / range)
-                ptsNum.push({ x, y })
-                pts.push(`${x},${y}`)
-              }
-              const d = pts.length ? 'M ' + pts.join(' L ') : ''
               const trendUp = data[len - 1] >= data[0]
               let color = trendUp ? 'var(--accent-up)' : 'var(--accent-down)'
               // If a pulse is active, override stroke color temporarily to match the incoming dot
@@ -505,63 +579,29 @@ const Row = memo(
                   color = pulseColorRef.current || color
                 }
               } catch {}
-              const strokeWidth = 1.5
-              const dotRadius = strokeWidth // diameter = 2x line height → r = stroke
               // Fractional left-shift so the chart advances smoothly each second
               const secsFrac = (now % MINUTE) / MINUTE
               const offset = secsFrac * xStep
               return (
                 <div style={{ gridColumn: '1 / span 2' }} ref={sparkRef}>
-                  <button
-                    type="button"
+                  <Sparkline
+                    data={data}
+                    // allow SVG to expand to the full cell width
+                    width="100%"
+                    height={height}
+                    pad={pad}
+                    strokeColor={color}
+                    strokeWidth={1.5}
+                    showDots={true}
+                    baseline={true}
+                    offsetPx={offset}
+                    viewBoxWidth={w}
+                    multiplier={sparkMultiplier}
+                    ariaLabel={`Price sparkline. Y-axis from $${min.toLocaleString(undefined, {
+                      maximumSignificantDigits: 4,
+                    })} to $${max.toLocaleString(undefined, { maximumSignificantDigits: 4 })}. Click to open details.`}
                     onClick={() => onOpenRowDetails?.(t)}
-                    title={`Price sparkline • Y[min,max]: $${min.toLocaleString(undefined, { maximumSignificantDigits: 4 })} – $${max.toLocaleString(undefined, { maximumSignificantDigits: 4 })}`}
-                    aria-label={`Price sparkline. Y-axis from $${min.toLocaleString(undefined, { maximumSignificantDigits: 4 })} to $${max.toLocaleString(undefined, { maximumSignificantDigits: 4 })}. Click to open details.`}
-                    style={{
-                      background: 'transparent',
-                      border: 0,
-                      padding: 0,
-                      margin: 0,
-                      display: 'block',
-                      width: '100%',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <svg
-                      role="img"
-                      aria-label="Price sparkline"
-                      width={width}
-                      height={height}
-                      viewBox={`0 0 ${w} ${height}`}
-                      preserveAspectRatio="none"
-                      style={{ display: 'block', width: '100%', height }}
-                    >
-                      {/* baseline */}
-                      <polyline
-                        points={`${pad},${height - pad} ${w - pad},${height - pad}`}
-                        stroke="#374151"
-                        fill="none"
-                      />
-                      <path
-                        d={d}
-                        stroke={color}
-                        strokeWidth={strokeWidth}
-                        fill="none"
-                        transform={`translate(${-offset}, 0)`}
-                      />
-                      <g transform={`translate(${-offset}, 0)`}>
-                        {ptsNum.map((p) => (
-                          <circle
-                            key={`${p.x}-${p.y}`}
-                            cx={p.x}
-                            cy={p.y}
-                            r={dotRadius}
-                            fill={color}
-                          />
-                        ))}
-                      </g>
-                    </svg>
-                  </button>
+                  />
                 </div>
               )
             })()}

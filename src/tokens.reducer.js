@@ -458,15 +458,44 @@ export function tokensReducer(state = initialState, action) {
           burned: p.burned ?? (token.security ? token.security.burned : undefined),
         }
         // Build new token object including price/mcap updates when available
+        // Append to 1-hour rolling history similarly to pair/tick so sparkline renders reflect pair-stats updates
+        const now = Date.now()
+        const prevHist =
+          token.history && typeof token.history === 'object' ? token.history : __emptyHistory__()
+        const hist = {
+          ts: [...prevHist.ts, now],
+          price: [...prevHist.price, Number.isFinite(newPrice) ? newPrice : token.priceUsd],
+          mcap: [...prevHist.mcap, Number.isFinite(newMcap) ? newMcap : token.mcap],
+          volume: [...prevHist.volume, token.volumeUsd ?? 0],
+          buys: [...prevHist.buys, token.transactions?.buys ?? 0],
+          sells: [...prevHist.sells, token.transactions?.sells ?? 0],
+          liquidity: [...prevHist.liquidity, token.liquidity?.current ?? 0],
+        }
+        // Evict older entries beyond ONE_HOUR_MS keeping arrays aligned
+        let startIdx = 0
+        const len = hist.ts.length
+        const cutoff = now - ONE_HOUR_MS
+        while (startIdx < len && hist.ts[startIdx] < cutoff) startIdx++
+        if (startIdx > 0) {
+          hist.ts = hist.ts.slice(startIdx)
+          hist.price = hist.price.slice(startIdx)
+          hist.mcap = hist.mcap.slice(startIdx)
+          hist.volume = hist.volume.slice(startIdx)
+          hist.buys = hist.buys.slice(startIdx)
+          hist.sells = hist.sells.slice(startIdx)
+          hist.liquidity = hist.liquidity.slice(startIdx)
+        }
+
         const nextTok = {
           ...token,
           audit,
           security,
           migrationPc,
-          pairStatsAt: Date.now(),
+          pairStatsAt: now,
           // Update canonical price and mcap so UI consumers (NumberCell, sparkline history assembly) reflect pair-stats
           priceUsd: Number.isFinite(newPrice) ? newPrice : token.priceUsd,
           mcap: Number.isFinite(newMcap) ? newMcap : token.mcap,
+          history: hist,
         }
         // After computing nextTok, compare with existing token
         if (JSON.stringify(nextTok) === JSON.stringify(token)) {
