@@ -52,12 +52,10 @@ export default function WsConsole() {
 
   useEffect(() => {
     const handleChange = (next: WsConsoleEntry[]) => {
-      // Only keep the most recent 100 logs
-      setEntries(next.slice(-100))
+      // Keep the rolling history as provided by the bus (already capped)
+      setEntries(next)
     }
     const off = onWsConsoleChange(handleChange)
-    // Initial trim in case getWsConsoleHistory returns more than 100
-    setEntries((prev) => prev.slice(-100))
     return () => {
       off()
     }
