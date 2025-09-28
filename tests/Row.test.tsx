@@ -1,3 +1,4 @@
+import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import Row from '../src/components/Row';
@@ -18,4 +19,3 @@ describe('ErrorBoundary', () => {
     expect(container).toBeTruthy();
   });
 });
-

@@ -1,3 +1,4 @@
+import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { ChartSection } from '../src/components/ChartSection';
@@ -30,4 +31,3 @@ describe('AuditIcons', () => {
     expect(container).toBeTruthy();
   });
 });
-
