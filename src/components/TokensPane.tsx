@@ -1085,6 +1085,23 @@ export default function TokensPane({
       } catch {
         /* no-op */
       }
+      // When the modal closes (lock deactivates), only reconcile the invisible queue to restore InvisSubs.
+      // Visible rows were never unsubscribed; do NOT resubscribe them here.
+      if (!st.active) {
+        try {
+          const ws = wsRef.current
+          // Reapply the known subscription universe so the invisible queue can be repopulated
+          const universeKeys = (payloadsRef.current || []).map((p) =>
+            buildPairKey(p.pair, (p.token ?? '').toLowerCase(), p.chain),
+          )
+          if (universeKeys.length > 0) {
+            SubscriptionQueue.updateUniverse(universeKeys, ws ?? null)
+          }
+          debugLog(`[TokensPane:${title}] lock released → restored InvisSubs via universe=${universeKeys.length}`)
+        } catch (err) {
+          console.error(`[TokensPane:${title}] updateUniverse on lock release failed`, err)
+        }
+      }
     })
     return () => {
       try {
@@ -1093,7 +1110,7 @@ export default function TokensPane({
         /* no-op */
       }
     }
-  }, [])
+  }, [tableId, title])
 
   // Stable props to prevent unnecessary re-renders in Table
   const handleBothEndsVisible = useCallback((v: boolean) => {
