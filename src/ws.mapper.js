@@ -10,7 +10,7 @@
   - subscribe-pair-stats / unsubscribe-pair-stats
 
   Incoming events handled by mapIncomingMessageToAction:
-  - scanner-pairs → { type: 'scanner/pairs', payload: { page, scannerPairs }}
+  - scanner-pairs → { type: 'scanner/ws', payload: { page, scannerPairs }}
   - tick          → { type: 'pair/tick', payload: { pair, swaps }}
   - pair-stats    → { type: 'pair/stats', payload: { data }}
 */
@@ -185,7 +185,7 @@ export function mapIncomingMessageToAction(msg) {
     case 'scanner-pairs':
       // Conform to test-task-types: { data: { filter, results: { pairs: [...] } } }
       return {
-        type: 'scanner/pairs',
+        type: 'scanner/ws',
         payload: {
           page: (msg.data && msg.data.filter && msg.data.filter.page) || 1,
           scannerPairs:

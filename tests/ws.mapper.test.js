@@ -40,7 +40,7 @@ test('mapIncomingMessageToAction maps known events and ignores unknown', () => {
     },
   }
   const a1 = mapIncomingMessageToAction(scannerMsg)
-  assert.equal(a1.type, 'scanner/pairs')
+  assert.equal(a1.type, 'scanner/ws')
   assert.equal(a1.payload.page, 2)
   const tickMsg = {
     event: 'tick',

@@ -826,6 +826,8 @@ export default function Table({
               </tr>
             </tfoot>
           </table>
+          {/* Persistent bottom sentinel to support reliable infinite scroll triggers, independent of row attributes/virtualization */}
+          <div data-scroll-sentinel="1" style={{ width: '100%', height: 1 }} />
         </div>
       </div>
     </section>

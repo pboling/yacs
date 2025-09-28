@@ -17,6 +17,7 @@ import { markVisible, markHidden } from '../visibility.bus.js'
 import { SubscriptionQueue } from '../subscription.queue'
 import { formatAge } from '../helpers/format'
 import type { GetScannerResultParams, ScannerResult } from '../test-task-types'
+import { TRENDING_TOKENS_FILTERS, NEW_TOKENS_FILTERS } from '../test-task-types'
 import { buildPairKey, buildTickKey } from '../utils/key_builder'
 import { dedupeByPairAddress } from '../utils/dedupeByPairAddress'
 import { filterRowsByTokenQuery } from '../utils/filteredCompareOptions.mjs'
@@ -31,13 +32,21 @@ import {
 import type { Token as TokenRow } from '../models/Token'
 
 // Action aliases to satisfy TS strictly
-interface ScannerPairsAction {
-  type: 'scanner/pairs'
+interface ScannerWsAction {
+  type: 'scanner/ws'
   payload: { page: number; scannerPairs: unknown[] }
+}
+interface ScannerPairsTokensAction {
+  type: 'scanner/pairsTokens'
+  payload: { page: number; tokens: TokenRow[] }
 }
 interface ScannerAppendAction {
   type: 'scanner/append'
   payload: { page: number; scannerPairs: unknown[] }
+}
+interface ScannerAppendTokensAction {
+  type: 'scanner/appendTokens'
+  payload: { page: number; tokens: TokenRow[] }
 }
 
 type SortKey =
@@ -72,7 +81,7 @@ export default function TokensPane({
     byId: Record<string, TokenRow | undefined>
     pages: Partial<Record<number, string[]>>
   } & { version?: number }
-  dispatch: React.Dispatch<ScannerPairsAction | ScannerAppendAction>
+  dispatch: React.Dispatch<ScannerWsAction | ScannerPairsTokensAction | ScannerAppendAction | ScannerAppendTokensAction>
   defaultSort: { key: SortKey; dir: Dir }
   clientFilters?: {
     chains?: string[]
@@ -101,6 +110,13 @@ export default function TokensPane({
   // Root scroll container for the table (overflowing pane); used to scope infinite scroll
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const [bothEndsVisible, setBothEndsVisible] = useState(false)
+
+  // Build fixed server query params per pane, overriding only isNotHP from the client checkbox
+  const isNotHP = useMemo(() => (clientFilters?.excludeHoneypots !== false), [clientFilters?.excludeHoneypots])
+  const serverParams = useMemo(() => {
+    const base = title === 'Trending Tokens' ? TRENDING_TOKENS_FILTERS : NEW_TOKENS_FILTERS
+    return { ...base, isNotHP }
+  }, [title, isNotHP])
 
   // Stable table identifier used for SubscriptionQueue visibility tracking
   const tableId = useMemo(() => {
@@ -249,6 +265,9 @@ export default function TokensPane({
   // Run initial data load only once per pane; do not reset rows on filter changes
   const didInitRef = useRef<boolean>(false)
 
+  // Refetch policy: only Exclude Honeypot (isNotHP) toggling should reset and refetch rows
+  const prevIsNotHPRef = useRef<boolean>(isNotHP)
+
   // Initial REST load (page must start at 1 for every pane)
   useEffect(() => {
     let cancelled = false
@@ -266,12 +285,8 @@ export default function TokensPane({
       Array.isArray(clientFilters?.chains) && clientFilters.chains.length === 0
     if (chainsProvidedEmpty) {
       try {
-        // --- ACTION TYPE CLARIFICATION ---
-        // We dispatch 'scanner/pairs' here when chains are empty or on error, and the payload is an empty array or raw results.
-        // This allows the reducer to clear/reset the page or handle unmapped data.
-        // Use 'scanner/pairs' for raw or empty payloads, and 'scanner/pairsTokens' for mapped tokens.
-        // ----------------------------------
-        dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: [] } })
+        // When chains are empty, clear the page with a tokens-based action (REST context)
+        dispatch({ type: 'scanner/pairsTokens', payload: { page, tokens: [] } }) as unknown as ScannerPairsTokensAction
       } catch (err) {
         logCatch(`[TokensPane:${title}] init: dispatch empty pairs on empty chains failed`, err)
       }
@@ -312,20 +327,20 @@ export default function TokensPane({
       setError(null)
       armFailsafe()
       try {
-        debugLog('[TokensPane:' + title + '] fetching initial scanner page with filters', {
-          ...filters,
+        debugLog('[TokensPane:' + title + '] fetching initial scanner page with fixed server params', {
+          ...serverParams,
           page: 1,
         })
-        const res = await fetchScannerTyped({ ...filters, page: 1 })
+        const res = await fetchScannerTyped({ ...serverParams, page: 1 })
         if (cancelled) return
-        const tokens = Array.isArray(res.raw.scannerPairs) ? res.raw.scannerPairs : []
+        const mappedTokens = Array.isArray((res as any).tokens) ? ((res as any).tokens as TokenRow[]) : []
         // Deduplicate by pairAddress (case-insensitive) before computing payloads/dispatching
-        const dedupedList = dedupeByPairAddress(tokens)
-        debugLog('[TokensPane:' + title + '] dispatching scanner/pairs:', {
+        const dedupedTokens = dedupeByPairAddress(mappedTokens as unknown as ScannerResult[]) as unknown as TokenRow[]
+        debugLog('[TokensPane:' + title + '] dispatching scanner/pairsTokens:', {
           page,
-          scannerPairs: dedupedList,
+          count: dedupedTokens.length,
         })
-        dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: dedupedList } })
+        dispatch({ type: 'scanner/pairsTokens', payload: { page, tokens: dedupedTokens } } as ScannerPairsTokensAction)
         try {
           debugLog(
             `[Loading:${title}] clearing after initial fetch success; rows will derive shortly`,
@@ -344,7 +359,9 @@ export default function TokensPane({
         )
         // Best-effort: compute subscription payloads and update universe after dispatch.
         try {
-          const payloads = computePairPayloadsSafe(dedupedList)
+          const payloads = dedupedTokens
+            .map((t) => ({ pair: t.pairAddress, token: (t.tokenAddress ?? '').toLowerCase(), chain: t.chain }))
+            .filter((p) => p.pair && p.token && p.chain)
           payloadsRef.current = payloads
           try {
             const keys = payloads.map((p) => buildPairKey(p.pair, p.token, p.chain))
@@ -370,11 +387,10 @@ export default function TokensPane({
         // Mark page as initialized with no rows so App overlay can clear
         try {
           // --- ACTION TYPE CLARIFICATION ---
-          // We dispatch 'scanner/pairs' here when chains are empty or on error, and the payload is an empty array or raw results.
-          // This allows the reducer to clear/reset the page or handle unmapped data.
-          // Use 'scanner/pairs' for raw or empty payloads, and 'scanner/pairsTokens' for mapped tokens.
+          // On error, clear the page explicitly with a mapped-tokens action (empty array).
+          // Raw REST/WS should use 'scanner/rest' or 'scanner/ws' respectively; here we are just clearing.
           // ----------------------------------
-          dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: [] } })
+          dispatch({ type: 'scanner/pairsTokens', payload: { page, tokens: [] } })
         } catch {
           /* no-op */
         }
@@ -668,32 +684,38 @@ export default function TokensPane({
     if (loadingMore || !hasMore) return
     setLoadingMore(true)
     try {
-      const nextPage = currentPage + 1
-      debugLog(`[TokensPane:${title}] loading more: page ${String(nextPage)}`)
-      const res = await fetchScannerTyped({ ...filters, page: nextPage })
-      const raw = res.raw as unknown
-      const list =
-        raw && typeof raw === 'object' && Array.isArray((raw as { pairs?: unknown[] }).pairs)
-          ? (raw as { pairs: unknown[] }).pairs
-          : []
+      // Read the current REST page number from the persistent sentinel if available.
+      const root = scrollContainerRef.current
+      const sentinel = root?.querySelector('[data-scroll-sentinel="1"]') as HTMLElement | null
+      const attrVal = sentinel?.getAttribute('data-rest-page') || ''
+      const curPageFromDom = Number.parseInt(attrVal || '', 10)
+      const curPage = Number.isFinite(curPageFromDom) && curPageFromDom > 0 ? curPageFromDom : currentPage
+      const nextPage = curPage + 1
+      try {
+        debugLog(`[TokensPane:${title}] loading more: page ${String(nextPage)} (from DOM=${String(curPageFromDom)} state=${String(currentPage)})`)
+      } catch {}
+      const res = await fetchScannerTyped({ ...serverParams, page: nextPage })
+      const mapped = Array.isArray((res as any).tokens) ? ((res as any).tokens as TokenRow[]) : []
       // Deduplicate by pairAddress (case-insensitive)
-      const dedupedList = dedupeByPairAddress(list as ScannerResult[])
+      const dedupedTokens = dedupeByPairAddress(mapped as unknown as ScannerResult[]) as unknown as TokenRow[]
       // Merge new payloads into our cumulative payloadsRef and update SubscriptionQueue universe
       // Dispatch append EARLY to ensure rows appear even if later steps fail.
       dispatch({
-        type: 'scanner/append',
-        payload: { page, scannerPairs: dedupedList },
-      } as ScannerAppendAction)
+        type: 'scanner/appendTokens',
+        payload: { page, tokens: dedupedTokens },
+      } as ScannerAppendTokensAction)
       try {
-        debugLog(`[TokensPane:${title}] dispatched scanner/append`, {
+        debugLog(`[TokensPane:${title}] dispatched scanner/appendTokens`, {
           page,
-          added: dedupedList.length,
+          added: dedupedTokens.length,
         })
       } catch {}
 
       // Best-effort: compute/update subscription universe after dispatch
       try {
-        const newPayloads = computePairPayloadsSafe(dedupedList)
+        const newPayloads = dedupedTokens
+          .map((t) => ({ pair: t.pairAddress, token: (t.tokenAddress ?? '').toLowerCase(), chain: t.chain }))
+          .filter((p) => p.pair && p.token && p.chain)
         const all = [...(payloadsRef.current || []), ...newPayloads]
         // Deduplicate by full key pair|token|chain
         const seen = new Set<string>()
@@ -719,7 +741,11 @@ export default function TokensPane({
         const next = c + 50
         return Math.min(next, limit)
       })
+      // Persist the new current page both in state and on the persistent sentinel element
       setCurrentPage(nextPage)
+      try {
+        if (sentinel) sentinel.setAttribute('data-rest-page', String(nextPage))
+      } catch {}
       // If server returned no items, or we've hit the configured limit, stop auto-loading
       const limitVal =
         clientFilters && typeof clientFilters.limit === 'number' && clientFilters.limit > 0
@@ -740,13 +766,13 @@ export default function TokensPane({
     hasMore,
     currentPage,
     fetchScannerTyped,
-    filters,
     dispatch,
     page,
     bothEndsVisible,
     computePairPayloadsSafe,
     title,
     clientFilters,
+    serverParams,
   ])
 
   // Load more when the scroll-trigger row (10 above the last) enters the viewport of the pane
@@ -782,8 +808,10 @@ export default function TokensPane({
       rebindTimeoutRef.current = null
     }
     rebindTimeoutRef.current = window.setTimeout(() => {
-      // find current trigger element in DOM (tagged by Table)
-      const triggerEl = root.querySelector('[data-scroll-trigger="1"]')
+      // find current trigger element in DOM (prefer persistent bottom sentinel, fallback to row tag)
+      const triggerEl =
+        root.querySelector('[data-scroll-sentinel="1"]') ||
+        root.querySelector('[data-scroll-trigger="1"]')
       const prevEl = observedTriggerRef.current
       // If same element, nothing to do
       if (triggerEl === prevEl && triggerObserverRef.current) return
@@ -1040,7 +1068,65 @@ export default function TokensPane({
   }, [])
   const handleContainerRef = useCallback((el: HTMLDivElement | null) => {
     scrollContainerRef.current = el
+    // Keep the persistent sentinel annotated with the current REST page number so
+    // pagination survives rebinds/remounts.
+    try {
+      const sentinel = el?.querySelector('[data-scroll-sentinel="1"]') as HTMLElement | null
+      if (sentinel) sentinel.setAttribute('data-rest-page', String(currentPage || 1))
+    } catch {
+      /* no-op */
+    }
   }, [])
+  // Keep the sentinel's data-rest-page synchronized with currentPage as a source of truth
+  useEffect(() => {
+    const root = scrollContainerRef.current
+    const sentinel = root?.querySelector('[data-scroll-sentinel="1"]') as HTMLElement | null
+    try {
+      if (sentinel) sentinel.setAttribute('data-rest-page', String(currentPage || 1))
+    } catch {
+      /* no-op */
+    }
+  }, [currentPage, title])
+
+  // Watch only isNotHP and refetch/reset when it toggles
+  useEffect(() => {
+    if (!didInitRef.current) return
+    const prev = prevIsNotHPRef.current
+    if (prev === isNotHP) return
+    prevIsNotHPRef.current = isNotHP
+    // Reset pagination state
+    setCurrentPage(1)
+    setVisibleCount(50)
+    setHasMore(true)
+    setLoading(true)
+    setError(null)
+    ;(async () => {
+      try {
+        debugLog('[TokensPane:' + title + '] isNotHP changed → refetching page 1', { isNotHP })
+        const res = await fetchScannerTyped({ ...serverParams, page: 1 })
+        const mappedTokens = Array.isArray((res as any).tokens) ? ((res as any).tokens as TokenRow[]) : []
+        const dedupedTokens = dedupeByPairAddress(mappedTokens as unknown as ScannerResult[]) as unknown as TokenRow[]
+        dispatch({ type: 'scanner/pairsTokens', payload: { page, tokens: dedupedTokens } } as ScannerPairsTokensAction)
+        // Update subscriptions universe
+        try {
+          const payloads = dedupedTokens
+            .map((t) => ({ pair: t.pairAddress, token: (t.tokenAddress ?? '').toLowerCase(), chain: t.chain }))
+            .filter((p) => p.pair && p.token && p.chain)
+          payloadsRef.current = payloads
+          const keys = payloads.map((p) => buildPairKey(p.pair, (p.token ?? '').toLowerCase(), p.chain))
+          SubscriptionQueue.updateUniverse(keys, wsRef.current ?? null)
+        } catch (err) {
+          logCatch(`[TokensPane:${title}] updateUniverse (isNotHP change) failed`, err)
+        }
+        setLoading(false)
+      } catch (e) {
+        console.error('[TokensPane:' + title + '] refetch on isNotHP failed', e)
+        setLoading(false)
+        setError(e instanceof Error ? e.message : 'Refetch failed')
+      }
+    })()
+  }, [isNotHP, serverParams, title, page, computePairPayloadsSafe])
+
   const handleScrollStart = useCallback(() => {
     // Enter scrolling; do not alter subscriptions anymore. We only mark scrolling state
     // and let IntersectionObserver/onScrollStop handle precise visibility transitions.

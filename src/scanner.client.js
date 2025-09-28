@@ -69,9 +69,14 @@ export function mapScannerPage(apiResponse) {
 /*
   --- ACTION TYPE CLARIFICATION FOR DOWNSTREAM ---
   fetchScanner returns tokens already mapped to TokenData shape (via mapScannerPage).
-  When dispatching these results to the reducer, use 'scanner/pairsTokens' with payload { page, tokens }.
-  If you have raw API results (unmapped), use 'scanner/pairs' and let the reducer map them.
-  This distinction ensures efficient data flow and avoids redundant mapping.
+  In this repository:
+  - Use 'scanner/pairsTokens' for page 1 results and 'scanner/appendTokens' for subsequent pages (append-only pagination).
+  - The only server-side filter that triggers a full reset/refetch is isNotHP (Exclude Honeypot).
+  - Other filter UI controls are client-side only and must NOT change the REST query params.
+
+  The 'scanner/rest' action exists for ingesting raw REST payloads, but it is not used for pagination here
+  (per-page replacement is not part of this app’s UX). For raw WebSocket scanner-pairs payloads, use 'scanner/ws'.
+  This distinction ensures efficient data flow and avoids redundant mapping and conflation between WS and REST shapes.
   ------------------------------------------------
 */
 

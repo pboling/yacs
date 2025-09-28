@@ -8,15 +8,19 @@
   - filters: minimal client-side flags
 
   Action types (plain objects to keep testability high):
-  - 'scanner/pairs' — replace the dataset for a page; preserves live price/mcap if already present
-  - 'pair/tick'    — apply real-time swaps to a token (price, mcap, volume, tx counters)
-  - 'pair/stats'   — update audit/meta info from pair-stats events
-  - 'filters/set'  — update local filter flags
+  - 'scanner/ws'     — ingest raw WS scanner-pairs payloads (mapped inside reducer). In this app, used only for live WS events, not pagination.
+  - 'scanner/rest'   — ingest raw REST /scanner payloads (mapped inside reducer). Not used for pagination in this app; see notes below.
+  - 'pair/tick'      — apply real-time swaps to a token (price, mcap, volume, tx counters)
+  - 'pair/stats'     — update audit/meta info from pair-stats events
+  - 'filters/set'    — update local filter flags
 
   Action types clarification:
-  - 'scanner/pairs': Most common action for ingesting scanner data. Payload: { page, scannerPairs }. Expects an array of raw scanner results (unmapped or minimally mapped). The reducer will map these to TokenData as needed. Used throughout the app for both initial loads and updates.
+  - 'scanner/ws': Ingest raw WebSocket scanner-pairs payloads. Payload: { page, scannerPairs }. These are WS-shaped items and will be mapped via mapWSPairsItemToToken inside the reducer.
+  - 'scanner/rest': Ingest raw REST /scanner payloads. Payload: { page, scannerPairs }. These are REST-shaped items and will be mapped via mapRESTScannerResultToToken inside the reducer.
+    Note: In this repository’s UX, REST pagination does not perform per-page replacement. We fetch pages with fixed query params (except isNotHP) and append to the dataset client-side.
+    Prefer dispatching 'scanner/pairsTokens' for page 1 and 'scanner/appendTokens' for subsequent pages. Toggle of isNotHP triggers a full reset/refetch.
   - 'scanner/pairsTokens': Used when the tokens are already mapped to TokenData before dispatch. Payload: { page, tokens }. This bypasses per-item mapping in the reducer. Used in scenarios where mapping is done outside the reducer for performance or architectural reasons.
-  Both actions update byId and pages. The main difference is whether mapping is done before or inside the reducer. Use scanner/pairs for raw API results, and scanner/pairsTokens for pre-mapped tokens.
+  This split removes ambiguity between WS and REST shapes and avoids conflation.
 */
 // Pure tokens reducer to manage scanner pages, ticks, and pair-stats
 // Model typedef for JS consumers
@@ -42,7 +46,7 @@ export const initialState = {
   meta: {}, // id -> { totalSupply: number, token0Address?: string }
   pages: {}, // pageNumber -> string[] ids present on that page
   filters: {
-    excludeHoneypots: false,
+    excludeHoneypots: true,
     chains: ['ETH', 'SOL', 'BASE', 'BSC'],
     minVolume: 0,
     maxAgeHours: null,
@@ -59,13 +63,14 @@ export const initialState = {
 const __REDUCER_SEEN__ = new WeakSet()
 
 function assertValidTokenMinimal(token, context) {
-  if (context.action === "scanner/pairs") {
-    // scanner/pairs can return a ScannerPairsMinimalItem (see tdd.runtime.js)
+  // WS path uses 'scanner/ws' and may carry minimal/sparse items. Skip strict checks there.
+  if (context.action === 'scanner/ws') {
     return
   }
-  if (typeof token?.token1Name !== 'string' || token.token1Name.trim() === '') {
-    try { console.error('[tokensReducer] Invalid token1Name', { context, token }); } catch {}
-    throw new Error('Invalid Token: token1Name must be a non-empty string')
+  // For pre-mapped Token objects and REST-mapped tokens, validate tokenName.
+  if (typeof token?.tokenName !== 'string' || token.tokenName.trim() === '') {
+    try { console.error('[tokensReducer] Invalid tokenName', { context, token }); } catch {}
+    throw new Error('Invalid Token: tokenName must be a non-empty string')
   }
 }
 
@@ -84,7 +89,7 @@ function mergeToken(existing, tNew, now) {
   }
 }
 
-function processTokens({ tokens, state, page, mapFn }) {
+function processTokens({ tokens, state, page, mapFn, contextAction }) {
   const nextById = { ...state.byId }
   const nextMeta = { ...state.meta }
   const ids = []
@@ -92,7 +97,7 @@ function processTokens({ tokens, state, page, mapFn }) {
   for (const tRaw of Array.isArray(tokens) ? tokens : []) {
     const tNew = mapFn ? mapFn(tRaw) : tRaw
     // Validate minimal Token shape (must have proper tokenName)
-    assertValidTokenMinimal(tNew, { page, action: mapFn ? 'scanner/pairs' : 'scanner/pairsTokens' })
+    assertValidTokenMinimal(tNew, { page, action: contextAction || (mapFn ? 'scanner/ws' : 'scanner/pairsTokens') })
     const id = tNew.id
     const idLower = String(id || '').toLowerCase()
     ids.push(id)
@@ -136,13 +141,14 @@ export function tokensReducer(state = initialState, action) {
           version: (state.version || 0) + 1,
         }
       }
-      case 'scanner/pairs': {
+      case 'scanner/ws': {
         const { page, scannerPairs } = action.payload
         const { nextById, nextMeta, nextPages, changed } = processTokens({
           tokens: scannerPairs,
           state,
           page,
           mapFn: mapWSPairsItemToToken,
+          contextAction: 'scanner/ws',
         })
         if (!changed && JSON.stringify(nextPages) === JSON.stringify(state.pages)) {
           return state
@@ -157,12 +163,13 @@ export function tokensReducer(state = initialState, action) {
       }
       case 'scanner/append': {
         const { page, scannerPairs } = action.payload
-        // Map and merge incoming tokens into byId/meta first
+        // Map and merge incoming tokens into byId/meta first (WS minimal/raw → map to Token)
         const { nextById, nextMeta, nextPages, changed } = processTokens({
           tokens: scannerPairs,
           state,
           page,
           mapFn: mapWSPairsItemToToken,
+          contextAction: 'scanner/ws',
         })
         // Append semantics for page ordering: merge with existing ids, de-dupe, preserve order
         const prevIds = Array.isArray(state.pages?.[page]) ? state.pages[page] : []
@@ -188,6 +195,69 @@ export function tokensReducer(state = initialState, action) {
         })()
         const mergedPages = { ...nextPages, [page]: mergedIds }
         // If nothing effectively changed, keep state stable
+        const pagesUnchanged = JSON.stringify(mergedPages) === JSON.stringify(state.pages)
+        if (!changed && pagesUnchanged) {
+          return state
+        }
+        return {
+          ...state,
+          byId: nextById,
+          meta: nextMeta,
+          pages: mergedPages,
+          version: (state.version || 0) + 1,
+        }
+      }
+      case 'scanner/rest': {
+        const { page, scannerPairs } = action.payload
+        const { nextById, nextMeta, nextPages, changed } = processTokens({
+          tokens: scannerPairs,
+          state,
+          page,
+          mapFn: mapRESTScannerResultToToken,
+          contextAction: 'scanner/rest',
+        })
+        if (!changed && JSON.stringify(nextPages) === JSON.stringify(state.pages)) {
+          return state
+        }
+        return {
+          ...state,
+          byId: nextById,
+          meta: nextMeta,
+          pages: nextPages,
+          version: (state.version || 0) + 1,
+        }
+      }
+      case 'scanner/appendTokens': {
+        const { page, tokens } = action.payload
+        // Merge pre-mapped Token[] into byId/meta first
+        const { nextById, nextMeta, nextPages, changed } = processTokens({
+          tokens,
+          state,
+          page,
+        })
+        // Append semantics for page ordering: merge with existing ids, de-dupe, preserve order
+        const prevIds = Array.isArray(state.pages?.[page]) ? state.pages[page] : []
+        const newIds = Array.isArray(nextPages?.[page]) ? nextPages[page] : []
+        const mergedIds = (() => {
+          if (!prevIds || prevIds.length === 0) return newIds
+          if (!newIds || newIds.length === 0) return prevIds
+          const seen = new Set()
+          const out = []
+          for (const id of prevIds) {
+            if (!seen.has(id)) {
+              seen.add(id)
+              out.push(id)
+            }
+          }
+          for (const id of newIds) {
+            if (!seen.has(id)) {
+              seen.add(id)
+              out.push(id)
+            }
+          }
+          return out
+        })()
+        const mergedPages = { ...nextPages, [page]: mergedIds }
         const pagesUnchanged = JSON.stringify(mergedPages) === JSON.stringify(state.pages)
         if (!changed && pagesUnchanged) {
           return state
@@ -418,8 +488,19 @@ export function tokensReducer(state = initialState, action) {
 
 // Action creators (optional convenience)
 export const actions = {
+  // WS raw (preferred): maps via mapWSPairsItemToToken in reducer
+  scannerWs: (page, scannerPairs) => ({
+    type: 'scanner/ws',
+    payload: { page, scannerPairs },
+  }),
+  // REST raw: maps via mapRESTScannerResultToToken in reducer
+  scannerRest: (page, scannerPairs) => ({
+    type: 'scanner/rest',
+    payload: { page, scannerPairs },
+  }),
+  // Back-compat alias used by older tests: emit WS action
   scannerPairs: (page, scannerPairs) => ({
-    type: 'scanner/pairs',
+    type: 'scanner/ws',
     payload: { page, scannerPairs },
   }),
   tick: (pair, swaps) => ({ type: 'pair/tick', payload: { pair, swaps } }),
