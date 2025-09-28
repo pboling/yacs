@@ -32,3 +32,4 @@ dist-ssr
 eslint-*.json
 
 INSTRUCTIONS.md
+*.txt
