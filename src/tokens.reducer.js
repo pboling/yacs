@@ -59,9 +59,13 @@ export const initialState = {
 const __REDUCER_SEEN__ = new WeakSet()
 
 function assertValidTokenMinimal(token, context) {
-  if (typeof token?.tokenName !== 'string' || token.tokenName.trim() === '') {
-    try { console.error('[tokensReducer] Invalid tokenName', { context, token }); } catch {}
-    throw new Error('Invalid Token: tokenName must be a non-empty string')
+  if (context.action === "scanner/pairs") {
+    // scanner/pairs can return a ScannerPairsMinimalItem (see tdd.runtime.js)
+    return
+  }
+  if (typeof token?.token1Name !== 'string' || token.token1Name.trim() === '') {
+    try { console.error('[tokensReducer] Invalid token1Name', { context, token }); } catch {}
+    throw new Error('Invalid Token: token1Name must be a non-empty string')
   }
 }
 

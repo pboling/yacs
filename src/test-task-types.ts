@@ -527,3 +527,22 @@ export const NEW_TOKENS_FILTERS: GetScannerResultParams = {
   maxAge: 24 * 60 * 60, // max 24 hours old
   isNotHP: true,
 }
+
+
+/**
+ * Minimal WS scanner-pairs snapshot shape observed in production.
+ * This differs from WsScannerPairsItem and only includes a subset of fields
+ * with liquidity as a string and a nullable tokenCreatedTimestamp.
+ * Use this type when handling sparse scanner/pairs snapshots.
+ */
+export interface WsScannerPairsMinimalItem {
+  id: string
+  pairAddress: string
+  priceUsd: number
+  volumeUsd: number
+  mcap: number
+  priceChangePcs: { '5m': number; '1h': number; '6h': number; '24h': number }
+  transactions: { buys: number; sells: number }
+  tokenCreatedTimestamp: string | null
+  liquidity: string
+}
