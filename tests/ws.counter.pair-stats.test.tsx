@@ -1,6 +1,6 @@
 /**
- * Test to reproduce the tick counter issue
- * This test simulates WebSocket tick events and verifies the counter increments
+ * Test to reproduce the pair-stats counter behavior
+ * This test simulates WebSocket pair-stats events and verifies the counter increments
  */
 import React from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -26,7 +26,8 @@ class MockWebSocket {
   }
 
   send(data) {
-    console.log('[MockWS] Sent:', data)
+    // no-op for test; keep lightweight logging available if debugging
+    // console.log('[MockWS] Sent:', data)
   }
 
   close() {
@@ -51,22 +52,22 @@ class MockWebSocket {
 vi.mock('../src/scanner.client.js', () => ({
   fetchScanner: vi.fn().mockResolvedValue({
     tokens: [],
-    raw: { scannerPairs: [] }
-  })
+    raw: { scannerPairs: [] },
+  }),
 }))
 
-describe('Tick Counter Bug Reproduction', () => {
+describe('Pair-Stats Counter', () => {
   let mockWs
   let originalWebSocket
   let originalIntersectionObserver
 
   beforeEach(() => {
-    // Store original WebSocket and IntersectionObserver
+    // Preserve originals
     originalWebSocket = global.WebSocket
     originalIntersectionObserver = global.IntersectionObserver
 
-    // Mock IntersectionObserver for tests
-    global.IntersectionObserver = vi.fn().mockImplementation((callback) => ({
+    // Minimal IntersectionObserver mock used by Table
+    global.IntersectionObserver = vi.fn().mockImplementation(() => ({
       observe: vi.fn(),
       unobserve: vi.fn(),
       disconnect: vi.fn(),
@@ -78,86 +79,91 @@ describe('Tick Counter Bug Reproduction', () => {
       return mockWs
     })
 
-    // Mock window properties that App.tsx expects
+    // Provide test-friendly browser APIs used by App
     Object.defineProperty(window, 'requestIdleCallback', {
       writable: true,
-      value: (fn) => setTimeout(fn, 0)
+      value: (fn) => setTimeout(fn, 0),
     })
 
-    // Mock sessionStorage
     Object.defineProperty(window, 'sessionStorage', {
       writable: true,
       value: {
         getItem: vi.fn().mockReturnValue(null),
         setItem: vi.fn(),
         clear: vi.fn(),
-      }
+      },
     })
 
-    // Mock localStorage for the app
     Object.defineProperty(window, 'localStorage', {
       writable: true,
       value: {
         getItem: vi.fn().mockReturnValue(null),
         setItem: vi.fn(),
-      }
+      },
     })
 
-    // Bypass the boot overlay for testing
+    // Bypass boot overlay for tests
     Object.defineProperty(window, '__BYPASS_BOOT__', {
       writable: true,
-      value: true
+      value: true,
     })
   })
 
   afterEach(() => {
-    // Restore original WebSocket and IntersectionObserver
+    // Restore originals
     global.WebSocket = originalWebSocket
     global.IntersectionObserver = originalIntersectionObserver
     vi.clearAllMocks()
   })
 
   it('should increment counter for pair-stats events', async () => {
-    const { container } = render(<App />)
+    render(<App />)
 
+    // Wait until our MockWebSocket is created and opened
     await waitFor(() => {
       expect(mockWs).toBeDefined()
       expect(mockWs.readyState).toBe(MockWebSocket.OPEN)
     }, { timeout: 3000 })
 
-    // Find the pair-stats counter
-    const pairStatsCounter = await screen.findByText(/Pair Stats:/)
-    expect(pairStatsCounter.textContent).toContain('0')
+    // Wait for the Pair Stats button / label to be present in the top bar
+    const pairStatsBtn = await screen.findByText(/Pair Stats:/, {}, { timeout: 3000 })
+    expect(pairStatsBtn).toBeDefined()
 
-    // Send a valid pair-stats event
+    // Extract initial numeric value from the label (e.g., 'Pair Stats: 0')
+    const initialMatch = pairStatsBtn.textContent?.match(/Pair Stats:\s*(\d+)/)
+    const initialCount = initialMatch ? parseInt(initialMatch[1], 10) : 0
+
+    // Build a pair-stats event that matches the App's mapping logic
     const pairStatsEvent = {
       event: 'pair-stats',
       data: {
         pair: {
           pairAddress: '0x1234567890123456789012345678901234567890',
           token1Address: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
-          chain: 'ETH'
+          chain: 'ETH',
         },
         pairStats: {
           volume24h: '1000000',
-          liquidity: '5000000'
+          liquidity: '5000000',
         },
         migrationProgress: '0',
-        callCount: 1
-      }
+        callCount: 1,
+      },
     }
 
+    // Deliver the message through the mock WS
     await act(async () => {
       mockWs.simulateMessage(pairStatsEvent)
-      await new Promise(resolve => setTimeout(resolve, 100))
+      // allow the message pipeline to settle
+      await new Promise((r) => setTimeout(r, 150))
     })
 
-    // Wait for the counter to update
+    // Wait for the UI to reflect an incremented counter
     await waitFor(() => {
-      const updatedCounter = screen.getByText(/Pair Stats:/)
-      expect(updatedCounter.textContent).toMatch(/Pair Stats:\s*1/)
+      const updated = screen.getByText(/Pair Stats:/)
+      const m = updated.textContent?.match(/Pair Stats:\s*(\d+)/)
+      const count = m ? parseInt(m[1], 10) : NaN
+      expect(Number.isFinite(count) ? count : NaN).toBe(initialCount + 1)
     }, { timeout: 3000 })
-
-    console.log('✓ Pair Stats counter successfully incremented')
   })
 })

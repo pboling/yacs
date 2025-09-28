@@ -1,5 +1,5 @@
 /**
- * Test to reproduce the tick counter issue
+ * Test to reproduce the tick counter behavior
  * This test simulates WebSocket tick events and verifies the counter increments
  */
 import React from 'react'
@@ -55,7 +55,7 @@ vi.mock('../src/scanner.client.js', () => ({
   })
 }))
 
-describe('Tick Counter Bug Reproduction', () => {
+describe('Tick Counter', () => {
   let mockWs
   let originalWebSocket
   let originalIntersectionObserver
