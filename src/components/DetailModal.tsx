@@ -425,19 +425,25 @@ export default function DetailModal({
     const min = Math.min(...merged)
     const range = Math.max(1e-6, max - min)
     const xStep = len > 1 ? (width - pad * 2) / (len - 1) : 0
-    const toPath = (vals: number[]) => {
-      if (!vals.length) return ''
-      const pts: string[] = []
+    const toPts = (vals: number[]) => {
+      if (!vals.length) return [] as { x: number; y: number }[]
+      const pts: { x: number; y: number }[] = []
       for (let i = 0; i < len; i++) {
         const v = i < vals.length ? vals[i] : vals[vals.length - 1]
         const x = pad + i * xStep
         const y = pad + (height - pad * 2) * (1 - (v - min) / range)
-        pts.push(`${x},${y}`)
+        pts.push({ x, y })
       }
-      return 'M ' + pts.join(' L ')
+      return pts
     }
-    const dA = toPath(a)
-    const dB = toPath(b)
+    const ptsA = toPts(a)
+    const ptsB = toPts(b)
+    const dA = ptsA.length ? 'M ' + ptsA.map((p) => `${p.x},${p.y}`).join(' L ') : ''
+    const dB = ptsB.length ? 'M ' + ptsB.map((p) => `${p.x},${p.y}`).join(' L ') : ''
+    const strokeA = 1.5
+    const strokeB = 1.25
+    const rA = strokeA // diameter = 2x line height → r = stroke
+    const rB = strokeB
     return (
       <svg
         width={width}
@@ -453,8 +459,23 @@ export default function DetailModal({
           strokeWidth={1}
           fill="none"
         />
-        {dB && <path d={dB} stroke={colorB} strokeWidth={1.25} fill="none" opacity={0.85} />}
-        {dA && <path d={dA} stroke={colorA} strokeWidth={1.5} fill="none" />}
+        {dB && <path d={dB} stroke={colorB} strokeWidth={strokeB} fill="none" opacity={0.85} />}
+        {dA && <path d={dA} stroke={colorA} strokeWidth={strokeA} fill="none" />}
+        {/* Emphasize points with dots on both series */}
+        {ptsB.length > 0 && (
+          <g opacity={0.85}>
+            {ptsB.map((p, idx) => (
+              <circle key={`b-${idx}`} cx={p.x} cy={p.y} r={rB} fill={colorB} />
+            ))}
+          </g>
+        )}
+        {ptsA.length > 0 && (
+          <g>
+            {ptsA.map((p, idx) => (
+              <circle key={`a-${idx}`} cx={p.x} cy={p.y} r={rA} fill={colorA} />
+            ))}
+          </g>
+        )}
       </svg>
     )
   }

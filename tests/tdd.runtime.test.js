@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   calcMarketCapFromResponse,
-  mapScannerResultToToken,
+  mapRESTScannerResultToToken,
   applyTickToToken,
 } from '../src/tdd.runtime.js'
 
@@ -103,7 +103,7 @@ test('calcMarketCapFromResponse respects priority order', () => {
   assert.equal(calcMarketCapFromResponse(s5), 0)
 })
 
-test('mapScannerResultToToken maps core fields correctly', () => {
+test('mapRESTScannerResultToToken maps core fields correctly', () => {
   const s = baseScanner({
     currentMcap: '0',
     initialMcap: '0',
@@ -112,7 +112,7 @@ test('mapScannerResultToToken maps core fields correctly', () => {
     buys: 10,
     sells: 5,
   })
-  const t = mapScannerResultToToken(s)
+  const t = mapRESTScannerResultToToken(s)
   assert.equal(t.id, '0xPAIR')
   assert.equal(t.tokenName, 'My Token')
   assert.equal(t.tokenSymbol, 'MTK')
@@ -137,7 +137,7 @@ test('mapScannerResultToToken maps core fields correctly', () => {
 
 test('applyTickToToken uses latest non-outlier swap and updates price, mcap, volume and tx counts', () => {
   const s = baseScanner({ price: '1.0' })
-  const token = mapScannerResultToToken(s)
+  const token = mapRESTScannerResultToToken(s)
   const swaps = [
     {
       timestamp: '1',

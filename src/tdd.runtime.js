@@ -42,9 +42,16 @@ function chainIdToName(chainId) {
 }
 
 /**
- * Normalize a raw ScannerResult-like object into a UI Token model.
+ * Normalize a REST /scanner ScannerResult into a UI Token model.
  *
- * - Resolves chain name from chainId (test/dev map treats sepolia as ETH).
+ * IMPORTANT
+ * - This mapper is ONLY for the REST endpoint GET /scanner. It expects the
+ *   ScannerResult shape defined in src/test-task-types.ts (see ScannerResult).
+ * - Do NOT use this for WebSocket "scanner-pairs" payloads — those have a
+ *   different shape and require a separate mapper.
+ *
+ * Behavior
+ * - Resolves chain name from chainId.
  * - Parses numeric fields defensively, defaulting to 0 when missing/invalid.
  * - Aggregates audit/security facets and social links with backward-compatible
  *   fallbacks (link* vs *Link legacy fields).
@@ -52,15 +59,25 @@ function chainIdToName(chainId) {
  *
  * This function is pure and safe to run in both Node and browser contexts.
  *
- * @param {object} scanner - ScannerResult-like object (see test-task-types.ts for reference).
+ * @param {import('./test-task-types.js').ScannerResult | object} scanner - REST ScannerResult item.
  * @returns {object} Token model suitable for UI consumption.
  */
-export function mapScannerResultToToken(scanner) {
+export function mapRESTScannerResultToToken(scanner) {
   const chainName = chainIdToName(scanner.chainId)
   const priceUsd = parseFloat(scanner.price || '0') || 0
   const volumeUsd = parseFloat(scanner.volume || '0') || 0
   const mcap = calcMarketCapFromResponse(scanner)
   const tokenCreatedTimestamp = new Date(scanner.age)
+  // Strict validation: token1Name and token1Symbol must be present and non-empty strings.
+  if (typeof scanner.token1Name !== 'string' || scanner.token1Name.trim() === '') {
+    // Log full context to aid investigation, then crash hard as per policy
+    try { console.error('[mapRESTScannerResultToToken] Invalid token1Name', { scanner }); } catch {}
+    throw new Error('Invalid Token data: token1Name must be a non-empty string')
+  }
+  if (typeof scanner.token1Symbol !== 'string' || scanner.token1Symbol.trim() === '') {
+    try { console.error('[mapRESTScannerResultToToken] Invalid token1Symbol', { scanner }); } catch {}
+    throw new Error('Invalid Token data: token1Symbol must be a non-empty string')
+  }
   return {
     id: scanner.pairAddress || scanner.token1Address,
     tokenName: scanner.token1Name,
@@ -91,7 +108,7 @@ export function mapScannerResultToToken(scanner) {
       freezable: !scanner.isFreezeAuthDisabled,
       honeypot: !!scanner.honeyPot,
       contractVerified: scanner.contractVerified,
-      // Social links (prefer new link* fields, fallback to legacy *Link)
+      // Social links (TODO: Need to determine which link style to use between ScannerResult and ScannerPairDetails)
       ...(scanner.linkDiscord || scanner.discordLink
         ? { linkDiscord: scanner.linkDiscord || scanner.discordLink }
         : {}),
@@ -223,5 +240,49 @@ export function applyTickToToken(token, swaps, ctx) {
       current: nextLiq,
       changePc: liqChangePc,
     },
+  }
+}
+
+/**
+ * Normalize a WebSocket "scanner-pairs" item into a UI Token model.
+ *
+ * IMPORTANT
+ * - This mapper is ONLY for the WebSocket context (event: 'scanner-pairs').
+ *   It expects the WsScannerPairsItem shape defined in src/test-task-types.ts.
+ * - Do NOT use this for REST GET /scanner payloads.
+ *
+ * Behavior
+ * - Converts tokenCreatedTimestamp ISO string to a Date instance.
+ * - Passes through numeric and audit/security fields as-is.
+ * - Leaves strict validation (e.g., tokenName presence) to the reducer contract.
+ *
+ * @param {import('./test-task-types.js').WsScannerPairsItem | object} item - WS scanner snapshot item.
+ * @returns {object} Token model suitable for UI consumption.
+ */
+export function mapWSPairsItemToToken(item) {
+  const tokenCreatedTimestamp =
+    typeof item.tokenCreatedTimestamp === 'string'
+      ? new Date(item.tokenCreatedTimestamp)
+      : item.tokenCreatedTimestamp instanceof Date
+        ? item.tokenCreatedTimestamp
+        : new Date(NaN)
+
+  return {
+    id: item.id || item.pairAddress,
+    tokenName: item.tokenName,
+    tokenSymbol: item.tokenSymbol,
+    tokenAddress: item.tokenAddress,
+    pairAddress: item.pairAddress,
+    chain: item.chain,
+    exchange: item.exchange,
+    priceUsd: item.priceUsd || 0,
+    volumeUsd: item.volumeUsd || 0,
+    mcap: item.mcap || 0,
+    priceChangePcs: item.priceChangePcs || { '5m': 0, '1h': 0, '6h': 0, '24h': 0 },
+    transactions: item.transactions || { buys: 0, sells: 0 },
+    audit: item.audit,
+    security: item.security,
+    tokenCreatedTimestamp,
+    liquidity: item.liquidity || { current: 0, changePc: 0 },
   }
 }

@@ -19,7 +19,9 @@
   Both actions update byId and pages. The main difference is whether mapping is done before or inside the reducer. Use scanner/pairs for raw API results, and scanner/pairsTokens for pre-mapped tokens.
 */
 // Pure tokens reducer to manage scanner pages, ticks, and pair-stats
-import { mapScannerResultToToken, applyTickToToken } from './tdd.runtime.js'
+// Model typedef for JS consumers
+/** @typedef {import('./models/Token').Token} Token */
+import { mapRESTScannerResultToToken, mapWSPairsItemToToken, applyTickToToken } from './tdd.runtime.js'
 
 import { debugLog as __debugLog__ } from './utils/debug.mjs'
 
@@ -36,7 +38,7 @@ const __emptyHistory__ = () => ({
 })
 
 export const initialState = {
-  byId: {}, // id -> TokenData
+  byId: /** @type {Record<string, Token>} */ ({}), // id -> Token
   meta: {}, // id -> { totalSupply: number, token0Address?: string }
   pages: {}, // pageNumber -> string[] ids present on that page
   filters: {
@@ -55,6 +57,13 @@ export const initialState = {
 }
 
 const __REDUCER_SEEN__ = new WeakSet()
+
+function assertValidTokenMinimal(token, context) {
+  if (typeof token?.tokenName !== 'string' || token.tokenName.trim() === '') {
+    try { console.error('[tokensReducer] Invalid tokenName', { context, token }); } catch {}
+    throw new Error('Invalid Token: tokenName must be a non-empty string')
+  }
+}
 
 function mergeToken(existing, tNew, now) {
   if (!existing) return { ...tNew, history: __emptyHistory__(), scannerAt: now }
@@ -78,6 +87,8 @@ function processTokens({ tokens, state, page, mapFn }) {
   let changed = false
   for (const tRaw of Array.isArray(tokens) ? tokens : []) {
     const tNew = mapFn ? mapFn(tRaw) : tRaw
+    // Validate minimal Token shape (must have proper tokenName)
+    assertValidTokenMinimal(tNew, { page, action: mapFn ? 'scanner/pairs' : 'scanner/pairsTokens' })
     const id = tNew.id
     const idLower = String(id || '').toLowerCase()
     ids.push(id)
@@ -127,7 +138,7 @@ export function tokensReducer(state = initialState, action) {
           tokens: scannerPairs,
           state,
           page,
-          mapFn: mapScannerResultToToken,
+          mapFn: mapWSPairsItemToToken,
         })
         if (!changed && JSON.stringify(nextPages) === JSON.stringify(state.pages)) {
           return state
@@ -147,7 +158,7 @@ export function tokensReducer(state = initialState, action) {
           tokens: scannerPairs,
           state,
           page,
-          mapFn: mapScannerResultToToken,
+          mapFn: mapWSPairsItemToToken,
         })
         // Append semantics for page ordering: merge with existing ids, de-dupe, preserve order
         const prevIds = Array.isArray(state.pages?.[page]) ? state.pages[page] : []

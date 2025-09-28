@@ -64,6 +64,7 @@ export interface GetScannerResultParams {
 
 /**
  * Raw scanner result from the API - this is what you get from GET /scanner
+ * This is NOT the shape of the data you'll receive in WebSocket messages'
  */
 export interface ScannerResult {
   /** @format date-time */
@@ -318,6 +319,7 @@ export interface ScannerPairDetails {
   /** Used to indicate a migration is in progress */
   isMigrating?: boolean | null
   isVerified: boolean
+  // Assignment documentation said to use this shape (which doesn't exist)
   linkDiscord?: string | null
   linkTelegram?: string | null
   linkTwitter?: string | null
@@ -448,10 +450,36 @@ export interface TimeFramePairStatsRef {
  * Full dataset updates - this replaces your current data
  */
 export interface ScannerPairsEventPayload {
-  filter: GetScannerResultParams
-  results: {
-    pairs: ScannerResult[]
+  // ...existing fields...
+}
+
+/**
+ * WS scanner snapshot item used by our app (already aggregated per pair).
+ * Note: this is NOT the REST /scanner item. tokenCreatedTimestamp is an ISO string here.
+ */
+export interface WsScannerPairsItem {
+  id: string
+  pairAddress: string
+  chain: SupportedChainName | string
+  exchange: string
+  priceUsd: number
+  volumeUsd: number
+  mcap: number
+  priceChangePcs: { '5m': number; '1h': number; '6h': number; '24h': number }
+  transactions: { buys: number; sells: number }
+  audit: {
+    mintable: boolean
+    freezable: boolean
+    honeypot: boolean
+    contractVerified: boolean
   }
+  security: {
+    renounced: boolean
+    locked: boolean
+  }
+  /** ISO8601 string */
+  tokenCreatedTimestamp: string
+  liquidity: { current: number; changePc: number }
 }
 
 /**

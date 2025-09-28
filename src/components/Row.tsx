@@ -431,10 +431,12 @@ const Row = memo(
               const w = Math.max(60, len * 2) // ensure some width in viewBox for smoothing
               const xStep = len > 1 ? (w - pad * 2) / (len - 1) : 0
               const pts: string[] = []
+              const ptsNum: { x: number; y: number }[] = []
               for (let i = 0; i < len; i++) {
                 const x = pad + i * xStep
                 const y = pad + (height - pad * 2) * (1 - (data[i] - min) / range)
                 pts.push(`${x},${y}`)
+                ptsNum.push({ x, y })
               }
               const d = pts.length ? 'M ' + pts.join(' L ') : ''
               const trendUp = data[len - 1] >= data[0]
@@ -445,6 +447,8 @@ const Row = memo(
                   color = pulseColorRef.current || color
                 }
               } catch {}
+              const strokeWidth = 1.5
+              const dotRadius = strokeWidth // diameter = 2x line height → r = stroke
               // Fractional left-shift so the chart advances smoothly each second
               const secsFrac = (now % MINUTE) / MINUTE
               const offset = secsFrac * xStep
@@ -482,13 +486,21 @@ const Row = memo(
                         fill="none"
                       />
                       {d && (
-                        <path
-                          d={d}
-                          stroke={color}
-                          strokeWidth={1.5}
-                          fill="none"
-                          transform={`translate(${-offset}, 0)`}
-                        />
+                        <>
+                          <path
+                            d={d}
+                            stroke={color}
+                            strokeWidth={strokeWidth}
+                            fill="none"
+                            transform={`translate(${-offset}, 0)`}
+                          />
+                          {/* Emphasize real data points with dots aligned to the path */}
+                          <g transform={`translate(${-offset}, 0)`}>
+                            {ptsNum.map((p, idx) => (
+                              <circle key={idx} cx={p.x} cy={p.y} r={dotRadius} fill={color} />
+                            ))}
+                          </g>
+                        </>
                       )}
                     </svg>
                   </button>

@@ -8,7 +8,7 @@
 */
 // Pure REST client utilities for /scanner (ESM, JS for node:test)
 // No direct network in tests: fetch is injected.
-import { mapScannerResultToToken } from './tdd.runtime.js'
+import { mapRESTScannerResultToToken } from './tdd.runtime.js'
 import { debugLog } from './utils/debug.mjs'
 
 // In Vite dev, prefer a relative base ('') so requests hit the dev proxy (/scanner)
@@ -63,7 +63,7 @@ export function buildScannerQuery(params = {}) {
  */
 export function mapScannerPage(apiResponse) {
   const items = apiResponse && Array.isArray(apiResponse.pairs) ? apiResponse.pairs : []
-  return items.map(mapScannerResultToToken)
+  return items.map(mapRESTScannerResultToToken)
 }
 
 /*
