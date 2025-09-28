@@ -1,3 +1,8 @@
+/*
+  ws.subs.js
+  Utilities for WebSocket subscription payloads. Currently exposes a helper to
+  derive unique {pair, token, chain} tuples from scanner results for subscribing.
+*/
 // Utility helpers related to WebSocket subscriptions
 // This module provides a small helper to compute payloads for pair-related
 // subscriptions based on the scanner results.

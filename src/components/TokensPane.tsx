@@ -1,3 +1,8 @@
+/*
+  TokensPane.tsx
+  Data-rich pane that fetches and renders a large, virtualized-like tokens table
+  with client-side sorting, filtering, infinite scroll, and WS-driven live updates.
+*/
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Table from './Table'
 import { fetchScanner } from '../scanner.client.js'
@@ -828,7 +833,7 @@ export default function TokensPane({
   }, [lastRowId, triggerRowId, loadMore, bothEndsVisible, clientFilters, rows.length])
 
   // Handler wired to Table row visibility
-  const onRowVisibilityChange = useCallback((row: TokenRow, visible: boolean) => {
+  const _onRowVisibilityChange = useCallback((row: TokenRow, visible: boolean) => {
     if (scrollingRef.current) return
     const pair = row.pairAddress
     const token = row.tokenAddress
@@ -893,7 +898,7 @@ export default function TokensPane({
         // Do not auto-unsubscribe on leaving viewport; let SubscriptionQueue manage inactive rows
       }
     }
-  }, [])
+  }, [title])
 
   // Handler for row visibility changes (per-row): only update local refs and counters.
   // Central reconciliation happens in onScrollStop via SubscriptionQueue.setTableVisible.
@@ -911,7 +916,7 @@ export default function TokensPane({
         visibleKeysRef.current.delete(key)
       } catch {}
     }
-  }, [])
+  }, [title])
 
   // Unsubscribe all visible on unmount (outside dev optional)
   useEffect(() => {
@@ -1121,7 +1126,7 @@ export default function TokensPane({
         /* no-op */
       }
     },
-    [persistDisabled],
+    [persistDisabled, tableId, title],
   )
 
   // Derive hard limit and reached state for UI/toast

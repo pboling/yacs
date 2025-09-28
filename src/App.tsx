@@ -155,7 +155,7 @@ function TopBar({
           </span>
           <span
             className="muted"
-            title="Invisible subscriptions in FIFO queue"
+            title="InvisSubs = active invisible subscriptions (queue length). Rotates within a quota computed from the Throttle base + 10% of the remainder; not the total invisible rows."
             style={{
               fontSize: 11,
               padding: '2px 6px',
@@ -680,6 +680,17 @@ function App() {
                 typeof parsed?.data === 'object' && parsed?.data !== null ? parsed.data : undefined
               // Validation
               const validationStart = performance.now()
+              // Increment event counters immediately upon recognizing the event name,
+              // regardless of payload validity. Validation below may early-return
+              // for malformed payloads, but we still want to reflect that an event
+              // of this type arrived.
+              try {
+                bumpEventCount(event)
+                // Debug: Log tick events specifically to help diagnose the issue
+                if (event === 'tick') {
+                  console.log('[DEBUG] Tick event received:', parsed)
+                }
+              } catch {}
               if (event === 'scanner-pairs') {
                 let hasPairs = false
                 if (data && typeof data === 'object') {
@@ -723,9 +734,6 @@ function App() {
                 }
               }
               const validationEnd = performance.now()
-              try {
-                bumpEventCount(event)
-              } catch {}
               // WsConsole: log allowed incoming events with brief summaries
               try {
                 if (event === 'scanner-pairs') {
@@ -985,37 +993,12 @@ function App() {
   const countsRef = useRef<WsCounts>({ ...zeroCounts })
   const [eventCounts, setEventCounts] = useState<WsCounts>({ ...zeroCounts })
   const flushTimerRef = useRef<number | null>(null)
-  // Normalize varying server event name styles to our canonical keys
-  const normalizeEventName = (ev: unknown): WsEventName | null => {
-    try {
-      let s: string
-      if (typeof ev === 'string') s = ev
-      else if (typeof ev === 'number' || typeof ev === 'boolean') s = String(ev)
-      else if (typeof ev === 'symbol') s = ev.toString()
-      else s = ''
-      s = s.toLowerCase()
-      const collapsed = s.replace(/[^a-z0-9]/g, '') // remove dashes/underscores/spaces
-      switch (collapsed) {
-        case 'scannerpairs':
-        case 'pairs': // tolerate legacy short name
-          return 'scanner-pairs'
-        case 'tick':
-          return 'tick'
-        case 'pairstats':
-        case 'pairstat':
-          return 'pair-stats'
-        case 'wpegprices':
-        case 'wpeg':
-          return 'wpeg-prices'
-        default:
-          return null
-      }
-    } catch {
-      return null
-    }
-  }
+  // Strict event counter: only count known, exact event names
   const bumpEventCount = (ev: unknown) => {
-    const k = normalizeEventName(ev)
+    const k =
+      ev === 'scanner-pairs' || ev === 'tick' || ev === 'pair-stats' || ev === 'wpeg-prices'
+        ? (ev as WsEventName)
+        : null
     if (!k) return
     countsRef.current[k] = (countsRef.current[k] ?? 0) + 1
     // Coalesce flushes to avoid excessive setState under high throughput
@@ -1088,7 +1071,7 @@ function App() {
         time: new Date().toISOString(),
       })
     } catch {}
-  }, [subCount])
+  }, [subCount, invisCount])
   const [rateSeries, setRateSeries] = useState<number[]>([])
   // WebSocket console visibility (default hidden)
   const [consoleVisible, setConsoleVisible] = useState(false)

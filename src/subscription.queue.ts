@@ -15,7 +15,7 @@
 //   invisible FIFO queue. If the queue exceeds its quota, we unsubscribe from the head until
 //   the queue fits. This guarantees: visible → active window; just-hidden → tail; rotation → head.
 
-import { sendSubscribe, sendUnsubscribe } from './ws.mapper.js'
+import { sendSubscribe, sendUnsubscribe, UNSUBSCRIPTIONS_DISABLED } from './ws.mapper.js'
 import { getDefaultInvisibleBaseLimit } from './subscription.limit.bus.js'
 
 type Key = string // pair|token|chain
@@ -85,7 +85,16 @@ const visible = new Map<Key, Set<string>>() // key -> set of tableIds
 const ignored = instrumentSet(new Set<Key>(), 'ignored')
 let universe: Key[] = [] // all keys known to the pane (deduped)
 
-// FIFO queue of currently subscribed invisible keys
+// FIFO queue of currently subscribed invisible keys (ACTIVE invisible subscriptions)
+// Important: InvisSubs shown in the UI is derived from invisibleQueue.length. This is the number
+// of invisible keys we are actively subscribed to right now — not the total number of invisible
+// candidates in the universe. Items rotate within this queue based on the quota.
+// Quota heuristic (when no runtime throttle):
+//   base = getDefaultInvisibleBaseLimit() (UI “Throttle” control)
+//   if totalInvisible <= base → subscribe all invisible
+//   else → subscribe base + ceil(10% of (totalInvisible - base))
+// Example: with ~400 total rows and ~20 visible, totalInvisible≈380, base=100 ⇒
+//   remaining=280, extra=ceil(28)=28 ⇒ InvisSubs≈128 (queue length). Seeing ~124–128 is expected.
 const invisibleQueue: Key[] = []
 const invisibleSet = instrumentSet(new Set<Key>(), 'invisibleSet') // mirror of queue for O(1) lookup
 
@@ -149,6 +158,9 @@ function unsubscribeKey(
         stack,
       })
     } catch {}
+    // When global UNSUBSCRIPTIONS_DISABLED is on, skip the WS call entirely to avoid
+    // emitting "[disabled] unsubscribe suppressed" messages into WsConsole.
+    if (UNSUBSCRIPTIONS_DISABLED) return
     if (ws && ws.readyState === WebSocket.OPEN) {
       sendUnsubscribe(ws, { pair, token, chain })
     }

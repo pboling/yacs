@@ -1,3 +1,8 @@
+/*
+  WsConsole.tsx
+  Developer console UI for streaming WebSocket logs. Subscribes to ws.console.bus
+  to render a rolling, filterable list of messages and provides copy-to-clipboard.
+*/
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   clearWsConsole,
@@ -89,6 +94,7 @@ export default function WsConsole() {
     showTick,
     showPairStats,
     showWpegPrices,
+    matchesFilter,
   ])
 
   const textBlob = useMemo(() => {

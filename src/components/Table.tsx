@@ -1,3 +1,8 @@
+/*
+  Table.tsx
+  Virtualized table component rendering token rows with sorting, sticky headers,
+  visibility tracking, and perf-focused diff logging for development.
+*/
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import Row from './Row'
@@ -296,7 +301,7 @@ export default function Table({
       threshold: 0,
     })
     try {
-      const rootRect = rootEl?.getBoundingClientRect() || null
+      const rootRect = rootEl?.getBoundingClientRect() ?? null
       console.log(`[Table:${title}] IO created`, {
         rootMargin: '100px 0px',
         threshold: 0,
@@ -388,7 +393,7 @@ export default function Table({
         /* ignore disconnect errors */
       }
     }
-  }, [onRowVisibilityChange, onScrollStop])
+  }, [onRowVisibilityChange, onScrollStop, title])
 
   // Determine when to disable infinite scroll based on viewport state
   // Disable when:
