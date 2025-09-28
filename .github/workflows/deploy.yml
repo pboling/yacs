@@ -1,0 +1,54 @@
+name: Deploy to GitHub Pages
+
+# Run on pushes to the main or master branch and when manually triggered
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 18
+          cache: 'pnpm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build
+        run: |
+          # If running on GitHub Actions, build with a repo-specific base so
+          # the site works when published as a project page (username.github.io/repo).
+          # For user/org pages you may want a root base "/" instead.
+          if [ -n "${GITHUB_REPOSITORY}" ]; then
+            REPO_NAME="${GITHUB_REPOSITORY#*/}"
+            echo "Building with base /$REPO_NAME/"
+            pnpm run build -- --base "/$REPO_NAME/"
+          else
+            pnpm run build
+          fi
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
