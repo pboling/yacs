@@ -1269,34 +1269,6 @@ export default function DetailModal({
                             <NumberCell value={history.sells.at(-1) ?? '—'} />
                           </div>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          <div style={{ fontSize: 11, color: '#9ca3af' }}>Compare</div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 11 }}>Vol</span>
-                            {miniSpark(
-                              history2.volume,
-                              history.volume,
-                              palette2.volume,
-                              palette.volume,
-                            )}
-                            <NumberCell value={history2.volume.at(-1) ?? '—'} prefix="$" />
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 11 }}>Buys</span>
-                            {miniSpark(history2.buys, history.buys, palette2.buys, palette.buys)}
-                            <NumberCell value={history2.buys.at(-1) ?? '—'} />
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 11 }}>Sells</span>
-                            {miniSpark(
-                              history2.sells,
-                              history.sells,
-                              palette2.sells,
-                              palette.sells,
-                            )}
-                            <NumberCell value={history2.sells.at(-1) ?? '—'} />
-                          </div>
-                        </div>
                       </div>
                     </div>
                   )}
