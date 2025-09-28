@@ -192,7 +192,7 @@ export default function TokensPane({
     wsRef.current = anyWin.__APP_WS__ ?? null
     try {
       const rs = wsRef.current?.readyState
-      console.log(
+      debugLog(
         '[TokensPane:' + title + '] mount; discovered __APP_WS__ readyState=' + String(rs),
       )
     } catch {
@@ -210,7 +210,7 @@ export default function TokensPane({
       const ws = anyWin.__APP_WS__ ?? null
       if (ws && wsRef.current !== ws) {
         wsRef.current = ws
-        console.log(
+        debugLog(
           '[TokensPane:' +
             title +
             '] detected __APP_WS__ later; readyState=' +
@@ -220,7 +220,7 @@ export default function TokensPane({
         if (ws.readyState === WebSocket.OPEN) {
           try {
             const keys = Array.from(visibleKeysRef.current)
-            console.log(
+            debugLog(
               '[TokensPane:' + title + '] late attach subscribing visible keys:',
               keys.length,
             )
@@ -276,7 +276,7 @@ export default function TokensPane({
         logCatch(`[TokensPane:${title}] init: dispatch empty pairs on empty chains failed`, err)
       }
       try {
-        console.log(`[Loading:${title}] clearing because chains list is empty at mount`)
+        debugLog(`[Loading:${title}] clearing because chains list is empty at mount`)
       } catch {}
       setLoading(false)
       setHasMore(false)
@@ -312,7 +312,7 @@ export default function TokensPane({
       setError(null)
       armFailsafe()
       try {
-        console.log('[TokensPane:' + title + '] fetching initial scanner page with filters', {
+        debugLog('[TokensPane:' + title + '] fetching initial scanner page with filters', {
           ...filters,
           page: 1,
         })
@@ -321,19 +321,19 @@ export default function TokensPane({
         const tokens = Array.isArray(res.raw.scannerPairs) ? res.raw.scannerPairs : []
         // Deduplicate by pairAddress (case-insensitive) before computing payloads/dispatching
         const dedupedList = dedupeByPairAddress(tokens)
-        console.log('[TokensPane:' + title + '] dispatching scanner/pairs:', {
+        debugLog('[TokensPane:' + title + '] dispatching scanner/pairs:', {
           page,
           scannerPairs: dedupedList,
         })
         dispatch({ type: 'scanner/pairs', payload: { page, scannerPairs: dedupedList } })
         try {
-          console.log(
+          debugLog(
             `[Loading:${title}] clearing after initial fetch success; rows will derive shortly`,
           )
         } catch {}
         setLoading(false)
         // Debug: print first few tokens and their id values
-        console.log(
+        debugLog(
           '[TokensPane:' + title + '] mapped tokens sample:',
           dedupedList.slice(0, 5).map((t) => ({
             id: t.id,
@@ -388,7 +388,7 @@ export default function TokensPane({
         } catch {}
         if (!cancelled) {
           try {
-            console.log(
+            debugLog(
               `[Loading:${title}] clearing in finally after init fetch (cancelled=${cancelled})`,
             )
           } catch {}
@@ -524,7 +524,7 @@ export default function TokensPane({
   useEffect(() => {
     try {
       if (loading && rows.length > 0) {
-        console.log(
+        debugLog(
           `[Loading:${title}] auto-clear: rows.length=${rows.length} (>0) while loading=true`,
         )
         setLoading(false)
@@ -537,7 +537,7 @@ export default function TokensPane({
   // Log any loading state transition with current rows count for root-cause tracing
   useEffect(() => {
     try {
-      console.log(
+      debugLog(
         `[Loading:${title}] state now ${loading ? 'true' : 'false'}; rows.length=${rows.length}`,
       )
     } catch {}
@@ -609,7 +609,7 @@ export default function TokensPane({
         lastLoggedVersionRef.current = version
         if (rows.length > 0) {
           const first = rows[0]
-          console.log(`[TokensPane:${title}] rows derived`, {
+          debugLog(`[TokensPane:${title}] rows derived`, {
             count: rows.length,
             firstId: first.id,
             firstPrice: first.priceUsd,
@@ -669,7 +669,7 @@ export default function TokensPane({
     setLoadingMore(true)
     try {
       const nextPage = currentPage + 1
-      console.log(`[TokensPane:${title}] loading more: page ${String(nextPage)}`)
+      debugLog(`[TokensPane:${title}] loading more: page ${String(nextPage)}`)
       const res = await fetchScannerTyped({ ...filters, page: nextPage })
       const raw = res.raw as unknown
       const list =
@@ -685,7 +685,7 @@ export default function TokensPane({
         payload: { page, scannerPairs: dedupedList },
       } as ScannerAppendAction)
       try {
-        console.info(`[TokensPane:${title}] dispatched scanner/append`, {
+        debugLog(`[TokensPane:${title}] dispatched scanner/append`, {
           page,
           added: dedupedList.length,
         })
@@ -850,7 +850,7 @@ export default function TokensPane({
           if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
             try {
               const stack = new Error('unsubscribe trace').stack
-              console.log('[TokensPane] UNSUB', {
+              debugLog('[TokensPane] UNSUB', {
                 key,
                 reason: 'disabled-token visibility change',
                 pane: title,
@@ -939,7 +939,7 @@ export default function TokensPane({
               } catch {}
               try {
                 const stack = new Error('unsubscribe trace').stack
-                console.log('[TokensPane] UNSUB', {
+                debugLog('[TokensPane] UNSUB', {
                   key,
                   reason: 'unmount: no more visible panes for key',
                   pane: title,
@@ -1097,7 +1097,7 @@ export default function TokensPane({
             } catch {}
             try {
               const stack = new Error('unsubscribe trace').stack
-              console.log('[TokensPane] UNSUB', {
+              debugLog('[TokensPane] UNSUB', {
                 key,
                 reason: 'toggleDisable: no more visible panes for key',
                 pane: title,
@@ -1173,7 +1173,7 @@ export default function TokensPane({
     }
   }, [])
 
-  console.log('TokensPane mounted:', title)
+  debugLog('TokensPane mounted:', title)
 
   return (
     <div>
@@ -1241,7 +1241,7 @@ export default function TokensPane({
           try {
             const added = Array.from(nextSet).filter((k) => !prevSet.has(k))
             const removed = Array.from(prevSet).filter((k) => !nextSet.has(k))
-            console.log(`[TokensPane:${title}] onScrollStop diff`, {
+            debugLog(`[TokensPane:${title}] onScrollStop diff`, {
               next: nextVisible.length,
               prev: prevSet.size,
               addedCount: added.length,

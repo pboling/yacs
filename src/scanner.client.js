@@ -9,6 +9,7 @@
 // Pure REST client utilities for /scanner (ESM, JS for node:test)
 // No direct network in tests: fetch is injected.
 import { mapScannerResultToToken } from './tdd.runtime.js'
+import { debugLog } from './utils/debug.mjs'
 
 // In Vite dev, prefer a relative base ('') so requests hit the dev proxy (/scanner)
 // Otherwise use VITE_API_BASE if provided, falling back to the public API.
@@ -93,12 +94,12 @@ export async function fetchScanner(params, opts = {}) {
   const url = `${baseUrl}/scanner?${qp.toString()}`
   const startedAt = Date.now()
   if (params && params.__source) {
-    console.info(`[scanner] source: ${params.__source}`)
+    debugLog(`[scanner] source: ${params.__source}`)
   }
   try {
-    console.info('[scanner] → GET', url)
+    debugLog('[scanner] → GET', url)
     const res = await fetchImpl(url, { headers: { accept: 'application/json' } })
-    console.info('[scanner] ← status', res.status, url)
+    debugLog('[scanner] ← status', res.status, url)
     if (!res.ok) {
       const text = await res.text().catch(() => '')
       const ms = Date.now() - startedAt
@@ -116,7 +117,7 @@ export async function fetchScanner(params, opts = {}) {
     const json = await res.json()
     const tokens = mapScannerPage(json)
     const ms = Date.now() - startedAt
-    console.info('[scanner] ✓ success', { status: res.status, count: tokens.length, ms, url })
+    debugLog('[scanner] ✓ success', { status: res.status, count: tokens.length, ms, url })
     return { raw: json, tokens }
   } catch (err) {
     const ms = Date.now() - startedAt

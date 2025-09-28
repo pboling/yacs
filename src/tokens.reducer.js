@@ -104,7 +104,7 @@ function processTokens({ tokens, state, page, mapFn }) {
 }
 
 export function tokensReducer(state = initialState, action) {
-  console.log('tokensReducer executed', { type: action.type })
+  __debugLog__('tokensReducer executed', { type: action.type })
   const result = (() => {
     switch (action.type) {
       case 'scanner/pairsTokens': {
@@ -127,6 +127,7 @@ export function tokensReducer(state = initialState, action) {
           tokens: scannerPairs,
           state,
           page,
+          mapFn: mapScannerResultToToken,
         })
         if (!changed && JSON.stringify(nextPages) === JSON.stringify(state.pages)) {
           return state
@@ -396,7 +397,7 @@ export function tokensReducer(state = initialState, action) {
         return state
     }
   })()
-  console.log('tokensReducer state after action:', result)
+  __debugLog__('tokensReducer state after action:', result)
   return result
 }
 

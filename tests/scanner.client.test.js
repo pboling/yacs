@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import test from 'node:test';
+import assert from 'node:assert/strict';
 import { buildScannerQuery, mapScannerPage, fetchScanner } from '../src/scanner.client.js';
 
 function makeScanner(overrides = {}) {
@@ -74,25 +75,25 @@ const sampleResponse = {
   totalPages: 5,
 }
 
-describe('scanner.client.js utilities', () => {
-  it('buildScannerQuery serializes primitives and arrays', () => {
+test('scanner.client.js utilities', async (t) => {
+  await t.test('buildScannerQuery serializes primitives and arrays', () => {
     const qp = buildScannerQuery({ chain: 'ETH', page: 2, dexes: ['uni', 'ray'], isNotHP: true })
     const s = qp.toString()
-    expect(s).toMatch(/chain=ETH/)
-    expect(s).toMatch(/page=2/)
+    assert.match(s, /chain=ETH/)
+    assert.match(s, /page=2/)
     // array becomes repeated params
-    expect((s.match(/dexes=/g) || []).length).toBe(2)
-    expect(s).toMatch(/isNotHP=true/)
+    assert.equal((s.match(/dexes=/g) || []).length, 2)
+    assert.match(s, /isNotHP=true/)
   })
 
-  it('mapScannerPage maps ScannerPairs to TokenData[]', () => {
+  await t.test('mapScannerPage maps ScannerPairs to TokenData[]', () => {
     const tokens = mapScannerPage(sampleResponse)
-    expect(tokens).toHaveLength(2)
-    expect(tokens[0].pairAddress).toBe('0xPAIR')
-    expect(tokens[1].tokenSymbol).toBe('TK2')
+    assert.equal(tokens.length, 2)
+    assert.equal(tokens[0].pairAddress, '0xPAIR')
+    assert.equal(tokens[1].tokenSymbol, 'TK2')
   })
 
-  it('fetchScanner uses injected fetch and maps tokens', async () => {
+  await t.test('fetchScanner uses injected fetch and maps tokens', async () => {
     const calls = []
     const mockFetch = async (url) => {
       calls.push(url)
@@ -105,8 +106,8 @@ describe('scanner.client.js utilities', () => {
       { chain: 'ETH', page: 1 },
       { baseUrl: 'https://mock', fetchImpl: mockFetch },
     )
-    expect(raw).toEqual(sampleResponse)
-    expect(tokens).toHaveLength(2)
-    expect(calls[0]).toMatch(/^https:\/\/mock\/scanner\?/)
+    assert.deepEqual(raw, sampleResponse)
+    assert.equal(tokens.length, 2)
+    assert.match(calls[0], /^https:\/\/mock\/scanner\?/)
   })
 })
