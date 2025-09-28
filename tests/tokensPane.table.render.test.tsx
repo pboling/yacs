@@ -1,6 +1,5 @@
 import '@testing-library/jest-dom/vitest'
 import '@testing-library/jest-dom/vitest'
-import React, { useReducer } from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import TokensPane from '../src/components/TokensPane'

@@ -2,50 +2,59 @@
  * Test to reproduce the pair-stats counter behavior
  * This test simulates WebSocket pair-stats events and verifies the counter increments
  */
-import React from 'react'
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { act } from 'react'
 import App from '../src/App'
 
 // Mock WebSocket to simulate server behavior
-class MockWebSocket {
-  constructor(url) {
-    this.url = url
-    this.readyState = MockWebSocket.CONNECTING
-    this.onopen = null
-    this.onmessage = null
-    this.onerror = null
-    this.onclose = null
+interface IMockWebSocket {
+  url: string;
+  readyState: number;
+  onopen: (() => void) | null;
+  onmessage: ((event: { data: string }) => void) | null;
+  onerror: (() => void) | null;
+  onclose: (() => void) | null;
+  send(data?: any): void;
+  close(): void;
+  simulateMessage(data: any): void;
+}
 
+class MockWebSocket implements IMockWebSocket {
+  url: string;
+  readyState: number;
+  onopen: (() => void) | null = null;
+  onmessage: ((event: { data: string }) => void) | null = null;
+  onerror: (() => void) | null = null;
+  onclose: (() => void) | null = null;
+  static CONNECTING = 0;
+  static OPEN = 1;
+  static CLOSING = 2;
+  static CLOSED = 3;
+  constructor(url: string) {
+    this.url = url;
+    this.readyState = MockWebSocket.CONNECTING;
     // Simulate connection opening after a short delay
     setTimeout(() => {
-      this.readyState = MockWebSocket.OPEN
-      if (this.onopen) this.onopen()
-    }, 10)
+      this.readyState = MockWebSocket.OPEN;
+      if (this.onopen) this.onopen();
+    }, 10);
   }
 
-  send(data) {
-    // no-op for test; keep lightweight logging available if debugging
-    // console.log('[MockWS] Sent:', data)
-  }
+  send() {} // removed unused parameter
 
   close() {
-    this.readyState = MockWebSocket.CLOSED
-    if (this.onclose) this.onclose()
+    this.readyState = MockWebSocket.CLOSED;
+    if (this.onclose) this.onclose();
   }
 
   // Simulate receiving a message from the server
-  simulateMessage(data) {
+  simulateMessage(data: any) {
     if (this.onmessage) {
-      this.onmessage({ data: JSON.stringify(data) })
+      this.onmessage({ data: JSON.stringify(data) });
     }
   }
-
-  static CONNECTING = 0
-  static OPEN = 1
-  static CLOSING = 2
-  static CLOSED = 3
 }
 
 // Mock the fetchScanner function to return fixture data
@@ -57,13 +66,14 @@ vi.mock('../src/scanner.client.js', () => ({
 }))
 
 describe('Pair-Stats Counter', () => {
-  let mockWs
-  let originalWebSocket
-  let originalIntersectionObserver
+  let mockWs: IMockWebSocket | undefined;
+  let originalWebSocket: typeof global.WebSocket;
+  let originalIntersectionObserver: typeof global.IntersectionObserver;
 
+  // Ensure test lifecycle hooks are available
   beforeEach(() => {
     // Preserve originals
-    originalWebSocket = global.WebSocket
+    originalWebSocket = global.WebSocket;
     originalIntersectionObserver = global.IntersectionObserver
 
     // Minimal IntersectionObserver mock used by Table
@@ -74,15 +84,19 @@ describe('Pair-Stats Counter', () => {
     }))
 
     // Replace WebSocket with our mock
-    global.WebSocket = vi.fn().mockImplementation((url) => {
-      mockWs = new MockWebSocket(url)
-      return mockWs
-    })
+    global.WebSocket = vi.fn().mockImplementation((url: string) => {
+      mockWs = new MockWebSocket(url);
+      return mockWs as unknown as WebSocket;
+    }) as unknown as typeof WebSocket;
+    (global.WebSocket as any).CONNECTING = MockWebSocket.CONNECTING;
+    (global.WebSocket as any).OPEN = MockWebSocket.OPEN;
+    (global.WebSocket as any).CLOSING = MockWebSocket.CLOSING;
+    (global.WebSocket as any).CLOSED = MockWebSocket.CLOSED;
 
     // Provide test-friendly browser APIs used by App
     Object.defineProperty(window, 'requestIdleCallback', {
       writable: true,
-      value: (fn) => setTimeout(fn, 0),
+      value: (fn: () => void) => setTimeout(fn, 0),
     })
 
     Object.defineProperty(window, 'sessionStorage', {
@@ -122,7 +136,7 @@ describe('Pair-Stats Counter', () => {
     // Wait until our MockWebSocket is created and opened
     await waitFor(() => {
       expect(mockWs).toBeDefined()
-      expect(mockWs.readyState).toBe(MockWebSocket.OPEN)
+      expect((mockWs as IMockWebSocket).readyState).toBe(MockWebSocket.OPEN)
     }, { timeout: 3000 })
 
     // Wait for the Pair Stats button / label to be present in the top bar
@@ -153,7 +167,7 @@ describe('Pair-Stats Counter', () => {
 
     // Deliver the message through the mock WS
     await act(async () => {
-      mockWs.simulateMessage(pairStatsEvent)
+      (mockWs as IMockWebSocket).simulateMessage(pairStatsEvent)
       // allow the message pipeline to settle
       await new Promise((r) => setTimeout(r, 150))
     })

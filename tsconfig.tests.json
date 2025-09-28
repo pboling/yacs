@@ -22,7 +22,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
 
-    "types": ["node", "@playwright/test"]
+    "types": ["vite/client", "node", "@playwright/test"]
   },
   "include": ["tests/**/*.ts", "tests/**/*.tsx", "e2e/**/*.ts", "e2e/**/*.tsx"]
 }

@@ -2,19 +2,16 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Sparkline from './Sparkline'
 import { onUpdate } from '../updates.bus'
 
-export default function UpdateRate({
-  filterKey,
-  version,
-  width = 120,
-  height = 24,
-  title,
-}: {
+interface UpdateRateProps {
+  rate?: number
   filterKey?: string | string[] | null
   version?: number
   width?: number
   height?: number
   title?: string
-}) {
+}
+
+const UpdateRate: React.FC<UpdateRateProps> = ({ rate, filterKey, version, width = 120, height = 24, title }) => {
   const [series, setSeries] = useState<number[]>([])
   const counterRef = useRef(0)
 
@@ -65,6 +62,9 @@ export default function UpdateRate({
 
   const ver = useMemo(() => version ?? null, [version])
 
+  // Use rate if provided, otherwise fallback to default logic
+  const displayRate = rate ?? 0
+
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
       {title && (
@@ -85,6 +85,9 @@ export default function UpdateRate({
           (v{String(ver)})
         </span>
       )}
+      <div>{displayRate}</div>
     </div>
   )
 }
+
+export default UpdateRate

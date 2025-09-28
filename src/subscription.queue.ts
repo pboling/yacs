@@ -332,14 +332,15 @@ export const SubscriptionQueue = {
     console.log('[SubscriptionQueue] updateUniverse: incoming keys', next)
     // Unsubscribe any queued/visible keys that are no longer in the universe
     const nextSet = new Set(next)
-    for (const key of [...invisibleQueue]) {
+    for (const entry of [...invisibleQueue]) {
+      const key = Array.isArray(entry) ? entry[0] : entry;
       if (!nextSet.has(key)) {
         removeFromQueue(key)
         unsubscribeKey(ws, key, 'removed-from-universe', { phase: 'updateUniverse/remove' })
       }
     }
     // Suppress removal of visible keys from visible set
-    for (const key of Array.from(visible)) {
+    for (const [key] of Array.from(visible)) {
       if (!nextSet.has(key)) {
         // console.log('[SubscriptionQueue] updateUniverse: would remove visible', key);
         // visible.delete(key)

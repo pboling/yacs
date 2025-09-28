@@ -1,4 +1,3 @@
-import React from 'react'
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
 import Sparkline from '../src/components/Sparkline'
@@ -9,4 +8,3 @@ describe('Sparkline', () => {
     expect(container).toBeTruthy();
   });
 });
-

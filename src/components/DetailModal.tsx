@@ -22,19 +22,18 @@ export interface DetailModalRow {
   tokenCreatedTimestamp: Date
   transactions: { buys: number; sells: number }
   liquidity: { current: number; changePc: number }
-  audit?: {
-    contractVerified?: boolean
-    freezable?: boolean
-    honeypot?: boolean
-    linkDiscord?: string
-    linkTelegram?: string
-    linkTwitter?: string
-    linkWebsite?: string
-  }
-  security?: { renounced?: boolean; locked?: boolean }
   // Optional addresses to build WS correlation key for update-rate tracking
   tokenAddress?: string
   pairAddress?: string
+  totalSupply?: number
+  burnedSupply?: number
+  percentBurned?: number
+  deadAddress?: string
+  ownerAddress?: string
+  audit?: any
+  security?: any
+  includeStale?: boolean
+  scannerAt?: number
 }
 
 export default function DetailModal({

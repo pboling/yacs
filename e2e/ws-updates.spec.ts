@@ -82,7 +82,7 @@ async function forceResubscribeForRow(page: Page, table: TableName, rowId: strin
     const c = el as HTMLElement
     const rowEl = c.querySelector(`tbody tr[data-row-id="${rid}"]`)
     if (!rowEl) return
-    const rowTop: number = rowEl.offsetTop
+    const rowTop: number = (rowEl as HTMLElement).offsetTop
     // Scroll just past the row to hide it
     c.scrollTop = Math.max(0, rowTop + c.clientHeight)
   }, rowId)
@@ -92,7 +92,7 @@ async function forceResubscribeForRow(page: Page, table: TableName, rowId: strin
     const c = el as HTMLElement
     const rowEl = c.querySelector(`tbody tr[data-row-id="${rid}"]`)
     if (!rowEl) return
-    const rowTop: number = rowEl.offsetTop
+    const rowTop: number = (rowEl as HTMLElement).offsetTop
     c.scrollTop = Math.max(0, rowTop - 20)
   }, rowId)
   await page.waitForTimeout(100)

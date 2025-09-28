@@ -24,6 +24,24 @@ function row(partial: Partial<Row> & { id: string }): Row {
   }
 }
 
+function makeProps(
+  overrides: Partial<{
+    open: boolean
+    allRows: any[]
+    currentRow: any
+    compareSearch: string
+    includeStale?: boolean
+  }>,
+) {
+  return {
+    open: true,
+    allRows: [],
+    currentRow: null,
+    compareSearch: '',
+    ...overrides,
+  }
+}
+
 describe('filteredCompareOptions and uniqueById', () => {
   it('uniqueById keeps the first occurrence and removes subsequent duplicates', () => {
     const a = row({ id: 'dup', tokenName: 'Alpha', tokenSymbol: 'ALP' })
