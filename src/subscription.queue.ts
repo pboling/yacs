@@ -85,9 +85,6 @@ const visible = new Map<Key, Set<string>>() // key -> set of tableIds
 const ignored = instrumentSet(new Set<Key>(), 'ignored')
 let universe: Key[] = [] // all keys known to the pane (deduped)
 
-// Global throttle: maximum total subscriptions (visible + invisible). 0 or undefined → use default policy
-let throttleMax: number | undefined = undefined
-
 // FIFO queue of currently subscribed invisible keys
 const invisibleQueue: Key[] = []
 const invisibleSet = instrumentSet(new Set<Key>(), 'invisibleSet') // mirror of queue for O(1) lookup
@@ -116,11 +113,6 @@ function getInvisibleUniverse(): Key[] {
 
 function computeQuota(totalInvisible: number) {
   if (totalInvisible <= 0) return 0
-  // If throttle is set and > 0, compute invisible quota as (throttle - visibleCount)
-  if (typeof throttleMax === 'number' && throttleMax >= 0) {
-    const allowedInvisible = Math.max(0, throttleMax - visible.size)
-    return Math.min(totalInvisible, allowedInvisible)
-  }
   // Default heuristic quota using a dynamic base limit from global state
   const base = Math.max(0, getDefaultInvisibleBaseLimit())
   if (totalInvisible <= base) return totalInvisible
@@ -275,6 +267,8 @@ function tick(ws: WebSocket | null) {
   }
 }
 
+const tableVisible = new Map<string, Set<Key>>() // per-table current visible keys
+
 export const SubscriptionQueue = {
   getSubscribedCount(): number {
     try {
@@ -371,23 +365,27 @@ export const SubscriptionQueue = {
       ids.delete(tableId)
       // Only remove key if no tables report it as visible
       if (ids.size === 0) {
+        // No table keeps this key visible anymore → move it to invisible queue (still subscribed)
         visible.delete(key)
-        // Per-token unsubscribe: only when no table reports it visible anymore.
-        // This avoids unsubscribing a token that is still needed by another table.
-        try {
-          unsubscribeKey(ws, key, 'no-table-visible', { phase: 'setVisible/ids.size===0' })
-        } catch {}
-        // Debug log
+        // Append to tail if not already queued, then enforce quota. Do NOT unsubscribe here.
+        if (!invisibleSet.has(key)) {
+          invisibleQueue.push(key)
+          invisibleSet.add(key)
+        }
         try {
           console.log(
-            '[SubscriptionQueue] setVisible: removed',
+            '[SubscriptionQueue] setVisible: moved to invisible queue',
             key,
             'tableId:',
             tableId,
             'visible.size:',
             visible.size,
+            'invisible.queueLen:',
+            invisibleQueue.length,
           )
         } catch {}
+        // Ensure queue respects current quota and eligibility
+        ensureQueueWithinQuota(ws)
       }
     }
   },
@@ -416,17 +414,73 @@ export const SubscriptionQueue = {
     } catch {}
   },
   tick,
-  setThrottle(max: number | undefined, ws: WebSocket | null) {
-    try {
-      if (typeof max === 'number' && isFinite(max) && max >= 0) {
-        throttleMax = Math.floor(max)
-      } else {
-        throttleMax = undefined
-      }
-      ensureQueueWithinQuota(ws)
-    } catch {
-      // no-op
+  setTableVisible(tableId: string, keys: Key[], ws: WebSocket | null) {
+    if (!tableId) {
+      try {
+        console.warn('[SubscriptionQueue] setTableVisible: missing tableId')
+      } catch {}
+      return
     }
+    // Normalize and dedupe keys, filter invalid
+    const next: Key[] = []
+    const seen = new Set<Key>()
+    for (const k of Array.isArray(keys) ? keys : []) {
+      if (!isValidKey(k)) continue
+      if (seen.has(k)) continue
+      seen.add(k)
+      next.push(k)
+    }
+    const nextSet = new Set(next)
+    const prevSet = tableVisible.get(tableId) ?? new Set<Key>()
+
+    // Removed for this table
+    for (const key of prevSet) {
+      if (nextSet.has(key)) continue
+      const ids = visible.get(key)
+      if (!ids) {
+        // nothing to do
+      } else {
+        ids.delete(tableId)
+        if (ids.size === 0) {
+          visible.delete(key)
+          if (!ignored.has(key)) {
+            if (!invisibleSet.has(key)) {
+              invisibleQueue.push(key)
+              invisibleSet.add(key)
+            }
+          }
+        }
+      }
+    }
+
+    // Added for this table
+    for (const key of nextSet) {
+      let ids = visible.get(key)
+      if (!ids) {
+        ids = instrumentSet(new Set<string>(), `visible.ids:${key}`)
+        visible.set(key, ids)
+      }
+      if (!ids.has(tableId)) {
+        ids.add(tableId)
+      }
+      // ensure not in invisible queue
+      removeFromQueue(key)
+    }
+
+    tableVisible.set(tableId, nextSet)
+
+    // Enforce quota changes once after batch
+    ensureQueueWithinQuota(ws)
+
+    try {
+      console.log('[SubscriptionQueue] setTableVisible applied', {
+        tableId,
+        nextCount: nextSet.size,
+        visibleCount: SubscriptionQueue.getVisibleCount(),
+        invisQueue: invisibleQueue.length,
+        time: new Date().toISOString(),
+      })
+    } catch {}
   },
   // For testing/inspection
   __debug__: {

@@ -97,6 +97,14 @@ export default function TokensPane({
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const [bothEndsVisible, setBothEndsVisible] = useState(false)
 
+  // Stable table identifier used for SubscriptionQueue visibility tracking
+  const tableId = useMemo(() => {
+    const t = title || 'pane'
+    if (t === 'Trending Tokens') return 'TREND'
+    if (t === 'New Tokens') return 'NEW'
+    return t.replace(/\s+/g, '-').toUpperCase()
+  }, [title])
+
   // Disabled tokens (by token|chain), persisted to localStorage
   const disabledTokensRef = useRef<Set<string>>(new Set())
   const DISABLED_LS_KEY = 'dex.disabledTokens.v1'
@@ -306,16 +314,6 @@ export default function TokensPane({
         const res = await fetchScannerTyped({ ...filters, page: 1 })
         if (cancelled) return
         const tokens = Array.isArray(res.raw.scannerPairs) ? res.raw.scannerPairs : []
-        // Check for address-like ids
-        const addressLikeIds = tokens.filter(
-          (token) => token && typeof token.id === 'string' && token.id.length === 42,
-        )
-        if (addressLikeIds.length > 0) {
-          console.warn(
-            '[TokensPane:' + title + '] token with id of address length:',
-            addressLikeIds[0],
-          )
-        }
         // Deduplicate by pairAddress (case-insensitive) before computing payloads/dispatching
         const dedupedList = dedupeByPairAddress(tokens)
         console.log('[TokensPane:' + title + '] dispatching scanner/pairs:', {
@@ -351,15 +349,6 @@ export default function TokensPane({
               logCatch(`[TokensPane:${title}] updateUniverse (init) failed`, err)
             } else {
               logCatch(`[TokensPane:${title}] updateUniverse (init) failed`, new Error(String(err)))
-            }
-          }
-          // Deduplicate pair ids for this pane to avoid duplicate row keys (computePairPayloads emits chain variants)
-          const seenPairs = new Set<string>()
-          const localIds: string[] = []
-          for (const p of payloads) {
-            if (typeof p.pair === 'string' && !seenPairs.has(p.pair)) {
-              seenPairs.add(p.pair)
-              localIds.push(p.pair)
             }
           }
         } catch (err) {
@@ -569,7 +558,7 @@ export default function TokensPane({
     }
   }, [rows, onChainCountsChange, page])
 
-  // When the rendered rows change (due to limit/sort), just update tracking; do not force unsubscribe.
+  // When the rendered rows change (due to limit/sort), just update local tracking; bulk reconcile on scrollStop.
   useEffect(() => {
     try {
       const currentKeys = new Set<string>()
@@ -587,16 +576,11 @@ export default function TokensPane({
       }
       prevRenderedKeysRef.current = currentKeys
 
-      const ws = wsRef.current
-      if (removed.length > 0 && ws && ws.readyState === WebSocket.OPEN) {
+      if (removed.length > 0) {
         for (const key of removed) {
           try {
-            // purge local tracking
+            // purge local tracking; queue will be updated on next scrollStop
             visibleKeysRef.current.delete(key)
-            // Let SubscriptionQueue enforce quotas for now-hidden rows
-            try {
-              SubscriptionQueue.setVisible(key, false, ws, 'TokensPane:rowsEffect/remove')
-            } catch {}
           } catch (err) {
             console.error(
               `[TokensPane:${title}] tracking update on removal failed for`,
@@ -911,6 +895,24 @@ export default function TokensPane({
     }
   }, [])
 
+  // Handler for row visibility changes (per-row): only update local refs and counters.
+  // Central reconciliation happens in onScrollStop via SubscriptionQueue.setTableVisible.
+  const handleRowVisibilityChange = useCallback((row: TokenRow, visible: boolean) => {
+    const key = buildPairKey(row.pairAddress, (row.tokenAddress ?? '').toLowerCase(), row.chain)
+    if (!key) return
+    if (visible) {
+      try {
+        markVisible(key)
+        visibleKeysRef.current.add(key)
+      } catch {}
+    } else {
+      try {
+        markHidden(key)
+        visibleKeysRef.current.delete(key)
+      } catch {}
+    }
+  }, [])
+
   // Unsubscribe all visible on unmount (outside dev optional)
   useEffect(() => {
     // Snapshot refs at effect creation to satisfy react-hooks rules
@@ -1082,7 +1084,7 @@ export default function TokensPane({
           const [pair, token, chain] = key.split('|')
           const { next } = markHidden(key)
           try {
-            SubscriptionQueue.setVisible(key, false, ws, 'TokensPane:toggleDisable/hide')
+            SubscriptionQueue.setVisible(key, false, ws, tableId)
           } catch {}
           if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
             try {
@@ -1178,7 +1180,7 @@ export default function TokensPane({
         onSort={onSort}
         sortKey={sort.key}
         sortDir={sort.dir}
-        onRowVisibilityChange={onRowVisibilityChange}
+        onRowVisibilityChange={handleRowVisibilityChange}
         onBothEndsVisible={handleBothEndsVisible}
         onContainerRef={handleContainerRef}
         onOpenRowDetails={onOpenRowDetails}
@@ -1247,44 +1249,40 @@ export default function TokensPane({
             })
           } catch {}
 
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            // Update visibility for keys no longer visible in this pane (no direct unsubscribe)
-            for (const key of prevSet) {
-              if (nextSet.has(key)) continue
-              try {
-                markHidden(key)
-                try {
-                  SubscriptionQueue.setVisible(key, false, ws, 'TokensPane:onScrollStop/hide')
-                } catch {}
-              } catch (err) {
-                console.error(
-                  `[TokensPane:${title}] visibility update on scrollStop failed for`,
-                  key,
-                  String(err),
-                )
-              }
-            }
-            // Subscribe newly visible keys
-            for (const key of nextSet) {
-              if (prevSet.has(key)) continue
-              const [pair, token, chain] = key.split('|')
-              try {
-                const { prev } = markVisible(key)
-                try {
-                  SubscriptionQueue.setVisible(key, true, ws, 'TokensPane:onScrollStop/show')
-                } catch {}
-                if (prev === 0) {
-                  sendSubscribe(ws, { pair, token, chain })
-                }
-              } catch (err) {
-                console.error(
-                  `[TokensPane:${title}] subscribe on scrollStop failed for`,
-                  key,
-                  String(err),
-                )
-              }
+          // Update visibility bookkeeping for local counters
+          for (const key of prevSet) {
+            if (nextSet.has(key)) continue
+            try {
+              markHidden(key)
+            } catch (err) {
+              console.error(
+                `[TokensPane:${title}] visibility update on scrollStop failed for`,
+                key,
+                String(err),
+              )
             }
           }
+          // Subscribe newly visible keys (send over WS only if connected)
+          for (const key of nextSet) {
+            if (prevSet.has(key)) continue
+            const [pair, token, chain] = key.split('|')
+            try {
+              const { prev } = markVisible(key)
+              if (prev === 0 && ws && ws.readyState === WebSocket.OPEN) {
+                sendSubscribe(ws, { pair, token, chain })
+              }
+            } catch (err) {
+              console.error(
+                `[TokensPane:${title}] subscribe on scrollStop failed for`,
+                key,
+                String(err),
+              )
+            }
+          }
+          // Centralized reconciliation: apply full table visible set in one shot
+          try {
+            SubscriptionQueue.setTableVisible(tableId, Array.from(nextSet), ws)
+          } catch {}
           visibleKeysRef.current = nextSet
         }}
       />

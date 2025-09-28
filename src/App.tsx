@@ -82,8 +82,6 @@ function TopBar({
   consoleVisible,
   onToggleConsole,
   onOpenDetail,
-  subThrottle,
-  setSubThrottle,
   subBaseLimit,
   setSubBaseLimit,
 }: {
@@ -103,8 +101,6 @@ function TopBar({
   consoleVisible: boolean
   onToggleConsole: () => void
   onOpenDetail: () => void
-  subThrottle: number
-  setSubThrottle: (n: number) => void
   subBaseLimit: number
   setSubBaseLimit: (n: number) => void
 }) {
@@ -245,58 +241,6 @@ function TopBar({
           {/* Throttle selector: controls total allowed subscriptions */}
           <label
             className="muted"
-            title="Throttle: maximum total subscriptions (visible + inactive)."
-            style={{
-              fontSize: 11,
-              padding: '2px 6px',
-              border: '1px solid #4b5563',
-              borderRadius: 12,
-              background: 'rgba(255,255,255,0.06)',
-              letterSpacing: 0.5,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            Throttle
-            <input
-              type="number"
-              min={0}
-              max={1000}
-              step={50}
-              list="sub-throttle-options"
-              value={subThrottle}
-              onChange={(e) => {
-                const n = Math.max(0, Math.min(1000, Number(e.currentTarget.value) || 0))
-                setSubThrottle(n)
-              }}
-              style={{
-                width: 80,
-                background: 'transparent',
-                border: '1px solid #374151',
-                color: '#e5e7eb',
-                borderRadius: 8,
-                padding: '2px 6px',
-              }}
-            />
-            <datalist id="sub-throttle-options">
-              <option value="50" />
-              <option value="100" />
-              <option value="150" />
-              <option value="200" />
-              <option value="250" />
-              <option value="300" />
-              <option value="400" />
-              <option value="500" />
-              <option value="600" />
-              <option value="700" />
-              <option value="800" />
-              <option value="900" />
-              <option value="1000" />
-            </datalist>
-          </label>
-          <label
-            className="muted"
             title="Base Limit: maximum invisible subscriptions when Throttle is unset."
             style={{
               fontSize: 11,
@@ -311,7 +255,7 @@ function TopBar({
             }}
             title="Default base for invisible subs when Throttle is unset"
           >
-            Base Limit
+            Throttle
             <input
               type="number"
               min={0}
@@ -652,7 +596,7 @@ function App() {
             console.log('WS: open', { url })
             // apply current subscription throttle to queue on open
             try {
-              SubscriptionQueue.setThrottle(subThrottle, ws)
+              // Disable runtime throttle; single UI selector controls base limit only
             } catch {}
             // expose WS to panes so they can send pair subscriptions without prop-drilling
             try {
@@ -1090,19 +1034,8 @@ function App() {
   // Invisible subs count (polled)
   const [invisCount, setInvisCount] = useState<number>(0)
   // Global throttle for total subscriptions (visible + inactive)
-  const [subThrottle, setSubThrottle] = useState<number>(300)
   // Dynamic base limit used when no throttle is applied (affects default heuristic)
   const [subBaseLimit, setSubBaseLimit] = useState<number>(100)
-  useEffect(() => {
-    try {
-      const safe = Math.max(0, Math.min(1000, subThrottle || 0))
-      const anyWin = window as unknown as { __APP_WS__?: WebSocket | null }
-      const ws = anyWin.__APP_WS__ ?? null
-      SubscriptionQueue.setThrottle(safe, ws)
-    } catch {
-      /* no-op */
-    }
-  }, [subThrottle])
   useEffect(() => {
     try {
       const safe = Math.max(0, Math.min(1000, subBaseLimit || 0))
@@ -1646,10 +1579,6 @@ function App() {
           onOpenDetail={() => {
             setDetailRow(null)
             setDetailOpen(true)
-          }}
-          subThrottle={subThrottle}
-          setSubThrottle={(n) => {
-            setSubThrottle(n)
           }}
           subBaseLimit={subBaseLimit}
           setSubBaseLimit={(n: number) => {

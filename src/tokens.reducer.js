@@ -141,20 +141,46 @@ export function tokensReducer(state = initialState, action) {
       }
       case 'scanner/append': {
         const { page, scannerPairs } = action.payload
+        // Map and merge incoming tokens into byId/meta first
         const { nextById, nextMeta, nextPages, changed } = processTokens({
           tokens: scannerPairs,
           state,
           page,
           mapFn: mapScannerResultToToken,
         })
-        if (!changed && JSON.stringify(nextPages) === JSON.stringify(state.pages)) {
+        // Append semantics for page ordering: merge with existing ids, de-dupe, preserve order
+        const prevIds = Array.isArray(state.pages?.[page]) ? state.pages[page] : []
+        const newIds = Array.isArray(nextPages?.[page]) ? nextPages[page] : []
+        const mergedIds = (() => {
+          if (!prevIds || prevIds.length === 0) return newIds
+          if (!newIds || newIds.length === 0) return prevIds
+          const seen = new Set()
+          const out = []
+          for (const id of prevIds) {
+            if (!seen.has(id)) {
+              seen.add(id)
+              out.push(id)
+            }
+          }
+          for (const id of newIds) {
+            if (!seen.has(id)) {
+              seen.add(id)
+              out.push(id)
+            }
+          }
+          return out
+        })()
+        const mergedPages = { ...nextPages, [page]: mergedIds }
+        // If nothing effectively changed, keep state stable
+        const pagesUnchanged = JSON.stringify(mergedPages) === JSON.stringify(state.pages)
+        if (!changed && pagesUnchanged) {
           return state
         }
         return {
           ...state,
           byId: nextById,
           meta: nextMeta,
-          pages: nextPages,
+          pages: mergedPages,
           version: (state.version || 0) + 1,
         }
       }
