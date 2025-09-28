@@ -7,12 +7,12 @@
   - All functions are pure and testable; network is injectable.
 */
 // Pure REST client utilities for /scanner (ESM, JS for node:test)
-// No direct network in tests: fetch is injected.
+// No direct network in e2e tests: fetch is injected.
 import { mapRESTScannerResultToToken } from './tdd.runtime.js'
 import { debugLog } from './utils/debug.mjs'
 
-// In Vite dev, prefer a relative base ('') so requests hit the dev proxy (/scanner)
-// Otherwise use VITE_API_BASE if provided, falling back to the public API.
+// In Vite dev, prefer a 'https://api-rs.dexcelerate.com' unless overridden by VITE_API_BASE.
+// When VITE_API_BASE is provided requests hit the dev proxy (/scanner).
 const viteApiBase = (() => {
   try {
     return (import.meta && import.meta.env && import.meta.env.VITE_API_BASE) || null
@@ -20,8 +20,8 @@ const viteApiBase = (() => {
     return null
   }
 })()
-// In dev, prefer relative base ('') so Vite proxy can handle /scanner when running the dev server.
-// Fall back to localhost:3001 only if explicitly provided via VITE_API_BASE.
+// In Vite dev, prefer a 'https://api-rs.dexcelerate.com' unless overridden by VITE_API_BASE.
+// When VITE_API_BASE is provided requests hit the dev proxy (/scanner).
 export const API_BASE = viteApiBase || 'https://api-rs.dexcelerate.com'
 
 // Build URLSearchParams from GetScannerResultParams-like object
