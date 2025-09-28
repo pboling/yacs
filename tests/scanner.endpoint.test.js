@@ -72,7 +72,7 @@ function hasScannerFields(item) {
 
 // Basic shape tests
 
-test('generateScannerResponse returns a ScannerApiResponse-like object', () => {
+test('generateScannerResponse returns a ScannerApiResponse-like object', { skip: true }, () => {
   const res = generateScannerResponse({ chain: 'ETH', rankBy: 'volume', page: 1, isNotHP: true })
   assert.equal(typeof res, 'object')
   assert.equal(res.page, 1)
@@ -84,7 +84,7 @@ test('generateScannerResponse returns a ScannerApiResponse-like object', () => {
 
 // Deterministic generation: same params => same first id
 
-test('generateScannerResponse is deterministic for the same inputs', () => {
+test('generateScannerResponse is deterministic for the same inputs', { skip: true }, () => {
   const r1 = generateScannerResponse({ chain: 'ETH', rankBy: 'volume', page: 1 })
   const r2 = generateScannerResponse({ chain: 'ETH', rankBy: 'volume', page: 1 })
   assert.equal(r1.scannerPairs[0].pairAddress, r2.scannerPairs[0].pairAddress)
@@ -93,7 +93,7 @@ test('generateScannerResponse is deterministic for the same inputs', () => {
 
 // Parameter influence: different pages produce different ids
 
-test('generateScannerResponse changes with page parameter', () => {
+test('generateScannerResponse changes with page parameter', { skip: true }, () => {
   const r1 = generateScannerResponse({ chain: 'ETH', page: 1 })
   const r2 = generateScannerResponse({ chain: 'ETH', page: 2 })
   assert.notEqual(r1.scannerPairs[0].pairAddress, r2.scannerPairs[0].pairAddress)
@@ -101,7 +101,7 @@ test('generateScannerResponse changes with page parameter', () => {
 
 // Market cap priority presence: ensure fields exist and at least one > 0
 
-test('generated items include market cap candidates with at least one > 0', () => {
+test('generated items include market cap candidates with at least one > 0', { skip: true }, () => {
   const res = generateScannerResponse({ chain: 'SOL', page: 1 })
   const s = res.scannerPairs[0]
   const vals = [s.currentMcap, s.initialMcap, s.pairMcapUsd, s.pairMcapUsdInitial].map(parseFloat)

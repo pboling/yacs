@@ -112,7 +112,13 @@ describe('App boot logging diagnostics', () => {
     const newCanary = await screen.findByTestId('rows-count-new')
     const trendingText = trendingCanary.textContent || ''
     const newText = newCanary.textContent || ''
+    console.error('DEBUG trendingText:', trendingText)
+    console.error('DEBUG newText:', newText)
     const parse = (s: string) => parseInt(/(\d+)/.exec(s)?.[1] ?? '0', 10)
-    expect(parse(trendingText) + parse(newText)).toBeGreaterThan(0)
+    const totalRows = parse(trendingText) + parse(newText)
+    if (totalRows <= 0) {
+      throw new Error(`Rendered row count is zero. trendingText: '${trendingText}', newText: '${newText}'`)
+    }
+    expect(totalRows).toBeGreaterThan(0)
   })
 })

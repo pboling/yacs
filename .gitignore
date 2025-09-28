@@ -36,3 +36,7 @@ test-*.txt
 test_*.txt
 test-*.json
 test_*.json
+debug-*.txt
+debug_*.txt
+debug-*.json
+debug_*.json

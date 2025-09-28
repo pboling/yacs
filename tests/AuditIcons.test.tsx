@@ -5,7 +5,13 @@ import AuditIcons, { AuditFlags } from '../src/components/AuditIcons';
 
 describe('AuditIcons', () => {
   it('renders without crashing', () => {
-    const flags: AuditFlags = { verified: true };
+    const flags: AuditFlags = {
+      verified: true,
+      honeypot: false,
+      freezable: false,
+      renounced: true,
+      locked: false,
+    };
     const { container } = render(<AuditIcons {...flags} />);
     expect(container).toBeTruthy();
   });

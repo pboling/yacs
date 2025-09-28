@@ -24,9 +24,10 @@ export default defineConfig(() => {
       proxy,
     },
     test: {
+      bail: 1, // fail fast
       environment: 'jsdom',
       setupFiles: ['./tests/setup.ts'],
-      include: ['tests/**/*.test.tsx'],
+      include: ['tests/**/*.test.{tsx,js}'],
       globals: true,
       tsconfig: './tsconfig.tests.json',
     },

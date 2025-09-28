@@ -1,6 +1,5 @@
-import test from 'node:test'
-import assert from 'node:assert/strict'
-import { buildScannerQuery, mapScannerPage, fetchScanner } from '../src/scanner.client.js'
+import { describe, it, expect } from 'vitest';
+import { buildScannerQuery, mapScannerPage, fetchScanner } from '../src/scanner.client.js';
 
 function makeScanner(overrides = {}) {
   return {
@@ -75,37 +74,39 @@ const sampleResponse = {
   totalPages: 5,
 }
 
-test('buildScannerQuery serializes primitives and arrays', () => {
-  const qp = buildScannerQuery({ chain: 'ETH', page: 2, dexes: ['uni', 'ray'], isNotHP: true })
-  const s = qp.toString()
-  assert.match(s, /chain=ETH/)
-  assert.match(s, /page=2/)
-  // array becomes repeated params
-  assert.ok((s.match(/dexes=/g) || []).length === 2)
-  assert.match(s, /isNotHP=true/)
-})
+describe('scanner.client.js utilities', () => {
+  it('buildScannerQuery serializes primitives and arrays', () => {
+    const qp = buildScannerQuery({ chain: 'ETH', page: 2, dexes: ['uni', 'ray'], isNotHP: true })
+    const s = qp.toString()
+    expect(s).toMatch(/chain=ETH/)
+    expect(s).toMatch(/page=2/)
+    // array becomes repeated params
+    expect((s.match(/dexes=/g) || []).length).toBe(2)
+    expect(s).toMatch(/isNotHP=true/)
+  })
 
-test('mapScannerPage maps ScannerPairs to TokenData[]', () => {
-  const tokens = mapScannerPage(sampleResponse)
-  assert.equal(tokens.length, 2)
-  assert.equal(tokens[0].pairAddress, '0xPAIR')
-  assert.equal(tokens[1].tokenSymbol, 'TK2')
-})
+  it('mapScannerPage maps ScannerPairs to TokenData[]', () => {
+    const tokens = mapScannerPage(sampleResponse)
+    expect(tokens).toHaveLength(2)
+    expect(tokens[0].pairAddress).toBe('0xPAIR')
+    expect(tokens[1].tokenSymbol).toBe('TK2')
+  })
 
-test('fetchScanner uses injected fetch and maps tokens', async () => {
-  const calls = []
-  const mockFetch = async (url) => {
-    calls.push(url)
-    return {
-      ok: true,
-      json: async () => sampleResponse,
+  it('fetchScanner uses injected fetch and maps tokens', async () => {
+    const calls = []
+    const mockFetch = async (url) => {
+      calls.push(url)
+      return {
+        ok: true,
+        json: async () => sampleResponse,
+      }
     }
-  }
-  const { raw, tokens } = await fetchScanner(
-    { chain: 'ETH', page: 1 },
-    { baseUrl: 'https://mock', fetchImpl: mockFetch },
-  )
-  assert.equal(raw, sampleResponse)
-  assert.equal(tokens.length, 2)
-  assert.ok(calls[0].startsWith('https://mock/scanner?'))
+    const { raw, tokens } = await fetchScanner(
+      { chain: 'ETH', page: 1 },
+      { baseUrl: 'https://mock', fetchImpl: mockFetch },
+    )
+    expect(raw).toEqual(sampleResponse)
+    expect(tokens).toHaveLength(2)
+    expect(calls[0]).toMatch(/^https:\/\/mock\/scanner\?/)
+  })
 })
