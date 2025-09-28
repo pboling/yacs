@@ -39,7 +39,6 @@ import { setDefaultInvisibleBaseLimit } from './subscription.limit.bus.js'
 import { engageSubscriptionLock, releaseSubscriptionLock } from './subscription.lock.bus.js'
 import { onSubscriptionLockChange, isSubscriptionLockActive } from './subscription.lock.bus.js'
 import { buildPairKey, buildTickKey } from './utils/key_builder'
-import { logCatch } from './utils/debug.mjs'
 import { emitUpdate } from './updates.bus'
 import { UNSUBSCRIPTIONS_DISABLED } from './ws.mapper.js'
 
@@ -635,19 +634,155 @@ function App() {
         (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)
       ) {
         console.log('WS: reusing existing shared WebSocket; state=', existing.readyState)
+        // Attach lightweight listeners that mirror the essential onmessage pipeline for this mount.
+        // We avoid reusing previous mount's closures by adding new listeners scoped to this component
+        // and remove them in cleanup. This prevents the spinner from getting stuck when the WS
+        // object survives a hot reload or page-level reuse.
+        // reuse existing WebSocket instance
+        const onMessage = (ev: MessageEvent) => {
+          try {
+            let parsed: Record<string, unknown> | null = null
+            try {
+              parsed = JSON.parse(typeof ev.data === 'string' ? ev.data : String(ev.data))
+            } catch {
+              return
+            }
+            const event = typeof parsed?.event === 'string' ? parsed.event : undefined
+            // Bump and emit minimal per-key updates to keep UI reactive
+            try {
+              if (event === 'tick' || event === 'pair-stats') bumpEventCount(event)
+            } catch {}
+            try {
+              if (event === 'tick') {
+                const d = (parsed as any).data || {}
+                const pairObj = d.pair || {}
+                const token1 = pairObj.token1Address || pairObj.token
+                const chainVal = pairObj.chain
+                if (
+                  typeof token1 === 'string' &&
+                  (typeof chainVal === 'string' || typeof chainVal === 'number')
+                ) {
+                  const key = buildTickKey(token1.toLowerCase(), chainVal)
+                  emitUpdate({ key, type: 'tick', data: d })
+                }
+              } else if (event === 'pair-stats') {
+                const d = (parsed as any).data || {}
+                const pairObj = d.pair || {}
+                const token1 = pairObj.token1Address
+                const chainVal = pairObj.chain
+                if (
+                  typeof token1 === 'string' &&
+                  (typeof chainVal === 'string' || typeof chainVal === 'number')
+                ) {
+                  const key = buildTickKey(token1.toLowerCase(), chainVal)
+                  emitUpdate({ key, type: 'pair-stats', data: d })
+                }
+              }
+            } catch {}
+            // Map and dispatch
+            try {
+              const action = mapIncomingMessageToActionSafe(parsed)
+              if (action) d(action as Action)
+            } catch (err) {
+              try {
+                console.error('WS(reuse) handler error', err)
+              } catch {}
+            }
+          } catch {
+            /* no-op */
+          }
+        }
+        const onErr = (ev: Event) => {
+          try {
+            console.log('WS(reuse): error', ev)
+          } catch {}
+        }
+        const onClose = (ev: CloseEvent) => {
+          try {
+            console.log('WS(reuse): close', ev?.code)
+          } catch {}
+        }
+        try {
+          existing.addEventListener('message', onMessage)
+          existing.addEventListener('error', onErr)
+          existing.addEventListener('close', onClose)
+        } catch {
+          /* ignore attach errors */
+        }
+        // If already open, immediately send scanner subscriptions for this mount to ensure we receive pairs
+        let reuseFailTimer: ReturnType<typeof setTimeout> | null = null
+        try {
+          const sendSubs = () => {
+            try {
+              existing.send(JSON.stringify(buildScannerSubscriptionSafe({ ...trendingFilters, page: TRENDING_PAGE })))
+            } catch {}
+            try {
+              existing.send(JSON.stringify(buildScannerSubscriptionSafe({ ...newFilters, page: NEW_PAGE })))
+            } catch {}
+          }
+          if (existing.readyState === WebSocket.OPEN) {
+            sendSubs()
+          } else {
+            // If still connecting, once it opens send subscriptions once
+            const onceOpen = () => {
+              try {
+                sendSubs()
+              } catch {}
+              try {
+                existing.removeEventListener('open', onceOpen)
+              } catch {}
+            }
+            try {
+              existing.addEventListener('open', onceOpen)
+            } catch {}
+          }
+          // Short reuse failsafe: if no pages/rows arrive within a few seconds, release overlay to avoid stuck UX
+          try {
+            reuseFailTimer = setTimeout(() => {
+              try {
+                const pagesNow = (state as any).pages ?? {}
+                const hasAnyPageNow = Object.keys(pagesNow).length > 0
+                const byIdNow = (state as any).byId ?? {}
+                const hasAnyRowsNow = !!(byIdNow && Object.keys(byIdNow).length > 0)
+                if (!hasAnyPageNow && !hasAnyRowsNow && !wsScannerReady.trending && !wsScannerReady.newer) {
+                  try {
+                    console.warn('App: reuse branch failsafe — no scanner-pairs after reuse, releasing overlay')
+                  } catch {}
+                  setAppReady(true)
+                }
+              } catch {
+                setAppReady(true)
+              }
+            }, 3000)
+          } catch {}
+        } catch {}
+
         return () => {
-          /* no-op reuse */
+          try {
+            existing.removeEventListener('message', onMessage)
+          } catch {}
+          try {
+            existing.removeEventListener('error', onErr)
+          } catch {}
+          try {
+            existing.removeEventListener('close', onClose)
+          } catch {}
+          try {
+            if (reuseFailTimer) clearTimeout(reuseFailTimer)
+          } catch {}
         }
       }
     } catch {
       /* no-op */
     }
 
-    // Use production WS endpoint by default in all environments. Allow override via VITE_WS_URL for testing/mocks.
+    // Prefer local dev WS path in development so Vite's proxy (vite.config.ts) can forward
+    // WebSocket traffic to the local backend. Allow override via VITE_WS_URL for testing/mocks.
     const prodUrl = 'wss://api-rs.dexcelerate.com/ws'
     const envUrl: string | null =
       typeof import.meta.env.VITE_WS_URL === 'string' ? import.meta.env.VITE_WS_URL : null
-    const urls: string[] = [envUrl, prodUrl].filter(Boolean) as string[]
+    const devLocal = import.meta.env.DEV ? '/ws' : null
+    const urls: string[] = [devLocal, envUrl, prodUrl].filter(Boolean) as string[]
 
     const maxAttempts = import.meta.env.DEV ? 8 : 20
 
@@ -977,6 +1112,25 @@ function App() {
               const mapStart = performance.now()
               const action = mapIncomingMessageToActionSafe(parsed)
               const mapEnd = performance.now()
+              // If this is a scanner-pairs event, mark the corresponding wsScannerReady flag
+              try {
+                if (event === 'scanner-pairs') {
+                  // Extract page from possible shapes: data.filter.page or data.page
+                  let page = 1
+                  try {
+                    if (parsed && typeof parsed === 'object' && parsed.data && typeof parsed.data === 'object') {
+                      const d = parsed.data as any
+                      if (d.filter && typeof d.filter === 'object' && d.filter.page) page = Number(d.filter.page) || 1
+                      else if (d.page) page = Number(d.page) || 1
+                    }
+                  } catch {}
+                  try {
+                    if (page === TRENDING_PAGE) setWsScannerReady((p) => ({ ...p, trending: true }))
+                    else if (page === NEW_PAGE) setWsScannerReady((p) => ({ ...p, newer: true }))
+                    console.info('App: ws scanner-pairs received, marked wsScannerReady', { page, TRENDING_PAGE, NEW_PAGE })
+                  } catch {}
+                }
+              } catch {}
               if (!action) {
                 console.error('WS: unhandled or malformed message', parsed)
                 return
@@ -1127,10 +1281,8 @@ function App() {
   }, [trendingCounts, newCounts, CHAINS])
 
   // Live update rate tracker: 2s resolution over a 1-minute window (30 samples)
-  const versionRef = useRef<number>((state as unknown as { version?: number }).version ?? 0)
   const blurVersionRef = useRef<number | null>(null)
   const pendingApplyAfterBlurRef = useRef(false)
-  const updatesCounterRef = useRef(0)
   // WS event counters (allowed incoming events)
   type WsEventName = 'scanner-pairs' | 'tick' | 'pair-stats' | 'wpeg-prices'
   type WsCounts = Record<WsEventName, number>
@@ -1350,7 +1502,7 @@ function App() {
       })
     } catch {}
   }, [subCount, invisCount])
-  const [rateSeries, setRateSeries] = useState<number[]>([])
+  const [rateSeries] = useState<number[]>([])
   // WebSocket console visibility (default hidden)
   const [consoleVisible, setConsoleVisible] = useState(false)
 
@@ -1387,6 +1539,82 @@ function App() {
   // Loading overlay visibility with smooth fade-out when clearing
   const [showOverlay, setShowOverlay] = useState<boolean>(true)
   const [overlayClosing, setOverlayClosing] = useState<boolean>(false)
+  // Overlay DOM ref + paint ACK. Some environments mount/pause the overlay such that the
+  // main readiness computation can race ahead and miss the overlay's mounted lifecycle.
+  // `overlayAck` becomes true once the overlay DIV has painted. While the overlay is
+  // visible and not acked we run a boot-probe that re-emits the loaded-state readiness
+  // once-per-second so the overlay will see the readiness transition reliably.
+  const overlayRef = useRef<HTMLDivElement | null>(null)
+  const [overlayAck, setOverlayAck] = useState(false)
+  useEffect(() => {
+    if (!showOverlay) {
+      setOverlayAck(false)
+      return
+    }
+    // When the overlay becomes visible, clear ack and mark it after next paint
+    setOverlayAck(false)
+    let mounted = true
+    // Use requestAnimationFrame to detect paint; fall back to setTimeout
+    const onPaint = () => {
+      if (!mounted) return
+      try {
+        setOverlayAck(true)
+      } catch {}
+    }
+    try {
+      if (window.requestAnimationFrame) window.requestAnimationFrame(onPaint)
+      else setTimeout(onPaint, 16)
+    } catch {
+      try {
+        setTimeout(onPaint, 16)
+      } catch {}
+    }
+    return () => {
+      mounted = false
+    }
+  }, [showOverlay])
+
+  // Boot-probe: while overlay is visible but has not acked paint, re-emit readiness
+  useEffect(() => {
+    if (!showOverlay || overlayAck) return
+    let id: number | null = null
+    const probe = () => {
+      try {
+        const pages = (state as unknown as { pages?: Partial<Record<number, string[]>> }).pages ?? {}
+        const trendingArr = (pages as Record<number, string[] | undefined>)[TRENDING_PAGE]
+        const newArr = (pages as Record<number, string[] | undefined>)[NEW_PAGE]
+        const hasTrending = Array.isArray(trendingArr)
+        const hasNew = Array.isArray(newArr)
+        const byId = (state as unknown as { byId?: Record<string, unknown> }).byId ?? {}
+        const hasAnyRows = byId && Object.keys(byId).length > 0
+        // Re-emit readiness signals so the overlay receives them even if timing races occur.
+        setWsScannerReady((prev) => ({
+          trending: prev.trending || hasTrending,
+          newer: prev.newer || hasNew,
+        }))
+        // If we already have any rows/pages, also nudge appReady so the UI can progress.
+        if (hasTrending || hasNew || hasAnyRows) {
+          setAppReady(true)
+        }
+      } catch {}
+    }
+    // Fire immediately, then every 1s until overlay ack
+    try {
+      probe()
+      id = window.setInterval(probe, 1000)
+    } catch {
+      /* no-op */
+    }
+    return () => {
+      try {
+        if (id != null) window.clearInterval(id)
+      } catch {}
+    }
+    // Intentionally skip state in deps to avoid resetting probe too aggressively; we only
+    // need to probe until overlay acknowledges paint.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showOverlay, overlayAck])
+
   // Synchronize overlay with appReady state; when ready, fade for 2s before unmounting
   useEffect(() => {
     if (!appReady) {
@@ -1492,128 +1720,28 @@ function App() {
           trending: prev.trending || hasTrending,
           newer: prev.newer || hasNew,
         }))
+        // Diagnostic: report wsScannerReady after update (will show previous state here)
+        try {
+          console.info('App: requested wsScannerReady update', { hasTrending, hasNew })
+        } catch {}
+        try {
+          // If REST already provided pages or rows, mark app ready to avoid the boot overlay
+          const byId = (state as unknown as { byId?: Record<string, unknown> }).byId ?? {}
+          const hasAnyRows = byId && Object.keys(byId).length > 0
+          if (hasTrending || hasNew || hasAnyRows) {
+            try {
+              console.info('App: pages-scan -> marking appReady (REST present)', {
+                hasTrending,
+                hasNew,
+                hasAnyRows,
+              })
+            } catch {}
+            setAppReady(true)
+          }
+        } catch {}
       }
-    } catch (err) {
-      logCatch('App: boot readiness pages scan failed', err)
-    }
+    } catch {}
   }, [appReady, state])
-  // Allow E2E/automation to bypass the boot splash to avoid spinner-related flakiness
-  const bypassBoot = useMemo(() => {
-    try {
-      // Playwright/Selenium set navigator.webdriver = true
-      if (
-        typeof navigator !== 'undefined' &&
-        (navigator as unknown as { webdriver?: boolean }).webdriver
-      )
-        return true
-      // Opt-in via URL: ?e2e=1
-      const sp = new URLSearchParams(window.location.search)
-      if ((sp.get('e2e') ?? '') === '1') return true
-      // Opt-in via global flag for tests: window.__BYPASS_BOOT__ = true
-      const anyWin = window as unknown as { __BYPASS_BOOT__?: boolean }
-      if (anyWin.__BYPASS_BOOT__) return true
-    } catch {
-      /* no-op */
-    }
-    return false
-  }, [])
-  useEffect(() => {
-    if (bypassBoot) {
-      setAppReady(true)
-      return
-    }
-    let mounted = true
-    let timer: ReturnType<typeof setTimeout> | null = null
-    let failsafe: ReturnType<typeof setTimeout> | null = null
-    const compute = () => {
-      try {
-        const ready = wsScannerReady.trending && wsScannerReady.newer
-        if (timer) {
-          clearTimeout(timer)
-          timer = null
-        }
-        // Debounce the flip to avoid brief flickers during FE/BE startup races
-        timer = setTimeout(() => {
-          if (mounted) {
-            setAppReady(ready)
-            if (!ready && !failsafe) {
-              // Arm a bounded boot failsafe so the overlay cannot stick forever without any errors
-              failsafe = setTimeout(() => {
-                try {
-                  const st = state as unknown as {
-                    pages?: Partial<Record<number, string[]>>
-                    byId?: Record<string, unknown>
-                  }
-                  const pages = st.pages ?? {}
-                  const pageKeys = Object.keys(pages)
-                  const hasAnyPage = pageKeys.length > 0
-                  const hasAnyRows = st.byId && Object.keys(st.byId).length > 0
-                  if (!appReady && (hasAnyPage || hasAnyRows)) {
-                    console.warn('App: boot failsafe released overlay', { hasAnyPage, hasAnyRows })
-                    setAppReady(true)
-                  }
-                } catch {
-                  // still release to unblock UI
-                  setAppReady(true)
-                }
-              }, 6000)
-            }
-          }
-        }, 250)
-      } catch {
-        /* no-op */
-      }
-    }
-    compute()
-    return () => {
-      mounted = false
-      if (timer) {
-        clearTimeout(timer)
-        timer = null
-      }
-      if (failsafe) {
-        clearTimeout(failsafe)
-        failsafe = null
-      }
-    }
-  }, [wsScannerReady, bypassBoot, state, appReady])
-
-  // Watch version for filter apply completion after blur
-  useEffect(() => {
-    const v = (state as unknown as { version?: number }).version ?? 0
-    if (versionRef.current !== v) {
-      versionRef.current = v
-      if (pendingApplyAfterBlurRef.current) {
-        if (blurVersionRef.current === null || v !== blurVersionRef.current) {
-          pendingApplyAfterBlurRef.current = false
-          blurVersionRef.current = null
-          try {
-            emitFilterApplyComplete()
-          } catch {
-            /* no-op */
-          }
-        }
-      }
-    }
-  }, [state])
-
-  // Sample every 2 seconds and convert count to per-second rate
-  useEffect(() => {
-    const id = setInterval(() => {
-      const count = updatesCounterRef.current
-      updatesCounterRef.current = 0
-      const perSec = count / 2
-      setRateSeries((prev) => {
-        const next = [...prev, perSec]
-        if (next.length > 30) next.splice(0, next.length - 30)
-        return next
-      })
-    }, 2000)
-    return () => {
-      clearInterval(id)
-    }
-  }, [])
-
   // Modal state & helpers
   const [detailRow, setDetailRow] = useState<TokenRow | null>(null)
   const [detailOpen, setDetailOpen] = useState<boolean>(false)
@@ -1783,36 +1911,37 @@ function App() {
   return (
     <div style={{ position: 'relative' }}>
       {(() => {
-        // Smooth fade-out overlay: keep mounted while closing
-        // showOverlay is true while visible or fading; overlayClosing triggers opacity transition
-        return showOverlay ? (
+         // Smooth fade-out overlay: keep mounted while closing
+         // showOverlay is true while visible or fading; overlayClosing triggers opacity transition
+         return showOverlay ? (
           <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              display: 'grid',
-              placeItems: 'center',
-              background: '#0b0f14',
-              color: '#e5e7eb',
-              zIndex: 1000,
-              opacity: overlayClosing ? 0 : 1,
-              transition: 'opacity 2000ms ease',
-              pointerEvents: overlayClosing ? 'none' : 'auto',
-            }}
+             style={{
+               position: 'fixed',
+               inset: 0,
+               display: 'grid',
+               placeItems: 'center',
+               background: '#0b0f14',
+               color: '#e5e7eb',
+               zIndex: 1000,
+               opacity: overlayClosing ? 0 : 1,
+               transition: 'opacity 2000ms ease',
+               pointerEvents: overlayClosing ? 'none' : 'auto',
+             }}
+            ref={overlayRef}
             aria-hidden={overlayClosing ? 'true' : undefined}
-          >
-            <div
-              className="status loading-bump loading-xl"
-              role="status"
-              aria-live="polite"
-              aria-busy={!overlayClosing}
-            >
-              <span className="loading-spinner" aria-hidden="true" />
-              <span className="loading-text">Loading data…</span>
-            </div>
-          </div>
-        ) : null
-      })()}
+           >
+             <div
+               className="status loading-bump loading-xl"
+               role="status"
+               aria-live="polite"
+               aria-busy={!overlayClosing}
+             >
+               <span className="loading-spinner" aria-hidden="true" />
+               <span className="loading-text">Loading data…</span>
+             </div>
+           </div>
+         ) : null
+       })()}
       <div style={{ padding: '16px 16px 16px 10px' }}>
         <DetailModal
           open={detailOpen}

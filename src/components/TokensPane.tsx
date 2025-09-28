@@ -163,7 +163,8 @@ export default function TokensPane({
   }
 
   const wsRef = useRef<WebSocket | null>(null)
-  const payloadsRef = useRef<{ pair: string; token: string; chain: string }[]>([])
+  // payloads may be partially populated before filtering; allow pair optional but filter before use
+  const payloadsRef = useRef<{ pair?: string; token: string; chain: string }[]>([])
   const rowsRef = useRef<TokenRow[]>([])
   const scrollingRef = useRef<boolean>(false)
   // Track last update timestamps per key and previous value snapshots
@@ -382,10 +383,10 @@ export default function TokensPane({
               token: (t.tokenAddress ?? '').toLowerCase(),
               chain: t.chain,
             }))
-            .filter((p) => p.pair && p.token && p.chain)
+            .filter((p): p is { pair: string; token: string; chain: string } => !!p.pair && !!p.token && !!p.chain)
           payloadsRef.current = payloads
           try {
-            const keys = payloads.map((p) => buildPairKey(p.pair, p.token, p.chain))
+            const keys = payloads.map((p) => buildPairKey(p.pair!, p.token, p.chain))
             SubscriptionQueue.updateUniverse(keys, wsRef.current ?? null)
           } catch (err) {
             if (err instanceof Error) {
@@ -554,6 +555,17 @@ export default function TokensPane({
     } catch {}
     return finalRows
   }, [state.byId, state.pages, page, sort, clientFilters, visibleCount, title])
+
+  // Keep an imperative copy of rows for imperative functions (loadMore, etc.).
+  // Prior code relied on rowsRef.current being populated but did not update it;
+  // sync it here so loadMore and other imperative logic can rely on its length.
+  useEffect(() => {
+    try {
+      rowsRef.current = rows
+    } catch {
+      /* no-op */
+    }
+  }, [rows])
 
   // Ensure the loading spinner is dismissed as soon as we actually have rows to render,
   // even if some upstream flag forgot to clear. This prevents masking ready data under
@@ -745,16 +757,17 @@ export default function TokensPane({
             token: (t.tokenAddress ?? '').toLowerCase(),
             chain: t.chain,
           }))
-          .filter((p) => p.pair && p.token && p.chain)
+          .filter((p): p is { pair: string; token: string; chain: string } => !!p.pair && !!p.token && !!p.chain)
         const all = [...(payloadsRef.current || []), ...newPayloads]
         // Deduplicate by full key pair|token|chain
         const seen = new Set<string>()
         const merged: { pair: string; token: string; chain: string }[] = []
         for (const p of all) {
+          if (!p.pair) continue
           const key = buildPairKey(p.pair, (p.token ?? '').toLowerCase(), p.chain)
           if (seen.has(key)) continue
           seen.add(key)
-          merged.push(p)
+          merged.push({ pair: p.pair, token: p.token, chain: p.chain })
         }
         payloadsRef.current = merged
         const keys = merged.map((p) => buildPairKey(p.pair, (p.token ?? '').toLowerCase(), p.chain))
@@ -962,7 +975,10 @@ export default function TokensPane({
   // Central reconciliation happens in onScrollStop via SubscriptionQueue.setTableVisible.
   const handleRowVisibilityChange = useCallback(
     (row: TokenRow, visible: boolean) => {
-      const key = buildPairKey(row.pairAddress, (row.tokenAddress ?? '').toLowerCase(), row.chain)
+      const pair = row.pairAddress ?? ''
+      const tokenAddr = (row.tokenAddress ?? '').toLowerCase()
+      if (!pair || !tokenAddr) return
+      const key = buildPairKey(pair, tokenAddr, row.chain)
       if (!key) return
       if (visible) {
         try {
@@ -1091,9 +1107,9 @@ export default function TokensPane({
         try {
           const ws = wsRef.current
           // Reapply the known subscription universe so the invisible queue can be repopulated
-          const universeKeys = (payloadsRef.current || []).map((p) =>
-            buildPairKey(p.pair, (p.token ?? '').toLowerCase(), p.chain),
-          )
+          const universeKeys = (payloadsRef.current || [])
+            .filter((p): p is { pair: string; token: string; chain: string } => !!p.pair && !!p.token && !!p.chain)
+            .map((p) => buildPairKey(p.pair!, (p.token ?? '').toLowerCase(), p.chain))
           if (universeKeys.length > 0) {
             SubscriptionQueue.updateUniverse(universeKeys, ws ?? null)
           }
@@ -1125,6 +1141,10 @@ export default function TokensPane({
     try {
       const sentinel = el?.querySelector('[data-scroll-sentinel="1"]') as HTMLElement | null
       if (sentinel) sentinel.setAttribute('data-rest-page', String(currentPage || 1))
+      // Also ensure our local sentinelRef is annotated even if it's outside the container
+      try {
+        if (sentinelRef.current) sentinelRef.current.setAttribute('data-rest-page', String(currentPage || 1))
+      } catch {}
     } catch {
       /* no-op */
     }
@@ -1174,11 +1194,9 @@ export default function TokensPane({
               token: (t.tokenAddress ?? '').toLowerCase(),
               chain: t.chain,
             }))
-            .filter((p) => p.pair && p.token && p.chain)
+            .filter((p): p is { pair: string; token: string; chain: string } => !!p.pair && !!p.token && !!p.chain)
           payloadsRef.current = payloads
-          const keys = payloads.map((p) =>
-            buildPairKey(p.pair, (p.token ?? '').toLowerCase(), p.chain),
-          )
+          const keys = payloads.map((p) => buildPairKey(p.pair!, (p.token ?? '').toLowerCase(), p.chain))
           SubscriptionQueue.updateUniverse(keys, wsRef.current ?? null)
         } catch (err) {
           logCatch(`[TokensPane:${title}] updateUniverse (isNotHP change) failed`, err)

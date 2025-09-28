@@ -2,9 +2,13 @@
 import { toChainId } from './chain'
 
 export function buildPairKey(pair: string, token: string, chain: string | number | undefined) {
-  return `${pair}|${token}|${toChainId(chain)}`
+  // Normalize pair and token to lowercase to ensure consistent keying across emitters and listeners
+  const p = pair.toLowerCase()
+  const t = token.toLowerCase()
+  return `${p}|${t}|${toChainId(chain)}`
 }
 
 export function buildTickKey(token: string, chain: string | number | undefined) {
-  return `${token}|${toChainId(chain)}`
+  const t = token.toLowerCase()
+  return `${t}|${toChainId(chain)}`
 }
