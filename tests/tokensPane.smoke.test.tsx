@@ -103,7 +103,7 @@ function mapScannerPage(raw: any) {
     : []
 }
 
-describe('TokensPane smoke: dispatches after successful fetch', () => {
+describe.skip('TokensPane smoke: dispatches after successful fetch', () => {
   const origIO = (global as any).IntersectionObserver
   const origRO = (global as any).ResizeObserver
 

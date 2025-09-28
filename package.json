@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "pnpm run test && vite",
     "server": "TEST_FAST=0 node server/index.js",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
@@ -14,7 +14,6 @@
     "lint:ci:fix": "eslint . --config eslint.ci.config.js --fix --max-warnings=0",
     "preview": "vite preview",
     "dev:serve": "concurrently -k -s first -n server,frontend -c blue,green \"pnpm run server\" \"pnpm run dev\"",
-    "dev:all": "pnpm run test:all && pnpm run dev:serve",
     "test:unit": "vitest run",
     "test": "pnpm run test:node && pnpm run test:unit",
     "test:e2e": "TEST_FAST=1 playwright test",

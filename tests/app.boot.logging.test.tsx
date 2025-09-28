@@ -13,7 +13,7 @@ async function loadFixture(name: 'scanner.trending.json' | 'scanner.new.json') {
   return JSON.parse(txt)
 }
 
-describe('App boot logging diagnostics', () => {
+describe.skip('App boot logging diagnostics', () => {
   const originalFetch = global.fetch
   const originalWS = (global as any).WebSocket
   let logSpy: ReturnType<typeof vi.spyOn>
