@@ -1,18 +1,18 @@
-import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
-import AuditIcons, { AuditFlags } from '../src/components/AuditIcons';
+import AuditIcons from '../src/components/AuditIcons';
+import type { AuditFlags } from '../src/components/AuditIcons';
 
 describe('AuditIcons', () => {
   it('renders without crashing', () => {
     const flags: AuditFlags = {
       verified: true,
-      honeypot: false,
       freezable: false,
       renounced: true,
       locked: false,
+      honeypot: false,
     };
-    const { container } = render(<AuditIcons {...flags} />);
+    const { container } = render(<AuditIcons flags={flags} />);
     expect(container).toBeTruthy();
   });
 });

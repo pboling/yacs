@@ -23,11 +23,15 @@ const mockToken: Token = {
 };
 
 beforeAll(() => {
-  global.IntersectionObserver = class {
-    constructor() {}
+  globalThis.IntersectionObserver = class {
+    root = null;
+    rootMargin = '';
+    thresholds = [];
     observe() {}
     unobserve() {}
     disconnect() {}
+    takeRecords() { return []; }
+    constructor() {}
   };
 });
 
