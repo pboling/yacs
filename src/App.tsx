@@ -714,10 +714,16 @@ function App() {
         try {
           const sendSubs = () => {
             try {
-              existing.send(JSON.stringify(buildScannerSubscriptionSafe({ ...trendingFilters, page: TRENDING_PAGE })))
+              existing.send(
+                JSON.stringify(
+                  buildScannerSubscriptionSafe({ ...trendingFilters, page: TRENDING_PAGE }),
+                ),
+              )
             } catch {}
             try {
-              existing.send(JSON.stringify(buildScannerSubscriptionSafe({ ...newFilters, page: NEW_PAGE })))
+              existing.send(
+                JSON.stringify(buildScannerSubscriptionSafe({ ...newFilters, page: NEW_PAGE })),
+              )
             } catch {}
           }
           if (existing.readyState === WebSocket.OPEN) {
@@ -744,9 +750,16 @@ function App() {
                 const hasAnyPageNow = Object.keys(pagesNow).length > 0
                 const byIdNow = (state as any).byId ?? {}
                 const hasAnyRowsNow = !!(byIdNow && Object.keys(byIdNow).length > 0)
-                if (!hasAnyPageNow && !hasAnyRowsNow && !wsScannerReady.trending && !wsScannerReady.newer) {
+                if (
+                  !hasAnyPageNow &&
+                  !hasAnyRowsNow &&
+                  !wsScannerReady.trending &&
+                  !wsScannerReady.newer
+                ) {
                   try {
-                    console.warn('App: reuse branch failsafe — no scanner-pairs after reuse, releasing overlay')
+                    console.warn(
+                      'App: reuse branch failsafe — no scanner-pairs after reuse, releasing overlay',
+                    )
                   } catch {}
                   setAppReady(true)
                 }
@@ -1118,16 +1131,26 @@ function App() {
                   // Extract page from possible shapes: data.filter.page or data.page
                   let page = 1
                   try {
-                    if (parsed && typeof parsed === 'object' && parsed.data && typeof parsed.data === 'object') {
+                    if (
+                      parsed &&
+                      typeof parsed === 'object' &&
+                      parsed.data &&
+                      typeof parsed.data === 'object'
+                    ) {
                       const d = parsed.data as any
-                      if (d.filter && typeof d.filter === 'object' && d.filter.page) page = Number(d.filter.page) || 1
+                      if (d.filter && typeof d.filter === 'object' && d.filter.page)
+                        page = Number(d.filter.page) || 1
                       else if (d.page) page = Number(d.page) || 1
                     }
                   } catch {}
                   try {
                     if (page === TRENDING_PAGE) setWsScannerReady((p) => ({ ...p, trending: true }))
                     else if (page === NEW_PAGE) setWsScannerReady((p) => ({ ...p, newer: true }))
-                    console.info('App: ws scanner-pairs received, marked wsScannerReady', { page, TRENDING_PAGE, NEW_PAGE })
+                    console.info('App: ws scanner-pairs received, marked wsScannerReady', {
+                      page,
+                      TRENDING_PAGE,
+                      NEW_PAGE,
+                    })
                   } catch {}
                 }
               } catch {}
@@ -1580,7 +1603,8 @@ function App() {
     let id: number | null = null
     const probe = () => {
       try {
-        const pages = (state as unknown as { pages?: Partial<Record<number, string[]>> }).pages ?? {}
+        const pages =
+          (state as unknown as { pages?: Partial<Record<number, string[]>> }).pages ?? {}
         const trendingArr = (pages as Record<number, string[] | undefined>)[TRENDING_PAGE]
         const newArr = (pages as Record<number, string[] | undefined>)[NEW_PAGE]
         const hasTrending = Array.isArray(trendingArr)
@@ -1911,37 +1935,37 @@ function App() {
   return (
     <div style={{ position: 'relative' }}>
       {(() => {
-         // Smooth fade-out overlay: keep mounted while closing
-         // showOverlay is true while visible or fading; overlayClosing triggers opacity transition
-         return showOverlay ? (
+        // Smooth fade-out overlay: keep mounted while closing
+        // showOverlay is true while visible or fading; overlayClosing triggers opacity transition
+        return showOverlay ? (
           <div
-             style={{
-               position: 'fixed',
-               inset: 0,
-               display: 'grid',
-               placeItems: 'center',
-               background: '#0b0f14',
-               color: '#e5e7eb',
-               zIndex: 1000,
-               opacity: overlayClosing ? 0 : 1,
-               transition: 'opacity 2000ms ease',
-               pointerEvents: overlayClosing ? 'none' : 'auto',
-             }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              display: 'grid',
+              placeItems: 'center',
+              background: '#0b0f14',
+              color: '#e5e7eb',
+              zIndex: 1000,
+              opacity: overlayClosing ? 0 : 1,
+              transition: 'opacity 2000ms ease',
+              pointerEvents: overlayClosing ? 'none' : 'auto',
+            }}
             ref={overlayRef}
             aria-hidden={overlayClosing ? 'true' : undefined}
-           >
-             <div
-               className="status loading-bump loading-xl"
-               role="status"
-               aria-live="polite"
-               aria-busy={!overlayClosing}
-             >
-               <span className="loading-spinner" aria-hidden="true" />
-               <span className="loading-text">Loading data…</span>
-             </div>
-           </div>
-         ) : null
-       })()}
+          >
+            <div
+              className="status loading-bump loading-xl"
+              role="status"
+              aria-live="polite"
+              aria-busy={!overlayClosing}
+            >
+              <span className="loading-spinner" aria-hidden="true" />
+              <span className="loading-text">Loading data…</span>
+            </div>
+          </div>
+        ) : null
+      })()}
       <div style={{ padding: '16px 16px 16px 10px' }}>
         <DetailModal
           open={detailOpen}
@@ -2367,6 +2391,22 @@ function App() {
             />
           </ErrorBoundary>
         </div>
+        <ul>
+          <li>
+            Copyright (c) 2025 Peter H. Boling -
+            <a href="https://discord.gg/3qme4XHNKN">
+               Galtzo.com
+              <picture>
+                <img
+                  src="https://logos.galtzo.com/assets/images/galtzo-floss/avatar-128px-blank.svg"
+                  alt="Galtzo.com Logo (Wordless) by Aboling0, CC BY-SA 4.0"
+                  width="24"
+                />
+              </picture>
+            </a>
+            .
+          </li>
+        </ul>
       </div>
     </div>
   )

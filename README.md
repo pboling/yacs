@@ -52,9 +52,9 @@ It features robust filtering, sorting, and live updates via WebSocket, with a fo
 
 <ul>
     <li>
-        Copyright (c) 2025 Peter H. Boling, of
+        Copyright (c) 2025 Peter H. Boling
         <a href="https://discord.gg/3qme4XHNKN">
-            Galtzo.com
+             - Galtzo.com
             <picture>
               <img src="https://logos.galtzo.com/assets/images/galtzo-floss/avatar-128px-blank.svg" alt="Galtzo.com Logo (Wordless) by Aboling0, CC BY-SA 4.0" width="24">
             </picture>
