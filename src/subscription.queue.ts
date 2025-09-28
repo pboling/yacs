@@ -372,6 +372,11 @@ export const SubscriptionQueue = {
       // Only remove key if no tables report it as visible
       if (ids.size === 0) {
         visible.delete(key)
+        // Per-token unsubscribe: only when no table reports it visible anymore.
+        // This avoids unsubscribing a token that is still needed by another table.
+        try {
+          unsubscribeKey(ws, key, 'no-table-visible', { phase: 'setVisible/ids.size===0' })
+        } catch {}
         // Debug log
         try {
           console.log(
