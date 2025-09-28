@@ -396,6 +396,38 @@ export function tokensReducer(state = initialState, action) {
         const token = state.byId[id] || state.byId[idOrig]
         if (!token) return state
         const p = data.pair || {}
+        // Prefer most-recent 'last' price found in pairStats windows (24h, 1h, 5m)
+        let newPrice = token.priceUsd
+        try {
+          const ps = data.pairStats || {}
+          const candidates = [ps?.twentyFourHour?.last, ps?.oneHour?.last, ps?.fiveMin?.last]
+          for (const cand of candidates) {
+            if (cand == null) continue
+            let num = NaN
+            if (typeof cand === 'number') num = cand
+            else if (typeof cand === 'string') num = parseFloat(cand)
+            if (Number.isFinite(num)) {
+              newPrice = num
+              break
+            }
+          }
+        } catch {}
+
+        // Recompute mcap when we can: prefer meta.totalSupply, else try to derive from existing mcap/price
+        const meta = state.meta[id] || state.meta[idOrig] || {}
+        let totalSupply = typeof meta.totalSupply === 'number' ? meta.totalSupply : 0
+        if (!(Number.isFinite(totalSupply) && totalSupply > 0)) {
+          const prevPrice = Number(token.priceUsd) || 0
+          const prevMcap = Number(token.mcap) || 0
+          if (prevPrice > 0 && prevMcap > 0) totalSupply = prevMcap / prevPrice
+        }
+        let newMcap = token.mcap
+        if (Number.isFinite(totalSupply) && totalSupply > 0 && Number.isFinite(newPrice)) {
+          try {
+            newMcap = totalSupply * newPrice
+          } catch {}
+        }
+
         const audit = {
           ...token.audit,
           // README mapping:
@@ -425,7 +457,17 @@ export function tokensReducer(state = initialState, action) {
           locked: p.liquidityLocked ?? (token.security ? token.security.locked : undefined),
           burned: p.burned ?? (token.security ? token.security.burned : undefined),
         }
-        const nextTok = { ...token, audit, security, migrationPc, pairStatsAt: Date.now() }
+        // Build new token object including price/mcap updates when available
+        const nextTok = {
+          ...token,
+          audit,
+          security,
+          migrationPc,
+          pairStatsAt: Date.now(),
+          // Update canonical price and mcap so UI consumers (NumberCell, sparkline history assembly) reflect pair-stats
+          priceUsd: Number.isFinite(newPrice) ? newPrice : token.priceUsd,
+          mcap: Number.isFinite(newMcap) ? newMcap : token.mcap,
+        }
         // After computing nextTok, compare with existing token
         if (JSON.stringify(nextTok) === JSON.stringify(token)) {
           return state

@@ -44,8 +44,8 @@ const Row = memo(
     const trRef = useRef<HTMLTableRowElement | null>(null)
     const isVisibleRef = useRef<boolean>(true)
     const lastPriceRef = useRef<number>(t.priceUsd)
-    // Latest incoming tick override for sparkline's most recent bucket
-    const latestOverrideRef = useRef<{ price: number; at: number } | null>(null)
+    // Latest incoming tick override for sparkline's most recent bucket (use state to trigger renders)
+    const [latestOverride, setLatestOverride] = useState<{ price: number; at: number } | null>(null)
     // Temporary stroke color pulse to match the incoming dot color
     const pulseColorRef = useRef<string>('')
     const pulseUntilRef = useRef<number>(0)
@@ -103,7 +103,7 @@ const Row = memo(
         // Only respond to per-token events for this row (tick or pair-stats)
         if (e.type !== 'tick' && e.type !== 'pair-stats') return
         // e.key is expected to be a string; coerce for TypeScript and lowercase for comparison
-        const incoming = (e.key as string).toLowerCase()
+        const incoming = e.key.toLowerCase()
         if (incoming !== key.toLowerCase()) return
         // Only animate when the row is visible within the scrollpane viewport
         // Additionally, pause animations while the detail modal is open
@@ -133,7 +133,7 @@ const Row = memo(
             // pair-stats contains aggregated pairStats with nested time windows.
             // Prefer the most recent 'last' price we can find in twentyFourHour -> oneHour -> fiveMin
             type PriceWindow = { last?: number | string | null } | undefined
-            type PairStats = {
+            interface PairStats {
               twentyFourHour?: PriceWindow
               oneHour?: PriceWindow
               fiveMin?: PriceWindow
@@ -148,7 +148,7 @@ const Row = memo(
             ]
             for (const cand of candidates) {
               if (cand == null) continue
-              let num: number = NaN
+              let num = NaN
               if (typeof cand === 'number') num = cand
               else if (typeof cand === 'string') num = parseFloat(cand)
               // ignore non-number/string candidates
@@ -171,7 +171,9 @@ const Row = memo(
                 : 'var(--muted, #9CA3AF)'
         if (Number.isFinite(np)) {
           lastPriceRef.current = np
-          latestOverrideRef.current = { price: np, at: Date.now() }
+          try {
+            setLatestOverride({ price: np, at: Date.now() })
+          } catch {}
         }
         // Pulse the sparkline stroke to the dot color briefly
         pulseColorRef.current = color
@@ -471,7 +473,7 @@ const Row = memo(
 
               // If we have a fresh live override (from incoming tick), apply it to the last bucket
               try {
-                const ov = latestOverrideRef.current
+                const ov = latestOverride
                 if (ov && now - ov.at < 60_000) {
                   data[data.length - 1] = ov.price
                 }
