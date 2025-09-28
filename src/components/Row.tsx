@@ -156,15 +156,31 @@ const Row = memo(
         const eyeEl = eyeRef.current
         const sparkEl = sparkRef.current
         const rowEl = trRef.current
-        if (!eyeEl || !sparkEl || !rowEl) return
+        // When a tick arrives and the row is visible, all three anchors must exist
+        if (!isVisibleRef.current) return
+        if (!eyeEl || !sparkEl || !rowEl) {
+          try {
+            console.error('[Row.animateDot] Missing required anchors', {
+              eye: !!eyeEl,
+              spark: !!sparkEl,
+              row: !!rowEl,
+              token: (t as { tokenAddress?: string }).tokenAddress,
+              chain: t.chain,
+            })
+          } catch {}
+          throw new Error('Invariant: animateDot anchors missing for visible row')
+        }
         const eyeRect = eyeEl.getBoundingClientRect()
         const sparkRect = sparkEl.getBoundingClientRect()
         const rowRect = rowEl.getBoundingClientRect()
+        if (!eyeRect || !sparkRect || !rowRect) {
+          console.error('[Row.animateDot] Invalid DOMRect(s)', { eyeRect, sparkRect, rowRect })
+          throw new Error('Invariant: animateDot geometry invalid')
+        }
         const startX = eyeRect.left + eyeRect.width / 2
         const startY = eyeRect.top + eyeRect.height / 2
         const endX = sparkRect.left + sparkRect.width * 0.85 // aim near the right edge of sparkline
         const endY = sparkRect.top + sparkRect.height / 2
-        // Target "bottom of the row" (slightly above the border) for the travel phase
         const bottomY = Math.min(window.innerHeight - 4, rowRect.bottom - 4)
         const dot = document.createElement('div')
         dot.setAttribute('aria-hidden', 'true')
@@ -225,8 +241,9 @@ const Row = memo(
             window.setTimeout(cleanup, lastMs + 40)
           }, firstMs)
         }
-      } catch {
-        /* no-op */
+      } catch (err) {
+        // Fail hard to surface animation pipeline issues quickly
+        throw err instanceof Error ? err : new Error(String(err))
       }
     }
 

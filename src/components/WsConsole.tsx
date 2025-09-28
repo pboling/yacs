@@ -87,7 +87,11 @@ export default function WsConsole() {
   )
 
   const visibleEntries = useMemo(() => {
-    return entries.filter(matchesFilter)
+    // Apply filtering first, then cap to the latest 100 visible messages.
+    // This ensures filtered-out messages do not count toward the 100 limit.
+    const filtered = entries.filter(matchesFilter)
+    const MAX_VISIBLE = 100
+    return filtered.length > MAX_VISIBLE ? filtered.slice(-MAX_VISIBLE) : filtered
   }, [entries, matchesFilter])
 
   const textBlob = useMemo(() => {

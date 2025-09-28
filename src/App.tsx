@@ -792,17 +792,30 @@ function App() {
                   if (d && typeof d === 'object') {
                     const pairObj = (d as { pair?: unknown }).pair
                     if (pairObj && typeof pairObj === 'object') {
-                      const token = (pairObj as { token?: unknown }).token
+                      const token1 = (pairObj as { token1Address?: unknown }).token1Address
+                      const tokenAlt = (pairObj as { token?: unknown }).token
                       const chainUnknown = (pairObj as { chain?: unknown }).chain
-                      const tokenStr = typeof token === 'string' ? token : undefined
+                      const tokenStr =
+                        typeof token1 === 'string'
+                          ? token1
+                          : typeof tokenAlt === 'string'
+                            ? tokenAlt
+                            : undefined
                       const chainVal =
                         typeof chainUnknown === 'string' || typeof chainUnknown === 'number'
                           ? chainUnknown
                           : undefined
-                      if (tokenStr && chainVal !== undefined) {
-                        const key = buildTickKey(tokenStr, chainVal)
-                        emitUpdate({ key, type: 'tick', data })
+                      if (!tokenStr || chainVal === undefined) {
+                        // Hard error: we expect token1Address or token and a chain for tick events
+                        try {
+                          console.error('[WS tick] Missing token1Address/token or chain in pair object', {
+                            pairObj,
+                          })
+                        } catch {}
+                        throw new Error('Invalid WS tick: missing token1Address/token or chain')
                       }
+                      const key = buildTickKey(tokenStr, chainVal)
+                      emitUpdate({ key, type: 'tick', data })
                     }
                   }
                 } else if (event === 'pair-stats') {

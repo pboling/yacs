@@ -45,8 +45,9 @@ export function clearWsConsole() {
 
 function push(level: WsConsoleLevel, text: string) {
   history.push({ id: ++__seq, ts: Date.now(), level, text })
-  // Cap history to a rolling window of the most recent 100 messages
-  const MAX = 100
+  // Cap history generously; WsConsole applies a 100-message cap AFTER filtering.
+  // This prevents filtered-out noise from evicting useful entries.
+  const MAX = 2000
   if (history.length > MAX) history.splice(0, history.length - MAX)
   emit()
 }
