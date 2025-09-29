@@ -16,12 +16,30 @@ const history: WsConsoleEntry[] = []
 const listeners = new Set<Listener>()
 let __seq = 0
 
+// Throttled emitter: coalesce frequent pushes to reduce UI churn
+let emitTimer: number | null = null
+const EMIT_INTERVAL_MS = 200
+
 function emit() {
   const snapshot = history.slice()
   for (const fn of listeners) {
     try {
       fn(snapshot)
     } catch {}
+  }
+}
+
+function scheduleEmit() {
+  if (emitTimer != null) return
+  try {
+    emitTimer = window.setTimeout(() => {
+      emitTimer = null
+      emit()
+    }, EMIT_INTERVAL_MS)
+  } catch {
+    // Fallback if window is not available
+    emitTimer = null
+    emit()
   }
 }
 
@@ -49,7 +67,8 @@ function push(level: WsConsoleLevel, text: string) {
   // This prevents filtered-out noise from evicting useful entries.
   const MAX = 2000
   if (history.length > MAX) history.splice(0, history.length - MAX)
-  emit()
+  // Coalesce emits to at most once per interval
+  scheduleEmit()
 }
 
 export function logWsInfo(text: string) {

@@ -31,6 +31,16 @@ export function debugLog(...args) {
   }
 }
 
+// Lazy debug block executor to avoid computing heavy payloads unless debugging
+export function debugLogIf(fn) {
+  if (!isDebugEnabled()) return
+  try {
+    fn()
+  } catch {
+    // ignore
+  }
+}
+
 // Log caught errors with context; always logs (not gated by debug flag)
 export function logCatch(context, err) {
   try {

@@ -11,7 +11,15 @@
   - WebSocket logic includes a simple multi-endpoint fallback (dev proxy, env override, public).
   - Sorting is performed client-side; server-side filters are configured per table.
 */
-import { useEffect, useMemo, useReducer, useRef, useState, useCallback } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  useCallback,
+  startTransition,
+} from 'react'
 import './App.css'
 import {
   NEW_TOKENS_FILTERS,
@@ -42,6 +50,7 @@ import { buildPairKey, buildTickKey } from './utils/key_builder'
 import { emitUpdate } from './updates.bus'
 import { UNSUBSCRIPTIONS_DISABLED } from './ws.mapper.js'
 import Toast from './components/Toast'
+import { isDebugEnabled } from './utils/debug.mjs'
 
 // Theme allow-list and cookie helpers
 const THEME_ALLOW = ['cherry-sour', 'rocket-lake', 'legendary'] as const
@@ -67,6 +76,7 @@ function writeThemeCookie(v: ThemeName) {
 import UpdateRate from './components/UpdateRate'
 import WsConsole from './components/WsConsole'
 import { logWsInfo, logWsSuccess, logWsError } from './ws.console.bus.js'
+import { debugLog } from './utils/debug.mjs'
 function TopBar({
   title,
   version,
@@ -700,11 +710,17 @@ function App() {
             // Map and dispatch
             try {
               const action = mapIncomingMessageToActionSafe(parsed)
-              if (action) d(action as Action)
+              if (action) {
+                startTransition(() => {
+                  d(action as Action)
+                })
+              }
             } catch (err) {
-              try {
-                console.error('WS(reuse) handler error', err)
-              } catch {}
+              if (isDebugEnabled()) {
+                try {
+                  console.error('WS(reuse) handler error', err)
+                } catch {}
+              }
             }
           } catch {
             /* no-op */
@@ -1183,11 +1199,13 @@ function App() {
               }
               // Dispatch
               const dispatchStart = performance.now()
-              d(action)
+              startTransition(() => {
+                d(action)
+              })
               const dispatchEnd = performance.now()
               // Timing logs
               if (import.meta.env.DEV) {
-                console.log(
+                debugLog(
                   '[WS timing] total:',
                   (dispatchEnd - start).toFixed(2),
                   'ms',
@@ -1344,13 +1362,13 @@ function App() {
         : null
     if (!k) return
     try {
-      console.log('[App] bumpEventCount called for', k)
+      debugLog('[App] bumpEventCount called for', k)
     } catch {}
     countsRef.current[k] = (countsRef.current[k] ?? 0) + 1
     // Coalesce flushes to avoid excessive setState under high throughput
     flushTimerRef.current ??= window.setTimeout(() => {
       try {
-        console.log('[App] flushing eventCounts', countsRef.current)
+        debugLog('[App] flushing eventCounts', countsRef.current)
         setEventCounts({ ...countsRef.current })
       } finally {
         flushTimerRef.current = null

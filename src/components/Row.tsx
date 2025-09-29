@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import { formatAge } from '../helpers/format'
 import type { Token as TokenRow } from '../models/Token'
-import { onUpdate } from '../updates.bus'
+import { onUpdateKey } from '../updates.bus'
 import { buildTickKey } from '../utils/key_builder'
 import Sparkline from './Sparkline'
 
@@ -197,12 +197,9 @@ const Row = memo(
       const chain = t.chain
       if (!token || !chain) return
       const key = buildTickKey(token.toLowerCase(), chain)
-      return onUpdate((e) => {
+      return onUpdateKey(key, (e) => {
         // Only respond to per-token events for this row (tick or pair-stats)
         if (e.type !== 'tick' && e.type !== 'pair-stats') return
-        // e.key is expected to be a string; coerce for TypeScript and lowercase for comparison
-        const incoming = e.key.toLowerCase()
-        if (incoming !== key.toLowerCase()) return
         // Only animate when the row is visible within the scrollpane viewport
         // Additionally, pause animations while the detail modal is open
         try {

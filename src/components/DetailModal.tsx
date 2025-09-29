@@ -8,6 +8,7 @@ import useCompareSubscription from '../hooks/useCompareSubscription'
 import { toChainId } from '../utils/chain'
 import { buildPairKey, buildTickKey } from '../utils/key_builder'
 import { computeFilteredCompareOptions } from '../utils/filteredCompareOptions.mjs'
+import { isDebugEnabled } from '../utils/debug.mjs'
 
 export interface DetailModalRow {
   id: string
@@ -55,10 +56,7 @@ export default function DetailModal({
   const wrapperRef = useRef<HTMLDivElement | null>(null)
 
   // Utility to check for debug=true in the URL
-  function isDebugEnabled() {
-    if (typeof window === 'undefined') return false
-    return new URLSearchParams(window.location.search).get('debug') === 'true'
-  }
+  // removed local duplicate; use shared util instead
   const debugEnabled = isDebugEnabled()
 
   // Block page scroll while open

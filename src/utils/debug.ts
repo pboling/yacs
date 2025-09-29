@@ -28,3 +28,16 @@ export function debugLog(...args: unknown[]) {
 
   console.log(...args)
 }
+
+/**
+ * Lazily evaluate a debug log block only when debug is enabled.
+ * Use this to avoid computing heavy objects or DOM reads when not debugging.
+ */
+export function debugLogIf(fn: () => void) {
+  if (!isDebugEnabled()) return
+  try {
+    fn()
+  } catch {
+    // ignore
+  }
+}

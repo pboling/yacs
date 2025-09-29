@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import Row from './Row'
 import SortHeader, { type SortKey as HeaderSortKey } from './SortHeader'
+import { debugLog, debugLogIf } from '../utils/debug.mjs'
 
 // Typed helper to find the last index matching a predicate (avoids using Array.prototype.findLastIndex for broader TS lib support)
 function findLastIndexSafe<T>(arr: T[], predicate: (v: T) => boolean): number {
@@ -223,7 +224,9 @@ export default function Table({
   const enableVirtual = useMemo(() => {
     try {
       const sp = new URLSearchParams(window.location.search)
-      return sp.get('virtual') === 'true'
+      const v = sp.get('virtual')
+      if (v == null) return true // default ON
+      return v !== 'false'
     } catch {
       return true
     }
@@ -271,11 +274,11 @@ export default function Table({
           // Notify the row element directly so it can gate animations without new props
           const evt = new CustomEvent('dex:row-visibility', { detail: { visible } })
           el.dispatchEvent(evt)
-          // Diagnostics: log each visibility entry with geometry to trace flapping
-          try {
+          // Diagnostics (debug only): log each visibility entry with geometry
+          debugLogIf(() => {
             const r = el.getBoundingClientRect()
             const rootBounds = (e.rootBounds as DOMRect | null) ?? null
-            console.log(`[Table:${title}] IO entry`, {
+            debugLog(`[Table:${title}] IO entry`, {
               rowId: row.id,
               visible,
               ratio: e.intersectionRatio,
@@ -285,7 +288,7 @@ export default function Table({
                 ? { top: rootBounds.top, bottom: rootBounds.bottom, height: rootBounds.height }
                 : null,
             })
-          } catch {}
+          })
         } catch {
           /* no-op */
         }
@@ -297,9 +300,9 @@ export default function Table({
       rootMargin: '100px 0px',
       threshold: 0,
     })
-    try {
+    debugLogIf(() => {
       const rootRect = rootEl?.getBoundingClientRect() ?? null
-      console.log(`[Table:${title}] IO created`, {
+      debugLog(`[Table:${title}] IO created`, {
         rootMargin: '100px 0px',
         threshold: 0,
         rootRect: rootRect
@@ -307,7 +310,7 @@ export default function Table({
           : null,
         time: new Date().toISOString(),
       })
-    } catch {}
+    })
     observerRef.current = obs
     // Observe any rows already registered
     for (const el of rowMapRef.current.keys()) {
@@ -368,11 +371,13 @@ export default function Table({
         // Fire a synthetic scroll stop with expanded rows
         if (onScrollStop) {
           try {
-            const sample = expandedRows.slice(0, 5).map((r) => r.id)
-            console.log(`[Table:${title}] onScrollStop(seed)`, {
-              count: expandedRows.length,
-              sample,
-              time: new Date().toISOString(),
+            debugLogIf(() => {
+              const sample = expandedRows.slice(0, 5).map((r) => r.id)
+              debugLog(`[Table:${title}] onScrollStop(seed)`, {
+                count: expandedRows.length,
+                sample,
+                time: new Date().toISOString(),
+              })
             })
             onScrollStop(expandedRows)
           } catch {
@@ -504,10 +509,9 @@ export default function Table({
               const end = Math.min(ordered.length - 1, Math.max(...visibleIdxs) + 3)
               for (let i = start; i <= end; i++) expanded.push(ordered[i].row)
             }
-            const sample = expanded.slice(0, 5).map((r) => r.id)
-            console.log(`[Table:${title}] onScrollStop`, {
+            debugLog(`[Table:${title}] onScrollStop`, {
               count: expanded.length,
-              sample,
+              sample: expanded.slice(0, 5).map((r) => r.id),
               time: new Date().toISOString(),
             })
             onScrollStop(expanded)
@@ -555,15 +559,13 @@ export default function Table({
     } catch {}
   }, [])
 
-  console.log('[Table] rows prop:', rows)
-
   // Log when the loading spinner would be shown or hidden
   const showLoadingBanner = loading && rows.length === 0
   const prevShowRef = useRef<boolean>(showLoadingBanner)
   useEffect(() => {
     try {
       if (prevShowRef.current !== showLoadingBanner) {
-        console.log(
+        debugLog(
           `[Table:${title}] loading banner ${showLoadingBanner ? 'shown' : 'hidden'} (loading=${loading}, rows=${rows.length})`,
         )
         prevShowRef.current = showLoadingBanner
@@ -802,7 +804,9 @@ export default function Table({
                       getRowStatus={getRowStatus}
                       onOpenRowDetails={onOpenRowDetails}
                       onToggleRowSubscription={onToggleRowSubscription}
-                      registerRow={registerRowCb}
+                      registerRow={(el) => {
+                        registerRowCb(el, t)
+                      }}
                     />
                   )
                 })}
@@ -810,23 +814,14 @@ export default function Table({
             )}
             <tfoot ref={tfootRef}>
               <tr>
-                <td
-                  colSpan={10}
-                  className="muted"
-                  style={{ fontSize: 12, textAlign: 'right', padding: '6px 8px' }}
-                  {...(title === 'Trending Tokens'
-                    ? { 'data-testid': 'rows-count-trending' }
-                    : title !== 'New Tokens'
-                      ? { 'data-testid': `rows-count-${title.replace(/\s+/g, '-').toLowerCase()}` }
-                      : {})}
-                >
-                  Token Rows (non-hidden): <strong>{rows.length}</strong>
+                <td colSpan={12} style={{ textAlign: 'center', padding: '6px 0' }}>
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    End of table
+                  </span>
                 </td>
               </tr>
             </tfoot>
           </table>
-          {/* Persistent bottom sentinel to support reliable infinite scroll triggers, independent of row attributes/virtualization */}
-          <div data-scroll-sentinel="1" style={{ width: '100%', height: 1 }} />
         </div>
       </div>
     </section>
