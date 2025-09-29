@@ -4,7 +4,9 @@
 
 [![CI](https://github.com/pboling/yacs/actions/workflows/ci.yml/badge.svg)](https://github.com/pboling/yacs/actions/workflows/ci.yml) [![Deploy](https://github.com/pboling/yacs/actions/workflows/deploy.yml/badge.svg)](https://github.com/pboling/yacs/actions/workflows/deploy.yml)
 
-Original website: https://www.dexcelerate.com/
+- ✅️ Original website 👉️️ https://www.dexcelerate.com/
+- ⚠️ WARNING ⚠️ This demo site can mix **mock/fake data** with real-time data from the [DEX Scanner API](https://www.dexcelerate.com/)
+- ⏳️ Why? ⏳️ This is a prod demo of what local dev could be like if you hire me!
 
 # YACS - Yet Another Crypto Scanner
 
