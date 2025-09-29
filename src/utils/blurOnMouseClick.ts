@@ -26,13 +26,14 @@
           const target = ev.target as HTMLElement | null
           if (!target) return
           // Find nearest actionable element we want to blur after mouse click.
-          // Cast to HTMLElement so TypeScript knows `blur()` exists on the resulting element.
+          // Use a runtime instanceof check to narrow to HTMLElement before calling blur()
           const actionable = target.closest('button, a.link')
-          if (actionable && typeof (actionable.blur as unknown) === 'function') {
+          if (actionable instanceof HTMLElement) {
+            const el: HTMLElement = actionable
             // Defer blur slightly to allow click handlers to run first.
             window.setTimeout(() => {
               try {
-                actionable.blur()
+                el.blur()
               } catch {}
             }, 0)
           }
