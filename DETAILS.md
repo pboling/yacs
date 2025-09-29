@@ -749,6 +749,15 @@ Notes:
 - You can still point the frontend at another API by setting VITE_API_BASE (e.g., to the public API), but by default the app assumes the local backend on port 3001.
 - WebSocket errors will surface; the client retries a limited number of times for developer visibility but does not switch to any mock WS.
 
+## Browser Storage Usage
+
+The app uses browser localStorage for the following purposes:
+
+- **Persisting last compare live ID**: The key `detailModal.lastCompareLiveId` is used to store and retrieve the last active comparison in the detail modal. This allows the app to restore the user's last compare state after a reload.
+- **Debug flag**: The key `debug` is used to enable or disable debug mode. If set to "true", debug features are activated in the app. It can be modified via URL param.
+
+No cookies, sessionStorage, or indexedDB are used by the app.
+
 ## WebSocket channels overview and boot overlay
 
 ### Scanner page identifiers (101 and 201)
