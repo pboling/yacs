@@ -23,8 +23,8 @@ This repo is a React 19 + TypeScript 5 + Vite 7 (Rolldown) app. Below are the es
 - Dev server
   - Frontend: pnpm run dev → starts Vite dev server with React Fast Refresh on http://localhost:5173
   - Backend: pnpm run server → starts the Express backend on http://localhost:3001 providing GET /scanner
-  - The frontend REST client in dev defaults to http://localhost:3001 unless VITE_API_BASE is set. Set VITE_API_BASE to override.
-  - WebSocket is proxied in dev at /ws to wss://api-rs.dexcelerate.com/ws (vite.config.ts keeps only the WS proxy).
+  - The frontend REST client in dev defaults to http://localhost:3001 unless VITE_API_BASE is set. In `.env.local` set 'export VITE_API_BASE="https://api-rs.dexcelerate.com"' to use Prod API locally. Remember to run `direnv allow` after ENV changes.
+  - WebSocket proxy in dev: Vite exposes `/ws` and proxies it to the local backend at `ws://localhost:3001/ws` when running the local dev stack (`pnpm run dev:serve`). `vite.config.ts` keeps only the WS proxy. To route to the public server use `USE_PUBLIC_API=1` or set `VITE_API_BASE`.
 
 - Production build
   - pnpm run build → runs TypeScript project build (tsc -b) for type-checking only (noEmit), then Vite build.
@@ -874,6 +874,6 @@ If the diff is empty, the sets are identical (ordering aside) and enabling VITE_
 
 Notes
 
-- Infinite scroll (page>1) always requests per pane with the pane’s filters.
+- Infinite scroll (page>1) always requests per pane with the pane’s default filters (not the selected filters in the UI).
 - WebSocket subscriptions remain per-pane (distinct logical pages 101/201) and are unaffected by this REST dedupe.
 - No caching is used when the flag is off; requests are performed directly.

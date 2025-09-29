@@ -31,4 +31,3 @@ jobs:
         run: pnpm run build || echo "Build failed"
       - name: Test
         run: pnpm test || echo "Tests failed"
-

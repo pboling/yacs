@@ -11,7 +11,14 @@ interface UpdateRateProps {
   title?: string
 }
 
-const UpdateRate: React.FC<UpdateRateProps> = ({ rate, filterKey, version, width = 120, height = 24, title }) => {
+const UpdateRate: React.FC<UpdateRateProps> = ({
+  rate,
+  filterKey,
+  version,
+  width = 120,
+  height = 24,
+  title,
+}) => {
   const [series, setSeries] = useState<number[]>([])
   const counterRef = useRef(0)
 

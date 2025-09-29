@@ -383,10 +383,13 @@ export default function TokensPane({
               token: (t.tokenAddress ?? '').toLowerCase(),
               chain: t.chain,
             }))
-            .filter((p): p is { pair: string; token: string; chain: string } => !!p.pair && !!p.token && !!p.chain)
+            .filter(
+              (p): p is { pair: string; token: string; chain: string } =>
+                !!p.pair && !!p.token && !!p.chain,
+            )
           payloadsRef.current = payloads
           try {
-            const keys = payloads.map((p) => buildPairKey(p.pair!, p.token, p.chain))
+            const keys = payloads.map((p) => buildPairKey(p.pair, p.token, p.chain))
             SubscriptionQueue.updateUniverse(keys, wsRef.current ?? null)
           } catch (err) {
             if (err instanceof Error) {
@@ -757,7 +760,10 @@ export default function TokensPane({
             token: (t.tokenAddress ?? '').toLowerCase(),
             chain: t.chain,
           }))
-          .filter((p): p is { pair: string; token: string; chain: string } => !!p.pair && !!p.token && !!p.chain)
+          .filter(
+            (p): p is { pair: string; token: string; chain: string } =>
+              !!p.pair && !!p.token && !!p.chain,
+          )
         const all = [...(payloadsRef.current || []), ...newPayloads]
         // Deduplicate by full key pair|token|chain
         const seen = new Set<string>()
@@ -1108,8 +1114,11 @@ export default function TokensPane({
           const ws = wsRef.current
           // Reapply the known subscription universe so the invisible queue can be repopulated
           const universeKeys = (payloadsRef.current || [])
-            .filter((p): p is { pair: string; token: string; chain: string } => !!p.pair && !!p.token && !!p.chain)
-            .map((p) => buildPairKey(p.pair!, (p.token ?? '').toLowerCase(), p.chain))
+            .filter(
+              (p): p is { pair: string; token: string; chain: string } =>
+                !!p.pair && !!p.token && !!p.chain,
+            )
+            .map((p) => buildPairKey(p.pair, (p.token ?? '').toLowerCase(), p.chain))
           if (universeKeys.length > 0) {
             SubscriptionQueue.updateUniverse(universeKeys, ws ?? null)
           }
@@ -1143,7 +1152,8 @@ export default function TokensPane({
       if (sentinel) sentinel.setAttribute('data-rest-page', String(currentPage || 1))
       // Also ensure our local sentinelRef is annotated even if it's outside the container
       try {
-        if (sentinelRef.current) sentinelRef.current.setAttribute('data-rest-page', String(currentPage || 1))
+        if (sentinelRef.current)
+          sentinelRef.current.setAttribute('data-rest-page', String(currentPage || 1))
       } catch {}
     } catch {
       /* no-op */
@@ -1194,9 +1204,14 @@ export default function TokensPane({
               token: (t.tokenAddress ?? '').toLowerCase(),
               chain: t.chain,
             }))
-            .filter((p): p is { pair: string; token: string; chain: string } => !!p.pair && !!p.token && !!p.chain)
+            .filter(
+              (p): p is { pair: string; token: string; chain: string } =>
+                !!p.pair && !!p.token && !!p.chain,
+            )
           payloadsRef.current = payloads
-          const keys = payloads.map((p) => buildPairKey(p.pair!, (p.token ?? '').toLowerCase(), p.chain))
+          const keys = payloads.map((p) =>
+            buildPairKey(p.pair, (p.token ?? '').toLowerCase(), p.chain),
+          )
           SubscriptionQueue.updateUniverse(keys, wsRef.current ?? null)
         } catch (err) {
           logCatch(`[TokensPane:${title}] updateUniverse (isNotHP change) failed`, err)
@@ -1460,12 +1475,6 @@ export default function TokensPane({
           visibleKeysRef.current = nextSet
         }}
       />
-      {/* Canary for test: show row count for New Tokens pane */}
-      {title === 'New Tokens' && (
-        <div data-testid="rows-count-new" style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
-          Rows: {rows.length}
-        </div>
-      )}
       <div ref={sentinelRef} style={{ height: 1 }} />
       {loadingMore && <div className="status">Loading more…</div>}
       {limitReached && (

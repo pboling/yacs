@@ -571,6 +571,9 @@ export default function Table({
     } catch {}
   }, [showLoadingBanner, loading, rows.length, title])
 
+  // Count only actual token rows, not metadata or tr elements
+  const tokenCount = rows.length
+
   return (
     <section>
       <div
@@ -585,7 +588,7 @@ export default function Table({
         <h2 style={{ margin: 0 }}>
           {title}
           <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>
-            {rows.length} rows
+            {tokenCount} tokens
           </span>
         </h2>
         <div className="export-controls" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -817,7 +820,7 @@ export default function Table({
                       ? { 'data-testid': `rows-count-${title.replace(/\s+/g, '-').toLowerCase()}` }
                       : {})}
                 >
-                  Rows (non-hidden): <strong>{rows.length}</strong>
+                  Token Rows (non-hidden): <strong>{rows.length}</strong>
                 </td>
               </tr>
             </tfoot>

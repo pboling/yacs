@@ -40,3 +40,6 @@ debug-*.txt
 debug_*.txt
 debug-*.json
 debug_*.json
+
+# direnv - brew install direnv
+.env.local

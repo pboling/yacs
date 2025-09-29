@@ -56,7 +56,13 @@ function BoolIcon({
   )
 }
 
-export default function AuditIcons({ flags }: { flags: AuditFlags }) {
+export default function AuditIcons({
+  flags,
+  extraIcon,
+}: {
+  flags: AuditFlags
+  extraIcon?: React.ReactNode
+}) {
   const size = 16
   return (
     <div
@@ -99,6 +105,7 @@ export default function AuditIcons({ flags }: { flags: AuditFlags }) {
         trueIcon={<CheckCircle2 size={size} />}
         falseIcon={<Bug size={size} />}
       />
+      {extraIcon && extraIcon}
     </div>
   )
 }

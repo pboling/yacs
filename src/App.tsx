@@ -109,7 +109,7 @@ function TopBar({
   perTokenDisabled: boolean
   isAutoPlaying: boolean
   onToggleAutoPlay: () => void
-  showOverlay: boolean;
+  showOverlay: boolean
 }) {
   return (
     <div
@@ -242,7 +242,9 @@ function TopBar({
         {!showOverlay && (
           <Toast>
             This demo site can mix <strong>mock/fake data</strong> with real-time data from the{' '}
-            <a href="https://www.dexcelerate.com/" target="_blank" rel="noopener noreferrer">DEX Scanner API</a>
+            <a href="https://www.dexcelerate.com/" target="_blank" rel="noopener noreferrer">
+              DEX Scanner API
+            </a>
           </Toast>
         )}
       </div>
@@ -1989,7 +1991,9 @@ function App() {
             <div style={{ maxWidth: 420 }}>
               <Toast>
                 This demo site can mix <strong>mock/fake data</strong> with real-time data from the{' '}
-                <a href="https://www.dexcelerate.com/" target="_blank" rel="noopener noreferrer">DEX Scanner API</a>
+                <a href="https://www.dexcelerate.com/" target="_blank" rel="noopener noreferrer">
+                  DEX Scanner API
+                </a>
               </Toast>
               <div
                 className="status loading-bump loading-xl"
@@ -2431,7 +2435,12 @@ function App() {
           </ErrorBoundary>
         </div>
         <ul>
-          <li>⚠️ WARNING ⚠️ This site can mix <strong>mock/fake data</strong> with real-time from the <a href="https://www.dexcelerate.com/" target="_blank" rel="noopener noreferrer">DEX Scanner API</a></li>
+          <li>
+            ⚠️ WARNING ⚠️ This site can mix <strong>mock/fake data</strong> with real-time from the{' '}
+            <a href="https://www.dexcelerate.com/" target="_blank" rel="noopener noreferrer">
+              DEX Scanner API
+            </a>
+          </li>
           <li>This is a prod demo of what local dev could be like if you hire me!</li>
           <li>
             Copyright (c) 2025 Peter H. Boling -

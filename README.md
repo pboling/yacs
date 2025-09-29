@@ -31,17 +31,20 @@ maximize performance with browser native tools, and leverage cross compatibility
 🎉 No CSS frameworks are used.
 
 ### Real-time Updates
+
 - **WebSocket Subscription:** The app subscribes to relevant WebSocket events to receive live updates for token price, volume, and new token additions.
 - **Dynamic Data Handling:** Token data is updated in real-time, with sorting and filtering maintained as new data arrives.
 - **Efficient State Management:** Ensures UI remains consistent and performant during frequent updates.
 - **Real-time Performance:** Can handle 50,000 web socket updates per minute (I stopped testing there, might handle more!).
 
 ### Filtering & Sorting
+
 - **Client-side Filtering:** Users can filter tokens by chain (ETH, SOL, BASE, BSC), minimum volume, maximum age, minimum market cap, and exclude honeypots.
 - **Server-side Sorting:** Client side sorting for speed.
 - **Responsive Controls:** Filtering controls are intuitive and update the table instantly.
 
 ### UI/UX
+
 - **Loading States:** Visual indicators during data fetches and updates.
 - **Error States:** Clear messaging and recovery options for API/WebSocket errors.
 - **Empty States:** Informative UI when no tokens match the filters.
@@ -49,6 +52,7 @@ maximize performance with browser native tools, and leverage cross compatibility
 - **A11y (Accessibility):** Entire app is themed with multiple themes friendly to colorblind users (orange/blue, yellow/purple).
 
 ## Main Features
+
 1. **React App:** Runnable SPA with tables and filters.
 2. **API Integration:** REST API calls for initial and filtered data.
 3. **WebSocket Integration:** Real-time updates for token data.
@@ -57,6 +61,7 @@ maximize performance with browser native tools, and leverage cross compatibility
 6. **Error Handling:** Robust error states and recovery mechanisms.
 
 ## Bonus Features
+
 - **Unit Tests:** Node tests for coverage of key components and logic.
 - **Integration Tests:** Vitest for key component integrations and behaviors.
 - **E2E Tests:** Coverage for full stack functionality, via playwright.
@@ -73,6 +78,7 @@ maximize performance with browser native tools, and leverage cross compatibility
 - **Advanced Filtering:** Additional controls for power users.
 
 ## Getting Started
+
 1. Install dependencies: `pnpm install`
 2. Start the app: `pnpm run dev`, or to run the local mock server as well: `pnpm run dev:serve`
 3. Run tests: `pnpm test`

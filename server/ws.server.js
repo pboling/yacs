@@ -208,7 +208,10 @@ export function attachWsServer(server) {
       const liquidity =
         typeof it.liquidity === 'object'
           ? it.liquidity
-          : { current: Number(it.liquidity ?? 0) || 0, changePc: Number(it.percentChangeInLiquidity ?? 0) || 0 }
+          : {
+              current: Number(it.liquidity ?? 0) || 0,
+              changePc: Number(it.percentChangeInLiquidity ?? 0) || 0,
+            }
 
       return {
         id: pairAddress || token1Address,
@@ -387,7 +390,10 @@ export function attachWsServer(server) {
         const wsPairs = Array.isArray(res.scannerPairs) ? res.scannerPairs.map(mapToWsPair) : []
 
         // Newshape: echo filter and provide results wrapper so mapIncomingMessageToAction can read
-        const payload = { event: 'scanner-pairs', data: { filter: { page }, results: { pairs: wsPairs } } }
+        const payload = {
+          event: 'scanner-pairs',
+          data: { filter: { page }, results: { pairs: wsPairs } },
+        }
         safeSend(ws, payload)
 
         // Index all items by pair key so later subscribe-pair can start their streams

@@ -1,7 +1,18 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import NumberCell from './NumberCell'
 import AuditIcons from './AuditIcons'
-import { Globe, Eye, ChartNoAxesCombined, Play, Pause, ArrowDownFromLine, Twitter, MessageCircle, Users, Link as LinkIcon } from 'lucide-react'
+import {
+  Globe,
+  Eye,
+  ChartNoAxesCombined,
+  Play,
+  Pause,
+  ArrowDownFromLine,
+  Twitter,
+  MessageCircle,
+  Users,
+  Link as LinkIcon,
+} from 'lucide-react'
 import { formatAge } from '../helpers/format'
 import type { Token as TokenRow } from '../models/Token'
 import { onUpdate } from '../updates.bus'
@@ -382,13 +393,14 @@ const Row = memo(
     return (
       <>
         <tr
-          key={composedId}
+          key={composedId + '-token'}
           data-row-id={composedId}
           ref={(el) => {
             // Keep a local ref to the <tr> for visibility events while still registering with Table
             trRef.current = el
             registerRow(el, t)
           }}
+          className="token-row"
           {...(idx === rowsLen - 1 ? ({ 'data-last-row': '1' } as Record<string, string>) : {})}
           {...(idx === Math.max(0, rowsLen - 10)
             ? ({ 'data-scroll-trigger': '1' } as Record<string, string>)
@@ -491,7 +503,9 @@ const Row = memo(
               <button
                 type="button"
                 style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                onClick={() => setExpanded((v) => !v)}
+                onClick={() => {
+                  setExpanded((v) => !v)
+                }}
                 aria-label={expanded ? 'Hide exchange details' : 'Show exchange details'}
               >
                 <ArrowDownFromLine size={16} />
@@ -500,7 +514,12 @@ const Row = memo(
           </td>
           <td colSpan={2} style={{ textAlign: 'right', verticalAlign: 'top' }}>
             <div
-              style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', alignItems: 'start', gap: 4 }}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                alignItems: 'start',
+                gap: 4,
+              }}
             >
               <div style={{ textAlign: 'right' }}>
                 <NumberCell value={t.priceUsd} prefix="$" maxSigDigits={4} />
@@ -781,7 +800,27 @@ const Row = memo(
                 </td>
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <AuditIcons flags={auditFlags} />
+                    <AuditIcons
+                      flags={auditFlags}
+                      extraIcon={
+                        <button
+                          type="button"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: 0,
+                          }}
+                          onClick={() => {
+                            setExpanded((v) => !v)
+                          }}
+                          aria-label={expanded ? 'Hide exchange details' : 'Show exchange details'}
+                          title={expanded ? 'Hide exchange details' : 'Show exchange details'}
+                        >
+                          <ArrowDownFromLine size={16} />
+                        </button>
+                      }
+                    />
                   </div>
                 </td>
               </>
@@ -790,9 +829,25 @@ const Row = memo(
         </tr>
         {expanded && (
           <tr>
-            <td colSpan={6} style={{ padding: '12px 24px', background: '#f9fafb' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ fontWeight: 500, marginBottom: 4 }}>Exchange: {t.exchange || <span style={{ color: 'var(--accent-down)' }}>N/A</span>}</div>
+            <td
+              colSpan={6}
+              style={{
+                padding: '12px 24px',
+                background: 'color-mix(in srgb, var(--token-row-bg), white 12%)',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 16,
+                }}
+              >
+                <div style={{ fontWeight: 500 }}>
+                  Exchange: {t.exchange || <span style={{ color: 'var(--accent-down)' }}>N/A</span>}
+                </div>
                 <div style={{ display: 'flex', gap: 16 }}>
                   {/* Social icons, always rendered, colored by down accent color to indicate missing data */}
                   <span title="Website" style={{ color: 'var(--accent-down)' }}>

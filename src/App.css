@@ -159,167 +159,6 @@ table.tokens {
   align-items: center;
 }
 
-/* Global dark theme + theming variables */
-:root {
-  /* Base surface/text */
-  --bg: #0f1115;
-  --bg-elev: #0d1117;
-  --bg-header: #111827;
-  --text: #e5e7eb;
-  --muted: #9ca3af;
-  --border: #30363d;
-  --row-border: #1f2937;
-  --thead-border: #374151;
-
-  /* Theme accents (default: Cherry Sour) */
-  --accent-up: #10b981; /* green */
-  --accent-down: #ef4444; /* red */
-
-  /* Spinner derived colors via CSS color math */
-  --spinner-start: color-mix(in oklab, var(--accent-up) 85%, black);
-  --spinner-end: color-mix(in oklab, var(--accent-down) 85%, black);
-}
-
-/* Cherry Sour explicit (defaults) */
-[data-theme='cherry-sour'] {
-  /* Positive = Green, Negative = Red */
-  --accent-up: #10b981;
-  --accent-down: #ef4444;
-  --spinner-start: color-mix(in oklab, var(--accent-up) 85%, black);
-  --spinner-end: color-mix(in oklab, var(--accent-down) 85%, black);
-}
-
-/* Rocket Lake theme (Orange/Blue, color-blind friendly) */
-[data-theme='rocket-lake'] {
-  --accent-up: #f59e0b; /* orange */
-  /* Make blue 25% lighter for dark background readability */
-  /* 25% toward white in perceptual oklab space */
-  --accent-down: color-mix(in oklab, #2563eb 75%, white); /* lighter blue */
-  --spinner-start: color-mix(in oklab, var(--accent-up) 85%, black);
-  --spinner-end: color-mix(in oklab, var(--accent-down) 85%, black);
-}
-
-/* Legendary theme (Yellow/Purple) */
-[data-theme='legendary'] {
-  /* Positive = Yellow, Negative = Purple */
-  --accent-up: #facc15; /* yellow-400 */
-  /* Make blue 25% lighter for dark background readability */
-  /* 25% toward white in perceptual oklab space */
-  --accent-down: color-mix(in oklab, #8b5cf6 90%, white); /* lighter violet-500 */
-  --spinner-start: color-mix(in oklab, var(--accent-up) 85%, black);
-  --spinner-end: color-mix(in oklab, var(--accent-down) 85%, black);
-}
-
-html,
-body,
-#root {
-  background: var(--bg);
-  color: var(--text);
-}
-
-body {
-  margin: 0;
-}
-
-#root {
-  margin: 0;
-  padding: 0;
-}
-
-.muted {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.table-wrap {
-  overflow: auto;
-  max-height: 70vh;
-  border: 1px solid #22272e;
-  border-radius: 8px;
-  background: var(--bg);
-}
-
-table.tokens {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-  text-align: left;
-  background: var(--bg);
-}
-.tokens thead th {
-  position: sticky;
-  top: 0;
-  background: var(--bg-header);
-  color: #f9fafb;
-  cursor: pointer;
-  padding: 8px;
-  border-bottom: 1px solid var(--thead-border);
-}
-.tokens tbody td {
-  padding: 8px;
-  border-bottom: 1px solid var(--row-border);
-}
-
-.status {
-  padding: 8px;
-  color: var(--text);
-}
-.status.error {
-  color: #f87171;
-}
-
-.up {
-  color: var(--accent-up);
-}
-.down {
-  color: var(--accent-down);
-}
-
-/* Filters bar */
-.filters {
-  margin: 10px 0 16px;
-  padding: 10px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-.filters .row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  align-items: end;
-}
-.filters .group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.filters label {
-  font-size: 12px;
-  color: var(--muted);
-}
-.filters .chk {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-right: 8px;
-}
-.filters input[type='number'] {
-  background: var(--bg-header);
-  color: var(--text);
-  border: 1px solid var(--thead-border);
-  border-radius: 4px;
-  padding: 6px 8px;
-  min-width: 120px;
-}
-
-.filters .chains-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  align-items: center;
-}
-
 /* WS Console */
 .ws-console {
   display: flex;
@@ -469,4 +308,13 @@ table.tokens {
   box-shadow:
     0 0 12px rgba(0, 0, 0, 0.45),
     inset 0 0 8px rgba(0, 0, 0, 0.65);
+}
+
+/* Token row background */
+.token-row {
+  background-color: rgba(0, 0, 0, 10);
+}
+/* Metadata row background: 12% lighter than token row */
+.metadata-row {
+  background-color: rgba(0, 0, 0, 0.45);
 }
