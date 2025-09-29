@@ -63,7 +63,7 @@ const UpdateRate: React.FC<UpdateRateProps> = ({ rate, filterKey, version, width
   const ver = useMemo(() => version ?? null, [version])
 
   // Use rate if provided, otherwise fallback to default logic
-  const displayRate = rate ?? 0
+  const displayRate = rate
 
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -85,7 +85,7 @@ const UpdateRate: React.FC<UpdateRateProps> = ({ rate, filterKey, version, width
           (v{String(ver)})
         </span>
       )}
-      <div>{displayRate}</div>
+      {displayRate !== undefined && <div>{displayRate}</div>}
     </div>
   )
 }
