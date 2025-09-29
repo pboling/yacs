@@ -41,6 +41,7 @@ import { onSubscriptionLockChange, isSubscriptionLockActive } from './subscripti
 import { buildPairKey, buildTickKey } from './utils/key_builder'
 import { emitUpdate } from './updates.bus'
 import { UNSUBSCRIPTIONS_DISABLED } from './ws.mapper.js'
+import Toast from './components/Toast'
 
 // Theme allow-list and cookie helpers
 const THEME_ALLOW = ['cherry-sour', 'rocket-lake', 'legendary'] as const
@@ -84,6 +85,7 @@ function TopBar({
   perTokenDisabled,
   isAutoPlaying,
   onToggleAutoPlay,
+  showOverlay,
 }: {
   title: string
   version: number
@@ -107,6 +109,7 @@ function TopBar({
   perTokenDisabled: boolean
   isAutoPlaying: boolean
   onToggleAutoPlay: () => void
+  showOverlay: boolean;
 }) {
   return (
     <div
@@ -210,6 +213,12 @@ function TopBar({
             )
           })}
         </h2>
+        {!showOverlay && (
+          <Toast>
+            This demo site can mix <strong>mock/fake data</strong> with real-time data from the{' '}
+            <a href="https://www.dexcelerate.com/" target="_blank" rel="noopener noreferrer">DEX Scanner API</a>
+          </Toast>
+        )}
       </div>
       {/* Middle column: two rows */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 260, flex: 1 }}>
@@ -1596,7 +1605,6 @@ function App() {
       mounted = false
     }
   }, [showOverlay])
-
   // Boot-probe: while overlay is visible but has not acked paint, re-emit readiness
   useEffect(() => {
     if (!showOverlay || overlayAck) return
@@ -1638,7 +1646,6 @@ function App() {
     // need to probe until overlay acknowledges paint.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showOverlay, overlayAck])
-
   // Synchronize overlay with appReady state; when ready, fade for 2s before unmounting
   useEffect(() => {
     if (!appReady) {
@@ -1667,7 +1674,6 @@ function App() {
       /* no-op */
     }
   }, [theme])
-
   // Global error diagnostics to catch silent failures after REST success
   useEffect(() => {
     const onError = (ev: ErrorEvent) => {
@@ -1954,14 +1960,20 @@ function App() {
             ref={overlayRef}
             aria-hidden={overlayClosing ? 'true' : undefined}
           >
-            <div
-              className="status loading-bump loading-xl"
-              role="status"
-              aria-live="polite"
-              aria-busy={!overlayClosing}
-            >
-              <span className="loading-spinner" aria-hidden="true" />
-              <span className="loading-text">Loading data…</span>
+            <div style={{ maxWidth: 420 }}>
+              <Toast>
+                This demo site can mix <strong>mock/fake data</strong> with real-time data from the{' '}
+                <a href="https://www.dexcelerate.com/" target="_blank" rel="noopener noreferrer">DEX Scanner API</a>
+              </Toast>
+              <div
+                className="status loading-bump loading-xl"
+                role="status"
+                aria-live="polite"
+                aria-busy={!overlayClosing}
+              >
+                <span className="loading-spinner" aria-hidden="true" />
+                <span className="loading-text">Loading data…</span>
+              </div>
             </div>
           </div>
         ) : null
@@ -2004,6 +2016,7 @@ function App() {
           onToggleAutoPlay={() => {
             setAutoPlaying((s) => !s)
           }}
+          showOverlay={showOverlay}
         />
         {/* Filters Bar */}
         <div className="filters">
@@ -2392,7 +2405,7 @@ function App() {
           </ErrorBoundary>
         </div>
         <ul>
-          <li>⚠️ WARNING ⚠️ This site can mix mock data with real-time from the [DEX Scanner API](https://www.dexcelerate.com/)</li>
+          <li>⚠️ WARNING ⚠️ This site can mix <strong>mock/fake data</strong> with real-time from the <a href="https://www.dexcelerate.com/" target="_blank" rel="noopener noreferrer">DEX Scanner API</a></li>
           <li>This is a prod demo of what local dev could be like if you hire me!</li>
           <li>
             Copyright (c) 2025 Peter H. Boling -

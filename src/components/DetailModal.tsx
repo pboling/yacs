@@ -1300,10 +1300,10 @@ export default function DetailModal({
                         <div style={{ flex: 1 }}>
                           <div style={{ width: '100%' }}>
                             <div style={{ marginTop: 6 }}>
-                              <span style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>Volume&nbsp;</span>
-                              <span>&nbsp;Base:&nbsp;</span><NumberCell value={history.volume.at(-1) ?? '—'} prefix="$" />
-                              <span style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>&mdash;</span>
-                              <span>&nbsp;Compare:&nbsp;</span><NumberCell value={history2.volume.at(-1) ?? '—'} prefix="$" />
+                              <span style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>Volume&nbsp;</span>{' '}
+                              <span>&nbsp;Base:&nbsp;</span><NumberCell value={history.volume.at(-1) ?? '—'} prefix="$" />{' '}
+                              <span style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>&mdash;</span>{' '}
+                              <span>&nbsp;Compare:&nbsp;</span><NumberCell value={history2.volume.at(-1) ?? '—'} prefix="$" />{' '}
                             </div>
                           </div>
                           <div style={{ width: '100%' }}>
@@ -1313,10 +1313,10 @@ export default function DetailModal({
                         <div style={{ flex: 1 }}>
                           <div style={{ width: '100%' }}>
                             <div style={{ marginTop: 6 }}>
-                              <span style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>Buys&nbsp;</span>
-                              <span>&nbsp;Base:&nbsp;</span><NumberCell value={history.buys.at(-1) ?? '—'} prefix="" />
-                              <span style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>&mdash;</span>
-                              <span>&nbsp;Compare:&nbsp;</span><NumberCell value={history2.buys.at(-1) ?? '—'} prefix="" />
+                              <span style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>Buys&nbsp;</span>{' '}
+                              <span>&nbsp;Base:&nbsp;</span><NumberCell value={history.buys.at(-1) ?? '—'} prefix="" />{' '}
+                              <span style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>&mdash;</span>{' '}
+                              <span>&nbsp;Compare:&nbsp;</span><NumberCell value={history2.buys.at(-1) ?? '—'} prefix="" />{' '}
                             </div>
                           </div>
                           <div style={{ width: '100%' }}>
@@ -1326,10 +1326,10 @@ export default function DetailModal({
                         <div style={{ flex: 1 }}>
                           <div style={{ width: '100%' }}>
                             <div style={{ marginTop: 6 }}>
-                              <span style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>Sells&nbsp;</span>
-                              <span>&nbsp;Base:&nbsp;</span><NumberCell value={history.sells.at(-1) ?? '—'} prefix="" />
-                              <span style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>&mdash;</span>
-                              <span>&nbsp;Compare:&nbsp;</span><NumberCell value={history2.sells.at(-1) ?? '—'} prefix="" />
+                              <span style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>Sells&nbsp;</span>{' '}
+                              <span>&nbsp;Base:&nbsp;</span><NumberCell value={history.sells.at(-1) ?? '—'} prefix="" />{' '}
+                              <span style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>&mdash;</span>{' '}
+                              <span>&nbsp;Compare:&nbsp;</span><NumberCell value={history2.sells.at(-1) ?? '—'} prefix="" />{' '}
                             </div>
                           </div>
                          <div style={{ width: '100%' }}>
