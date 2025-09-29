@@ -148,8 +148,8 @@ export function attachWsServer(server) {
     function computePrice(basePrice, pairKey, tickIndex) {
       const seed = mixSeeds(BASE_SEED, mixSeeds(hash32(pairKey), tickIndex >>> 0))
       const rnd = mulberry32(seed)
-      // smooth-ish drift in +-3%
-      const drift = (rnd() * 2 - 1) * 0.03
+      // smooth-ish drift in +-7%
+      const drift = (rnd() * 2 - 1) * 0.07
       const p = Math.max(0.000001, basePrice * (1 + drift))
       return Number(p.toFixed(8))
     }
