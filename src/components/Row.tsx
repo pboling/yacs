@@ -866,55 +866,98 @@ const Row = memo(
                   gap: 16,
                 }}
               >
-                <div
-                  data-testid={`row-num-expanded-#${rowNum}`}
-                  style={{ fontSize: 40 }}
-                >
+                <div data-testid={`row-num-expanded-#${rowNum}`} style={{ fontSize: 40 }}>
                   #{rowNum}
                 </div>
-                <div style={{ fontWeight: 500 }}>
-                  Name: ${t.tokenName}
-                </div>
-                <div style={{ fontWeight: 500 }}>
-                  Symbol: ${t.tokenSymbol}
-                </div>
-                <div style={{ fontWeight: 500 }}>
-                  Chain: ${t.chain}
-                </div>
+                <div style={{ fontWeight: 500 }}>Name: ${t.tokenName}</div>
+                <div style={{ fontWeight: 500 }}>Symbol: ${t.tokenSymbol}</div>
+                <div style={{ fontWeight: 500 }}>Chain: ${t.chain}</div>
                 <div style={{ fontWeight: 500 }}>
                   Exchange: {t.exchange || <span style={{ color: 'var(--accent-down)' }}>N/A</span>}
                 </div>
-                <div className="social-links" data-testid={`social-links-${idx}`} style={{ display: 'flex', flexDirection: 'row', gap: 16 }}>
-                  <span data-testid={`social-website-${idx}`} title="Website" className={!t.audit?.linkWebsite ? 'no-link' : undefined} style={{ color: t.audit?.linkWebsite ? 'var(--accent-up)' : 'var(--accent-down)' }}>
+                <div
+                  className="social-links"
+                  data-testid={`social-links-${idx}`}
+                  style={{ display: 'flex', flexDirection: 'row', gap: 16 }}
+                >
+                  <span
+                    data-testid={`social-website-${idx}`}
+                    title="Website"
+                    className={!t.audit?.linkWebsite ? 'no-link' : undefined}
+                    style={{
+                      color: t.audit?.linkWebsite ? 'var(--accent-up)' : 'var(--accent-down)',
+                    }}
+                  >
                     {t.audit?.linkWebsite ? (
-                      <a className="link" href={t.audit.linkWebsite} target="_blank" rel="noopener noreferrer">
+                      <a
+                        className="link"
+                        href={t.audit.linkWebsite}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
                         <LinkIcon size={20} />
                       </a>
                     ) : (
                       <LinkIcon size={20} />
                     )}
                   </span>
-                  <span data-testid={`social-twitter-${idx}`} title="Twitter" className={!t.audit?.linkTwitter ? 'no-link' : undefined} style={{ color: t.audit?.linkTwitter ? 'var(--accent-up)' : 'var(--accent-down)' }}>
+                  <span
+                    data-testid={`social-twitter-${idx}`}
+                    title="Twitter"
+                    className={!t.audit?.linkTwitter ? 'no-link' : undefined}
+                    style={{
+                      color: t.audit?.linkTwitter ? 'var(--accent-up)' : 'var(--accent-down)',
+                    }}
+                  >
                     {t.audit?.linkTwitter ? (
-                      <a className="link" href={t.audit.linkTwitter} target="_blank" rel="noopener noreferrer">
+                      <a
+                        className="link"
+                        href={t.audit.linkTwitter}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
                         <Twitter size={20} />
                       </a>
                     ) : (
                       <Twitter size={20} />
                     )}
                   </span>
-                  <span data-testid={`social-telegram-${idx}`} title="Telegram" className={!t.audit?.linkTelegram ? 'no-link' : undefined} style={{ color: t.audit?.linkTelegram ? 'var(--accent-up)' : 'var(--accent-down)' }}>
+                  <span
+                    data-testid={`social-telegram-${idx}`}
+                    title="Telegram"
+                    className={!t.audit?.linkTelegram ? 'no-link' : undefined}
+                    style={{
+                      color: t.audit?.linkTelegram ? 'var(--accent-up)' : 'var(--accent-down)',
+                    }}
+                  >
                     {t.audit?.linkTelegram ? (
-                      <a className="link" href={t.audit.linkTelegram} target="_blank" rel="noopener noreferrer">
+                      <a
+                        className="link"
+                        href={t.audit.linkTelegram}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
                         <MessageCircle size={20} />
                       </a>
                     ) : (
                       <MessageCircle size={20} />
                     )}
                   </span>
-                  <span data-testid={`social-discord-${idx}`} title="Discord" className={!t.audit?.linkDiscord ? 'no-link' : undefined} style={{ color: t.audit?.linkDiscord ? 'var(--accent-up)' : 'var(--accent-down)' }}>
+                  <span
+                    data-testid={`social-discord-${idx}`}
+                    title="Discord"
+                    className={!t.audit?.linkDiscord ? 'no-link' : undefined}
+                    style={{
+                      color: t.audit?.linkDiscord ? 'var(--accent-up)' : 'var(--accent-down)',
+                    }}
+                  >
                     {t.audit?.linkDiscord ? (
-                      <a className="link" href={t.audit.linkDiscord} target="_blank" rel="noopener noreferrer">
+                      <a
+                        className="link"
+                        href={t.audit.linkDiscord}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
                         <Users size={20} />
                       </a>
                     ) : (

@@ -2,7 +2,7 @@
 // focus styles for mouse users while preserving keyboard focus outlines.
 // This keeps :focus-visible behavior intact for keyboard navigation.
 
-(() => {
+;(() => {
   if (typeof window === 'undefined' || typeof document === 'undefined') return
   let lastPointerType = ''
   try {
@@ -26,8 +26,9 @@
           const target = ev.target as HTMLElement | null
           if (!target) return
           // Find nearest actionable element we want to blur after mouse click.
+          // Cast to HTMLElement so TypeScript knows `blur()` exists on the resulting element.
           const actionable = target.closest('button, a.link') as HTMLElement | null
-          if (actionable && typeof actionable.blur === 'function') {
+          if (actionable && typeof (actionable.blur as unknown) === 'function') {
             // Defer blur slightly to allow click handlers to run first.
             window.setTimeout(() => {
               try {
@@ -43,4 +44,3 @@
     /* noop */
   }
 })()
-

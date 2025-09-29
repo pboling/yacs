@@ -15,25 +15,27 @@
  * @param {T[]} params.allRows
  * @param {T|null|undefined} params.currentRow
  * @param {string|undefined|null} params.compareSearch
+ * @param {boolean|undefined} [params.includeStale]
+ * @param {boolean|undefined} [params.includeDegraded]
  * @returns {T[]}
  */
 export function computeFilteredCompareOptions({
-                                                open,
-                                                allRows,
-                                                currentRow,
-                                                compareSearch,
-                                                includeStale = false,
-                                                includeDegraded = false,
-                                              }) {
+  open,
+  allRows,
+  currentRow,
+  compareSearch,
+  includeStale = false,
+  includeDegraded = false,
+}) {
   if (!open) return []
   // Deduplicate by id (keep first occurrence)
   const uniq = uniqueById(Array.isArray(allRows) ? allRows : [])
-  // eslint-disable-next-line no-console
+   
   console.log('After uniqueById:', uniq)
   // Exclude the currently selected row (by id)
   const currentId = currentRow && typeof currentRow === 'object' ? currentRow.id : undefined
   const base = uniq.filter((r) => (currentId === undefined ? true : r?.id !== currentId))
-  // eslint-disable-next-line no-console
+   
   console.log('After exclude currentRow:', base)
   const ONE_HOUR_MS = 60 * 60 * 1000
   const now = Date.now()
@@ -49,14 +51,14 @@ export function computeFilteredCompareOptions({
   // Fresh is always included; stale/degraded controlled by flags
   const byFreshness = base.filter((r) => {
     const f = freshnessOf(r)
-    // eslint-disable-next-line no-console
+     
     console.log('Row', r.id, 'freshness:', f)
     if (f === 'fresh') return true
     if (f === 'stale') return !!includeStale
     if (f === 'degraded') return !!includeDegraded
     return true
   })
-  // eslint-disable-next-line no-console
+   
   console.log('After freshness filter:', byFreshness)
 
   const topN = (arr) => (Array.isArray(arr) ? arr.slice(0, 100) : [])
@@ -80,11 +82,11 @@ export function computeFilteredCompareOptions({
  * @returns {Set<string>} matching ids
  */
 export function filterRowsByTokenQuery({
-                                         rows,
-                                         query,
-                                         includeStale = false,
-                                         includeDegraded = false,
-                                       }) {
+  rows,
+  query,
+  includeStale = false,
+  includeDegraded = false,
+}) {
   const list = Array.isArray(rows) ? rows : []
   const uniq = uniqueById(list)
   if (!query) {

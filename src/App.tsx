@@ -146,8 +146,8 @@ function TopBar({
                 textShadow: '0 1px 2px rgba(0,0,0,0.25)', // Optional for extra contrast
               }}
             >
-                Compare
-              </span>
+              Compare
+            </span>
           </button>
         </h1>
         <h2 style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: 8 }}>

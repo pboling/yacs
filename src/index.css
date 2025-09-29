@@ -100,7 +100,9 @@ button:focus-visible {
   border-radius: 8px;
   text-decoration: none;
   line-height: 1;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 .link:hover {
   background-color: color-mix(in srgb, var(--link-bg, #1a1a1a), white 6%);
@@ -146,7 +148,8 @@ button:focus-visible {
 /* Keep previous focus outline accessibility rules - prefer :focus-visible so
    keyboard navigation still shows outlines but mouse clicks don't leave a
    persistent visible outline/border. */
-.link:focus-visible, a.link:focus-visible {
+.link:focus-visible,
+a.link:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
