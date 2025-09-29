@@ -1,4 +1,16 @@
 /**
+ * Param typedef for computeFilteredCompareOptions.
+ * @template T
+ * @typedef {Object} ComputeFilteredCompareOptionsParams
+ * @property {boolean} open
+ * @property {T[]} allRows
+ * @property {T|null|undefined} currentRow
+ * @property {string|undefined|null} compareSearch
+ * @property {boolean|undefined} [includeStale]
+ * @property {boolean|undefined} [includeDegraded]
+ */
+
+/**
  * Compute filtered compare options for the Detail modal.
  * Pure function, side-effect free, suitable for unit testing.
  *
@@ -10,13 +22,7 @@
  * - If there is a search query, case-insensitive match on tokenName or tokenSymbol, then cap to 100.
  *
  * @template T extends { id: string }
- * @param {Object} params
- * @param {boolean} params.open
- * @param {T[]} params.allRows
- * @param {T|null|undefined} params.currentRow
- * @param {string|undefined|null} params.compareSearch
- * @param {boolean|undefined} [params.includeStale]
- * @param {boolean|undefined} [params.includeDegraded]
+ * @param {ComputeFilteredCompareOptionsParams<T>} params
  * @returns {T[]}
  */
 export function computeFilteredCompareOptions({
@@ -30,12 +36,12 @@ export function computeFilteredCompareOptions({
   if (!open) return []
   // Deduplicate by id (keep first occurrence)
   const uniq = uniqueById(Array.isArray(allRows) ? allRows : [])
-   
+
   console.log('After uniqueById:', uniq)
   // Exclude the currently selected row (by id)
   const currentId = currentRow && typeof currentRow === 'object' ? currentRow.id : undefined
   const base = uniq.filter((r) => (currentId === undefined ? true : r?.id !== currentId))
-   
+
   console.log('After exclude currentRow:', base)
   const ONE_HOUR_MS = 60 * 60 * 1000
   const now = Date.now()
@@ -51,14 +57,14 @@ export function computeFilteredCompareOptions({
   // Fresh is always included; stale/degraded controlled by flags
   const byFreshness = base.filter((r) => {
     const f = freshnessOf(r)
-     
+
     console.log('Row', r.id, 'freshness:', f)
     if (f === 'fresh') return true
     if (f === 'stale') return !!includeStale
     if (f === 'degraded') return !!includeDegraded
     return true
   })
-   
+
   console.log('After freshness filter:', byFreshness)
 
   const topN = (arr) => (Array.isArray(arr) ? arr.slice(0, 100) : [])
