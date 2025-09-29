@@ -1,4 +1,4 @@
-# Dexcelerate
+# YACS - Yet Another Crypto Scanner
 
 💫 Alternative Front End Demo 💫
 
@@ -8,9 +8,7 @@
 - ⚠️ WARNING ⚠️ This demo site can mix **mock/fake data** with real-time data from the [DEX Scanner API](https://www.dexcelerate.com/)
 - ⏳️ Why? ⏳️ This is a prod demo of what local dev could be like if you hire me!
 
-# YACS - Yet Another Crypto Scanner
-
-<img width="2855" height="1569" alt="pboling-yacs" src="https://github.com/user-attachments/assets/352fcfee-75b4-4582-a583-332b826dca31" />
+<img width="2853" height="1587" alt="pboling-yacs2-crop" src="https://github.com/user-attachments/assets/dd75ba7a-da19-4e1b-9ba8-af68009ce6ca" />
 
 ## Overview
 
