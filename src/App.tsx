@@ -11,7 +11,7 @@
   - WebSocket logic includes a simple multi-endpoint fallback (dev proxy, env override, public).
   - Sorting is performed client-side; server-side filters are configured per table.
 */
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState, useCallback } from 'react'
 import './App.css'
 import {
   NEW_TOKENS_FILTERS,
@@ -1162,8 +1162,13 @@ function App() {
                     }
                   } catch {}
                   try {
-                    if (page === TRENDING_PAGE) setWsScannerReady((p) => ({ ...p, trending: true }))
-                    else if (page === NEW_PAGE) setWsScannerReady((p) => ({ ...p, newer: true }))
+                    // Only update flags if they actually change to avoid render loops
+                    setWsScannerReady((prev) => {
+                      const nextTrending = prev.trending || page === TRENDING_PAGE
+                      const nextNewer = prev.newer || page === NEW_PAGE
+                      if (nextTrending === prev.trending && nextNewer === prev.newer) return prev
+                      return { trending: nextTrending, newer: nextNewer }
+                    })
                     console.info('App: ws scanner-pairs received, marked wsScannerReady', {
                       page,
                       TRENDING_PAGE,
@@ -1629,12 +1634,15 @@ function App() {
         const byId = (state as unknown as { byId?: Record<string, unknown> }).byId ?? {}
         const hasAnyRows = byId && Object.keys(byId).length > 0
         // Re-emit readiness signals so the overlay receives them even if timing races occur.
-        setWsScannerReady((prev) => ({
-          trending: prev.trending || hasTrending,
-          newer: prev.newer || hasNew,
-        }))
+        setWsScannerReady((prev) => {
+          const next = {
+            trending: prev.trending || hasTrending,
+            newer: prev.newer || hasNew,
+          }
+          return next.trending === prev.trending && next.newer === prev.newer ? prev : next
+        })
         // If we already have any rows/pages, also nudge appReady so the UI can progress.
-        if (hasTrending || hasNew || hasAnyRows) {
+        if (!appReady && (hasTrending || hasNew || hasAnyRows)) {
           setAppReady(true)
         }
       } catch {}
@@ -1654,7 +1662,7 @@ function App() {
     // Intentionally skip state in deps to avoid resetting probe too aggressively; we only
     // need to probe until overlay acknowledges paint.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showOverlay, overlayAck])
+  }, [showOverlay, overlayAck, appReady])
   // Synchronize overlay with appReady state; when ready, fade for 2s before unmounting
   useEffect(() => {
     if (!appReady) {
@@ -1755,10 +1763,13 @@ function App() {
         newLen: Array.isArray(newArr) ? newArr.length : undefined,
       })
       if (hasTrending || hasNew) {
-        setWsScannerReady((prev) => ({
-          trending: prev.trending || hasTrending,
-          newer: prev.newer || hasNew,
-        }))
+        setWsScannerReady((prev) => {
+          const next = {
+            trending: prev.trending || hasTrending,
+            newer: prev.newer || hasNew,
+          }
+          return next.trending === prev.trending && next.newer === prev.newer ? prev : next
+        })
         // Diagnostic: report wsScannerReady after update (will show previous state here)
         try {
           console.info('App: requested wsScannerReady update', { hasTrending, hasNew })
@@ -1767,7 +1778,7 @@ function App() {
           // If REST already provided pages or rows, mark app ready to avoid the boot overlay
           const byId = (state as unknown as { byId?: Record<string, unknown> }).byId ?? {}
           const hasAnyRows = byId && Object.keys(byId).length > 0
-          if (hasTrending || hasNew || hasAnyRows) {
+          if (!appReady && (hasTrending || hasNew || hasAnyRows)) {
             try {
               console.info('App: pages-scan -> marking appReady (REST present)', {
                 hasTrending,
@@ -1799,7 +1810,8 @@ function App() {
     }
   }, [])
 
-  const wsSend = (obj: unknown) => {
+  // Stable WebSocket send helper
+  const wsSend = useCallback((obj: unknown) => {
     try {
       const ev = obj && typeof obj === 'object' ? (obj as { event?: unknown }).event : undefined
       if (typeof ev === 'string' && !isAllowedOutgoingEventSafe(ev)) {
@@ -1816,16 +1828,29 @@ function App() {
     } catch {
       /* no-op */
     }
-  }
-  const getRowById = (id: string): TokenRow | undefined => {
+  }, [isAllowedOutgoingEventSafe])
+
+  // Keep a ref to latest byId for a stable getRowById callback
+  const byIdRef = useRef<Record<string, TokenRow | undefined>>({})
+  useEffect(() => {
     try {
-      const byId = (state as unknown as { byId?: Record<string, TokenRow | undefined> }).byId ?? {}
-      return byId[id] ?? byId[id.toLowerCase()]
+      byIdRef.current = (state as unknown as { byId?: Record<string, TokenRow | undefined> }).byId ?? {}
+    } catch {
+      byIdRef.current = {}
+    }
+  }, [state])
+
+  // Stable row resolver for downstream consumers (reads from byIdRef)
+  const getRowById = useCallback((id: string): TokenRow | undefined => {
+    try {
+      const byId = byIdRef.current
+      return byId[id] ?? byId[id?.toLowerCase?.() ?? id]
     } catch {
       return undefined
     }
-  }
-  const openDetails = (row: TokenRow) => {
+  }, [])
+
+  const openDetails = useCallback((row: TokenRow) => {
     setDetailRow(row)
     setDetailOpen(true)
     try {
@@ -1861,8 +1886,9 @@ function App() {
       const chain = row.chain
       wsSendSubscribeSafe({ pair, token, chain })
     }
-  }
-  const closeDetails = () => {
+  }, [trendingFilters, newFilters, wsSend, wsSendSubscribeSafe])
+
+  const closeDetails = useCallback(() => {
     setDetailRow(null)
     setDetailOpen(false)
     try {
@@ -1882,7 +1908,7 @@ function App() {
     } catch {
       /* no-op */
     }
-  }
+  }, [trendingFilters, newFilters, wsSend, buildScannerSubscriptionSafe])
 
   // Fetch initial token data from REST API and dispatch to reducer
   useEffect(() => {
