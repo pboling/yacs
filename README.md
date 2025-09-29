@@ -36,7 +36,7 @@ It features robust filtering, sorting, and live updates via WebSocket, with a fo
 2. **API Integration:** REST API calls for initial and filtered data.
 3. **WebSocket Integration:** Real-time updates for token data.
 4. **Styling:** Clean, modern UI with flexible styling options.
-5. **Documentation:** This README and in-code comments.
+5. **Documentation:** This README, [DETAILS.md](DETAILS.md), unit and e2e tests, and in-code comments.
 6. **Error Handling:** Robust error states and recovery mechanisms.
 
 ## Bonus Features
