@@ -2392,6 +2392,8 @@ function App() {
           </ErrorBoundary>
         </div>
         <ul>
+          <li>⚠️ WARNING ⚠️ This site can mix mock data with real-time from the [DEX Scanner API](https://www.dexcelerate.com/)</li>
+          <li>This is a prod demo of what local dev could be like if you hire me!</li>
           <li>
             Copyright (c) 2025 Peter H. Boling -
             <a href="https://discord.gg/3qme4XHNKN">

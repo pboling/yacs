@@ -1,6 +1,10 @@
-# Dexcelerate FE Test
+# Dexcelerate
 
-[![CI](https://github.com/pboling/yacs/actions/workflows/ci.yml/badge.svg)](https://github.com/pboling/yacs/actions/workflows/ci.yml)
+💫 Alternative Front End Demo 💫
+
+[![CI](https://github.com/pboling/yacs/actions/workflows/ci.yml/badge.svg)](https://github.com/pboling/yacs/actions/workflows/ci.yml) [![Deploy](https://github.com/pboling/yacs/actions/workflows/deploy.yml/badge.svg)](https://github.com/pboling/yacs/actions/workflows/deploy.yml)
+
+Original website: https://www.dexcelerate.com/
 
 # YACS - Yet Another Crypto Scanner
 
