@@ -17,6 +17,7 @@
 
 import { sendSubscribe, sendUnsubscribe, UNSUBSCRIPTIONS_DISABLED } from './ws.mapper.js'
 import { getDefaultInvisibleBaseLimit } from './subscription.limit.bus.js'
+import { debugLog } from './utils/debug.mjs'
 
 type Key = string // pair|token|chain
 
@@ -46,7 +47,7 @@ function instrumentSet<T>(set: Set<T>, name: string) {
     function logChange(action: string, key?: unknown) {
       try {
         const stack = new Error('set change trace').stack
-        console.log(`[SubscriptionQueue] ${name} changed`, {
+        debugLog(`[SubscriptionQueue] ${name} changed`, {
           action,
           key,
           size: mutable.size,
@@ -75,7 +76,7 @@ function instrumentSet<T>(set: Set<T>, name: string) {
     }
     mutable.__instrumented__ = true
     try {
-      console.log(`[SubscriptionQueue] Instrumented Set '${name}'`)
+      debugLog(`[SubscriptionQueue] Instrumented Set '${name}'`)
     } catch {}
   } catch {}
   return set
@@ -149,7 +150,7 @@ function unsubscribeKey(
     const { pair, token, chain } = splitKey(key)
     try {
       const stack = new Error('unsubscribe trace').stack
-      console.log('[SubscriptionQueue] UNSUB', {
+      debugLog('[SubscriptionQueue] UNSUB', {
         key,
         reason,
         details,
@@ -290,7 +291,7 @@ export const SubscriptionQueue = {
       for (const ids of visible.values()) {
         if (ids.size > 0) count++
       }
-      console.log('[SubscriptionQueue] getVisibleCount:', count, Array.from(visible.entries()))
+      debugLog('[SubscriptionQueue] getVisibleCount:', count, Array.from(visible.entries()))
       return count
     } catch {
       return 0
@@ -322,7 +323,7 @@ export const SubscriptionQueue = {
         } catch {}
       }
     }
-    console.log('[SubscriptionQueue] updateUniverse: incoming keys', next)
+    debugLog('[SubscriptionQueue] updateUniverse: incoming keys', next)
     // Unsubscribe any queued/visible keys that are no longer in the universe
     const nextSet = new Set(next)
     for (const entry of [...invisibleQueue]) {
@@ -367,7 +368,7 @@ export const SubscriptionQueue = {
       removeFromQueue(key)
       // Debug log
       try {
-        console.log(
+        debugLog(
           '[SubscriptionQueue] setVisible: added',
           key,
           'tableId:',
@@ -390,7 +391,7 @@ export const SubscriptionQueue = {
           invisibleSet.add(key)
         }
         try {
-          console.log(
+          debugLog(
             '[SubscriptionQueue] setVisible: moved to invisible queue',
             key,
             'tableId:',
@@ -490,7 +491,7 @@ export const SubscriptionQueue = {
     ensureQueueWithinQuota(ws)
 
     try {
-      console.log('[SubscriptionQueue] setTableVisible applied', {
+      debugLog('[SubscriptionQueue] setTableVisible applied', {
         tableId,
         nextCount: nextSet.size,
         visibleCount: SubscriptionQueue.getVisibleCount(),
