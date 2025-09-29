@@ -5,6 +5,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import './utils/blurOnMouseClick'
 import App from './App.tsx'
 import { installConsoleGate } from './utils/consoleGate'
 

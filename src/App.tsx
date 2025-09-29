@@ -126,47 +126,28 @@ function TopBar({
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
         <h1 style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           {title}
+
           <button
             type="button"
-            aria-label="Open details"
-            title="Open Details"
+            data-testid={`open-token-compare`}
+            title={`Open Token Comparison`}
+            aria-label={`Open Token Comparison`}
+            className="link"
             onClick={onOpenDetail}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              padding: 0,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-            }}
           >
+            <ChartNoAxesCombined size={40} style={{ color: 'var(--accent-up)' }} />
             <span
               style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                background: 'rgba(255, 255, 255, 0.08)',
-                border: '1px solid #4b5563',
-                borderRadius: 9999,
-                padding: '6px 16px',
-                minWidth: 70,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                fontSize: 13,
+                fontWeight: 600,
+                color: '#e5e7eb', // Changed to light color for visibility
+                marginTop: 2,
+                letterSpacing: 0.5,
+                textShadow: '0 1px 2px rgba(0,0,0,0.25)', // Optional for extra contrast
               }}
             >
-              <ChartNoAxesCombined size={32} />
-              <span
-                style={{
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: '#e5e7eb', // Changed to light color for visibility
-                  marginTop: 2,
-                  letterSpacing: 0.5,
-                  textShadow: '0 1px 2px rgba(0,0,0,0.25)', // Optional for extra contrast
-                }}
-              >
                 Compare
               </span>
-            </span>
           </button>
         </h1>
         <h2 style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: 8 }}>

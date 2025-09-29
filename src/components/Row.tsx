@@ -7,6 +7,7 @@ import {
   ChartNoAxesCombined,
   Play,
   Pause,
+  ArrowUpFromLine,
   ArrowDownFromLine,
   Twitter,
   MessageCircle,
@@ -49,6 +50,7 @@ const Row = memo(
     onToggleRowSubscription,
     registerRow,
   }: RowProps) {
+    const rowNum = idx + 1
     // Global 1s tick to force sparkline to advance even without new data
     const [_secTick, setSecTick] = useState(0)
     const eyeRef = useRef<HTMLButtonElement | null>(null)
@@ -409,7 +411,12 @@ const Row = memo(
           <td>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span>
+                <span
+                  className="link"
+                  onClick={() => {
+                    setExpanded((v) => !v)
+                  }}
+                >
                   <strong title={`${t.tokenName}/${t.tokenSymbol}/${t.chain}`}>
                     {ellipsed(t.tokenName.toUpperCase() + '/' + t.tokenSymbol, 6)}
                   </strong>
@@ -446,12 +453,15 @@ const Row = memo(
                 <button
                   type="button"
                   className="link"
-                  onClick={() => onOpenRowDetails?.(t)}
-                  title={`Open details for row #${idx + 1}`}
-                  aria-label={`Open details for row #${idx + 1}`}
-                  style={{ padding: '0 6px', fontSize: 11 }}
+                  onClick={() => {
+                    setExpanded((v) => !v)
+                  }}
+                  data-testid={`row-num-#${rowNum}`}
+                  title={`Open metadata for row #${rowNum}`}
+                  aria-label={`Open metadata for row #${rowNum}`}
+                  style={{ padding: '0 6px', fontSize: 16 }}
                 >
-                  {idx + 1}
+                  #{rowNum}
                 </button>
                 {(() => {
                   // Color the details (chart) icon based on row freshness (same rules/colors as DetailModal)
@@ -485,6 +495,7 @@ const Row = memo(
                   return (
                     <button
                       type="button"
+                      data-testid={`open-details-#${rowNum}`}
                       className="link"
                       onClick={() => onOpenRowDetails?.(t)}
                       title={label}
@@ -509,7 +520,11 @@ const Row = memo(
                 }}
                 aria-label={expanded ? 'Hide exchange details' : 'Show exchange details'}
               >
-                <ArrowDownFromLine size={16} />
+                {expanded ? (
+                  <ArrowUpFromLine size={16} color={'var(--accent-down)'} />
+                ) : (
+                  <ArrowDownFromLine size={16} color={'var(--accent-up)'} />
+                )}
               </button>
             </div>
           </td>
@@ -819,7 +834,11 @@ const Row = memo(
                           aria-label={expanded ? 'Hide exchange details' : 'Show exchange details'}
                           title={expanded ? 'Hide exchange details' : 'Show exchange details'}
                         >
-                          <ArrowDownFromLine size={16} />
+                          {expanded ? (
+                            <ArrowUpFromLine size={16} color={'var(--accent-down)'} />
+                          ) : (
+                            <ArrowDownFromLine size={16} color={'var(--accent-up)'} />
+                          )}
                         </button>
                       }
                     />
@@ -830,9 +849,9 @@ const Row = memo(
           })()}
         </tr>
         {expanded && (
-          <tr>
+          <tr className="metadata-row" data-testid={`metadata-row-#${rowNum}`}>
             <td
-              colSpan={6}
+              colSpan={11}
               style={{
                 padding: '12px 24px',
                 background: 'color-mix(in srgb, var(--token-row-bg), white 12%)',
@@ -847,40 +866,55 @@ const Row = memo(
                   gap: 16,
                 }}
               >
+                <div
+                  data-testid={`row-num-expanded-#${rowNum}`}
+                  style={{ fontSize: 40 }}
+                >
+                  #{rowNum}
+                </div>
+                <div style={{ fontWeight: 500 }}>
+                  Name: ${t.tokenName}
+                </div>
+                <div style={{ fontWeight: 500 }}>
+                  Symbol: ${t.tokenSymbol}
+                </div>
+                <div style={{ fontWeight: 500 }}>
+                  Chain: ${t.chain}
+                </div>
                 <div style={{ fontWeight: 500 }}>
                   Exchange: {t.exchange || <span style={{ color: 'var(--accent-down)' }}>N/A</span>}
                 </div>
                 <div className="social-links" data-testid={`social-links-${idx}`} style={{ display: 'flex', flexDirection: 'row', gap: 16 }}>
-                  <span data-testid={`social-website-${idx}`} title="Website" style={{ color: t.audit?.linkWebsite ? 'var(--accent-up)' : 'var(--accent-down)' }}>
+                  <span data-testid={`social-website-${idx}`} title="Website" className={!t.audit?.linkWebsite ? 'no-link' : undefined} style={{ color: t.audit?.linkWebsite ? 'var(--accent-up)' : 'var(--accent-down)' }}>
                     {t.audit?.linkWebsite ? (
-                      <a href={t.audit.linkWebsite} target="_blank" rel="noopener noreferrer">
+                      <a className="link" href={t.audit.linkWebsite} target="_blank" rel="noopener noreferrer">
                         <LinkIcon size={20} />
                       </a>
                     ) : (
                       <LinkIcon size={20} />
                     )}
                   </span>
-                  <span data-testid={`social-twitter-${idx}`} title="Twitter" style={{ color: t.audit?.linkTwitter ? 'var(--accent-up)' : 'var(--accent-down)' }}>
+                  <span data-testid={`social-twitter-${idx}`} title="Twitter" className={!t.audit?.linkTwitter ? 'no-link' : undefined} style={{ color: t.audit?.linkTwitter ? 'var(--accent-up)' : 'var(--accent-down)' }}>
                     {t.audit?.linkTwitter ? (
-                      <a href={t.audit.linkTwitter} target="_blank" rel="noopener noreferrer">
+                      <a className="link" href={t.audit.linkTwitter} target="_blank" rel="noopener noreferrer">
                         <Twitter size={20} />
                       </a>
                     ) : (
                       <Twitter size={20} />
                     )}
                   </span>
-                  <span data-testid={`social-telegram-${idx}`} title="Telegram" style={{ color: t.audit?.linkTelegram ? 'var(--accent-up)' : 'var(--accent-down)' }}>
+                  <span data-testid={`social-telegram-${idx}`} title="Telegram" className={!t.audit?.linkTelegram ? 'no-link' : undefined} style={{ color: t.audit?.linkTelegram ? 'var(--accent-up)' : 'var(--accent-down)' }}>
                     {t.audit?.linkTelegram ? (
-                      <a href={t.audit.linkTelegram} target="_blank" rel="noopener noreferrer">
+                      <a className="link" href={t.audit.linkTelegram} target="_blank" rel="noopener noreferrer">
                         <MessageCircle size={20} />
                       </a>
                     ) : (
                       <MessageCircle size={20} />
                     )}
                   </span>
-                  <span data-testid={`social-discord-${idx}`} title="Discord" style={{ color: t.audit?.linkDiscord ? 'var(--accent-up)' : 'var(--accent-down)' }}>
+                  <span data-testid={`social-discord-${idx}`} title="Discord" className={!t.audit?.linkDiscord ? 'no-link' : undefined} style={{ color: t.audit?.linkDiscord ? 'var(--accent-up)' : 'var(--accent-down)' }}>
                     {t.audit?.linkDiscord ? (
-                      <a href={t.audit.linkDiscord} target="_blank" rel="noopener noreferrer">
+                      <a className="link" href={t.audit.linkDiscord} target="_blank" rel="noopener noreferrer">
                         <Users size={20} />
                       </a>
                     ) : (
