@@ -5,9 +5,9 @@ This React app is built with Vite. It provides HMR and some ESLint rules.
 This repository uses [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) (uses [Babel](https://babeljs.io/)) for React Fast Refresh during development.
 See vite.config.ts where the plugin is configured.
 
-## React Compiler
+## Typescript Compiler
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+`tsc -b` to validate against all Typescript errors and warnings. Should have a clean bill of health.
 
 ## Usage
 
@@ -698,7 +698,7 @@ For ws connection use:
 You will have to use a no-cors extension from the Chrome web store during development
 `https://chromewebstore.google.com/detail/allow-cors-access-control/` - or any other extension with similar functionality.
 
-### Dev proxy (added)
+### Dev proxy
 
 - The Vite dev server proxies API and WebSocket calls to avoid CORS during development.
 - REST: fetch('/scanner?…') → proxies to https://api-rs.dexcelerate.com/scanner
@@ -752,6 +752,8 @@ Notes:
 ## WebSocket channels overview and boot overlay
 
 ### Scanner page identifiers (101 and 201)
+
+The scanner-filter event doesn't seem to ever sent events, so I built a backend mock server to simulate it.
 
 In the UI we use two logical page identifiers to disambiguate the two main panes and their corresponding WebSocket scanner streams:
 
@@ -812,7 +814,7 @@ Prettier is run separately for formatting but also integrated into ESLint via `e
 
 ### Scripts
 
-- fixture:sets
+- `fixture:sets`
   - Generate two fixtures exactly like the app’s boot REST calls (Trending and New), save them, and print whether they are identical now (order-insensitive by pairAddress).
   - Run: pnpm run fixture:sets
   - Env: API_BASE to override base URL (defaults to the client default, which is the public API in production).
@@ -837,12 +839,6 @@ Prettier is run separately for formatting but also integrated into ESLint via `e
 2. Run `pnpm run format` (fast full-project formatting + lint fixes)
 3. Run `pnpm run lint` to inspect any residual warnings
 4. Before commit / pre-push hook: run `pnpm run lint:ci`
-
-### Adding a Pre-Push Hook (Optional)
-
-```
-pnpm dlx husky add .husky/pre-push "pnpm run lint:ci && pnpm test"
-```
 
 ### Promoting More Rules in CI
 
