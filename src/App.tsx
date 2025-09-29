@@ -1811,30 +1811,34 @@ function App() {
   }, [])
 
   // Stable WebSocket send helper
-  const wsSend = useCallback((obj: unknown) => {
-    try {
-      const ev = obj && typeof obj === 'object' ? (obj as { event?: unknown }).event : undefined
-      if (typeof ev === 'string' && !isAllowedOutgoingEventSafe(ev)) {
-        try {
-          console.warn('WS: blocked (not allowed) outgoing room:', ev)
-        } catch {
-          /* no-op */
+  const wsSend = useCallback(
+    (obj: unknown) => {
+      try {
+        const ev = obj && typeof obj === 'object' ? (obj as { event?: unknown }).event : undefined
+        if (typeof ev === 'string' && !isAllowedOutgoingEventSafe(ev)) {
+          try {
+            console.warn('WS: blocked (not allowed) outgoing room:', ev)
+          } catch {
+            /* no-op */
+          }
+          return
         }
-        return
+        const anyWin = window as unknown as { __APP_WS__?: WebSocket }
+        const ws = anyWin.__APP_WS__
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj))
+      } catch {
+        /* no-op */
       }
-      const anyWin = window as unknown as { __APP_WS__?: WebSocket }
-      const ws = anyWin.__APP_WS__
-      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj))
-    } catch {
-      /* no-op */
-    }
-  }, [isAllowedOutgoingEventSafe])
+    },
+    [isAllowedOutgoingEventSafe],
+  )
 
   // Keep a ref to latest byId for a stable getRowById callback
   const byIdRef = useRef<Record<string, TokenRow | undefined>>({})
   useEffect(() => {
     try {
-      byIdRef.current = (state as unknown as { byId?: Record<string, TokenRow | undefined> }).byId ?? {}
+      byIdRef.current =
+        (state as unknown as { byId?: Record<string, TokenRow | undefined> }).byId ?? {}
     } catch {
       byIdRef.current = {}
     }
@@ -1850,43 +1854,46 @@ function App() {
     }
   }, [])
 
-  const openDetails = useCallback((row: TokenRow) => {
-    setDetailRow(row)
-    setDetailOpen(true)
-    try {
-      emitFilterFocusStart()
-    } catch {
-      /* no-op */
-    }
-    // Engage global subscription lock allowing only this row's key
-    try {
+  const openDetails = useCallback(
+    (row: TokenRow) => {
+      setDetailRow(row)
+      setDetailOpen(true)
+      try {
+        emitFilterFocusStart()
+      } catch {
+        /* no-op */
+      }
+      // Engage global subscription lock allowing only this row's key
+      try {
+        const pair = row.pairAddress ?? ''
+        const token = row.tokenAddress ?? ''
+        if (pair && token) {
+          const chain = row.chain
+          engageSubscriptionLock(buildPairKey(pair, token, chain))
+        } else {
+          engageSubscriptionLock()
+        }
+      } catch {
+        /* no-op */
+      }
+      // Cancel scanner streams for both tables while modal is focused, then subscribe to the selected token
+      try {
+        if (!UNSUBSCRIPTIONS_DISABLED) {
+          wsSend(buildScannerUnsubscriptionSafe({ ...trendingFilters, page: TRENDING_PAGE }))
+          wsSend(buildScannerUnsubscriptionSafe({ ...newFilters, page: NEW_PAGE }))
+        }
+      } catch {
+        /* no-op */
+      }
       const pair = row.pairAddress ?? ''
       const token = row.tokenAddress ?? ''
       if (pair && token) {
         const chain = row.chain
-        engageSubscriptionLock(buildPairKey(pair, token, chain))
-      } else {
-        engageSubscriptionLock()
+        wsSendSubscribeSafe({ pair, token, chain })
       }
-    } catch {
-      /* no-op */
-    }
-    // Cancel scanner streams for both tables while modal is focused, then subscribe to the selected token
-    try {
-      if (!UNSUBSCRIPTIONS_DISABLED) {
-        wsSend(buildScannerUnsubscriptionSafe({ ...trendingFilters, page: TRENDING_PAGE }))
-        wsSend(buildScannerUnsubscriptionSafe({ ...newFilters, page: NEW_PAGE }))
-      }
-    } catch {
-      /* no-op */
-    }
-    const pair = row.pairAddress ?? ''
-    const token = row.tokenAddress ?? ''
-    if (pair && token) {
-      const chain = row.chain
-      wsSendSubscribeSafe({ pair, token, chain })
-    }
-  }, [trendingFilters, newFilters, wsSend, wsSendSubscribeSafe])
+    },
+    [trendingFilters, newFilters, wsSend, wsSendSubscribeSafe],
+  )
 
   const closeDetails = useCallback(() => {
     setDetailRow(null)

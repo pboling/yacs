@@ -1,5 +1,5 @@
 // Type declarations for filteredCompareOptions.mjs (module-aware .d.ts so imports using the .mjs path pick it up)
-export {};
+export {}
 
 export function computeFilteredCompareOptions<T extends { id: string }>(params: {
   open: boolean
@@ -10,7 +10,16 @@ export function computeFilteredCompareOptions<T extends { id: string }>(params: 
   includeDegraded?: boolean
 }): T[]
 
-export function filterRowsByTokenQuery<T extends { id: string; tokenName?: string; tokenSymbol?: string; scannerAt?: number; tickAt?: number; pairStatsAt?: number }>(params: {
+export function filterRowsByTokenQuery<
+  T extends {
+    id: string
+    tokenName?: string
+    tokenSymbol?: string
+    scannerAt?: number
+    tickAt?: number
+    pairStatsAt?: number
+  },
+>(params: {
   rows: T[]
   query?: string
   includeStale?: boolean
@@ -18,4 +27,3 @@ export function filterRowsByTokenQuery<T extends { id: string; tokenName?: strin
 }): Set<string>
 
 export function uniqueById<T extends { id: string }>(arr: T[]): T[]
-
