@@ -98,6 +98,8 @@ maximize performance with browser native tools, and leverage cross compatibility
 This code is licensed under [CC BY-NC-SA](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en). If you'd like to use it in another way, please contact me.
 I may change the license in the future.
 
+Lucide Icons are either ISC or MIT license - https://lucide.dev/license
+
 ---
 
 For more details, see [DETAILS.md](DETAILS.md), inline documentation, and tests.
