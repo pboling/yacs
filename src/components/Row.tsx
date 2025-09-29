@@ -56,7 +56,8 @@ const Row = memo(
     const eyeRef = useRef<HTMLButtonElement | null>(null)
     const sparkRef = useRef<HTMLDivElement | null>(null)
     const trRef = useRef<HTMLTableRowElement | null>(null)
-    const isVisibleRef = useRef<boolean>(true)
+    // Start as not visible; Table will mark it via dex:row-visibility when in viewport
+    const isVisibleRef = useRef<boolean>(false)
     const lastPriceRef = useRef<number>(t.priceUsd)
     // Latest incoming tick override for sparkline's most recent bucket (use state to trigger renders)
     const [latestOverride, setLatestOverride] = useState<{ price: number; at: number } | null>(null)
@@ -290,26 +291,14 @@ const Row = memo(
         // When a tick arrives and the row is visible, all three anchors must exist
         if (!isVisibleRef.current) return
         if (!eyeEl || !sparkEl || !rowEl) {
-          try {
-            console.error('[Row.animateDot] Missing required anchors', {
-              eye: !!eyeEl,
-              spark: !!sparkEl,
-              row: !!rowEl,
-              token: (t as { tokenAddress?: string }).tokenAddress,
-              chain: t.chain,
-            })
-          } catch {}
-          // Abort animation gracefully when DOM anchors are missing for the visible row
-          console.log('[animated-dot] missing anchors for visible row; aborting')
+          // Anchors missing; skip quietly to avoid console noise during mount/teardown
           return
         }
         const eyeRect = eyeEl.getBoundingClientRect()
         const sparkRect = sparkEl.getBoundingClientRect()
         const rowRect = rowEl.getBoundingClientRect()
         if (!eyeRect || !sparkRect || !rowRect) {
-          console.error('[Row.animateDot] Invalid DOMRect(s)', { eyeRect, sparkRect, rowRect })
-          // Geometry invalid; abort animation without throwing to avoid noisy caught exceptions
-          console.log('[animated-dot] geometry invalid; aborting')
+          // Geometry invalid; abort animation without logging
           return
         }
         const startX = eyeRect.left + eyeRect.width / 2
@@ -378,9 +367,6 @@ const Row = memo(
         }
       } catch (err) {
         // Fail fast for animation pipeline issues but avoid throwing into callers
-        try {
-          console.error('[Row.animateDot] animation error', err)
-        } catch {}
         return
       }
     }
