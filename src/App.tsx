@@ -1376,7 +1376,38 @@ function App() {
 
     // Per-token events require a visible key
     const visKeys = SubscriptionQueue.getVisibleKeys()
-    const randKey = pick(visKeys)
+    let randKey = pick(visKeys)
+
+    // Fallback: if no visible keys (e.g., virtualization or IO not active in test env),
+    // synthesize a key from the current state pages/byId so inject still works.
+    if (!randKey && (ev === 'tick' || ev === 'pair-stats')) {
+      try {
+        const st = state as unknown as {
+          byId?: Record<string, { pairAddress?: string; tokenAddress?: string; chain?: string }>
+          pages?: Partial<Record<number, string[]>>
+        }
+        const byId = st.byId ?? {}
+        const pages = st.pages ?? {}
+        const idSources: string[] =
+          (Array.isArray(pages[TRENDING_PAGE]) && (pages[TRENDING_PAGE] as string[])) ||
+          (Array.isArray(pages[NEW_PAGE]) && (pages[NEW_PAGE] as string[])) ||
+          Object.keys(byId)
+        for (const id of idSources) {
+          const row = byId[id]
+          if (!row) continue
+          const pair = row.pairAddress ?? ''
+          const token = (row.tokenAddress ?? '').toLowerCase()
+          const chain = row.chain as unknown as string
+          if (pair && token && chain) {
+            randKey = buildPairKey(pair, token, chain)
+            break
+          }
+        }
+      } catch {
+        /* no-op */
+      }
+    }
+
     const parseKey = (key: string | null) => {
       if (!key) return null
       const parts = key.split('|')
