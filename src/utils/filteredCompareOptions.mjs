@@ -1,3 +1,5 @@
+import { debugLog } from './debug.mjs'
+
 /**
  * Param typedef for computeFilteredCompareOptions.
  * @template T
@@ -37,12 +39,12 @@ export function computeFilteredCompareOptions({
   // Deduplicate by id (keep first occurrence)
   const uniq = uniqueById(Array.isArray(allRows) ? allRows : [])
 
-  console.log('After uniqueById:', uniq)
+  try { debugLog('After uniqueById:', uniq) } catch {}
   // Exclude the currently selected row (by id)
   const currentId = currentRow && typeof currentRow === 'object' ? currentRow.id : undefined
   const base = uniq.filter((r) => (currentId === undefined ? true : r?.id !== currentId))
 
-  console.log('After exclude currentRow:', base)
+  try { debugLog('After exclude currentRow:', base) } catch {}
   const ONE_HOUR_MS = 60 * 60 * 1000
   const now = Date.now()
   const freshnessOf = (r) => {
@@ -58,14 +60,14 @@ export function computeFilteredCompareOptions({
   const byFreshness = base.filter((r) => {
     const f = freshnessOf(r)
 
-    console.log('Row', r.id, 'freshness:', f)
+    try { debugLog('Row', r.id, 'freshness:', f) } catch {}
     if (f === 'fresh') return true
     if (f === 'stale') return !!includeStale
     if (f === 'degraded') return !!includeDegraded
     return true
   })
 
-  console.log('After freshness filter:', byFreshness)
+  try { debugLog('After freshness filter:', byFreshness) } catch {}
 
   const topN = (arr) => (Array.isArray(arr) ? arr.slice(0, 100) : [])
   if (!compareSearch) return topN(byFreshness)

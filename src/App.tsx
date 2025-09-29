@@ -92,7 +92,6 @@ function TopBar({
   subBaseLimit,
   setSubBaseLimit,
   onInject,
-  perTokenDisabled,
   isAutoPlaying,
   onToggleAutoPlay,
   showOverlay,
@@ -116,7 +115,6 @@ function TopBar({
   subBaseLimit: number
   setSubBaseLimit: (n: number) => void
   onInject: (ev: 'scanner-pairs' | 'tick' | 'pair-stats' | 'wpeg-prices') => void
-  perTokenDisabled: boolean
   isAutoPlaying: boolean
   onToggleAutoPlay: () => void
   showOverlay: boolean
@@ -169,29 +167,23 @@ function TopBar({
               ['wpeg-prices', 'WPEG'],
             ] as const
           ).map(([key, label]) => {
-            const disabled = (key === 'tick' || key === 'pair-stats') && perTokenDisabled
             return (
               <button
                 type="button"
                 key={key}
                 className="muted"
-                title={
-                  disabled
-                    ? `${label}: need a visible token to inject`
-                    : `Inject a faux ${label} event`
-                }
+                title={`Inject a faux ${label} event`}
                 onClick={() => {
                   onInject(key)
                 }}
-                disabled={disabled}
                 style={{
                   fontSize: 11,
                   padding: '2px 6px',
                   border: '1px solid #4b5563',
                   borderRadius: 12,
-                  background: disabled ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.06)',
+                  background: 'rgba(255,255,255,0.06)',
                   letterSpacing: 0.5,
-                  cursor: disabled ? 'not-allowed' : 'pointer',
+                  cursor: 'pointer',
                   color: 'inherit',
                 }}
               >
@@ -2073,7 +2065,6 @@ function App() {
             ;(setSubBaseLimit as (n: number) => void)(n)
           }}
           onInject={injectFauxWsEvent}
-          perTokenDisabled={SubscriptionQueue.getVisibleKeys().length === 0}
           isAutoPlaying={autoPlaying}
           onToggleAutoPlay={() => {
             setAutoPlaying((s) => !s)
