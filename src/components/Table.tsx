@@ -575,6 +575,12 @@ export default function Table({
 
   // Count only actual token rows, not metadata or tr elements
   const tokenCount = rows.length
+  // Expose a tiny test canary for smoke tests to verify row count without DOM traversal
+  const canaryId = useMemo(() => {
+    if (title === 'Trending Tokens') return 'rows-count-trending'
+    if (title === 'New Tokens') return 'rows-count-new'
+    return null
+  }, [title])
 
   return (
     <section>
@@ -642,6 +648,11 @@ export default function Table({
           style={{ width: '100%' }}
         >
           <table className="tokens">
+            {canaryId ? (
+              <caption style={{ display: 'none' }}>
+                <span data-testid={canaryId}>{tokenCount}</span>
+              </caption>
+            ) : null}
             <thead ref={theadRef}>
               <tr>
                 <SortHeader
@@ -734,7 +745,7 @@ export default function Table({
                 </th>
               </tr>
             </thead>
-            {enableVirtual ? (
+            {enableVirtual && rows.length > 50 ? (
               <tbody
                 style={{
                   display: 'block',
