@@ -50,6 +50,7 @@ describe('filteredCompareOptions and uniqueById', () => {
       allRows,
       currentRow: base,
       compareSearch: '',
+      includeDegraded: true,
     })
 
     // base is excluded

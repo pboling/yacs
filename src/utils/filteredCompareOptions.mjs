@@ -18,20 +18,23 @@
  * @returns {T[]}
  */
 export function computeFilteredCompareOptions({
-  open,
-  allRows,
-  currentRow,
-  compareSearch,
-  includeStale = false,
-  includeDegraded = false,
-}) {
+                                                open,
+                                                allRows,
+                                                currentRow,
+                                                compareSearch,
+                                                includeStale = false,
+                                                includeDegraded = false,
+                                              }) {
   if (!open) return []
-  const currentId = currentRow && typeof currentRow === 'object' ? currentRow.id : undefined
-  const base = Array.isArray(allRows)
-    ? allRows.filter((r) => (currentId === undefined ? true : r?.id !== currentId))
-    : []
   // Deduplicate by id (keep first occurrence)
-  const uniq = uniqueById(base)
+  const uniq = uniqueById(Array.isArray(allRows) ? allRows : [])
+  // eslint-disable-next-line no-console
+  console.log('After uniqueById:', uniq)
+  // Exclude the currently selected row (by id)
+  const currentId = currentRow && typeof currentRow === 'object' ? currentRow.id : undefined
+  const base = uniq.filter((r) => (currentId === undefined ? true : r?.id !== currentId))
+  // eslint-disable-next-line no-console
+  console.log('After exclude currentRow:', base)
   const ONE_HOUR_MS = 60 * 60 * 1000
   const now = Date.now()
   const freshnessOf = (r) => {
@@ -44,13 +47,17 @@ export function computeFilteredCompareOptions({
     return recent ? 'fresh' : 'stale'
   }
   // Fresh is always included; stale/degraded controlled by flags
-  const byFreshness = uniq.filter((r) => {
+  const byFreshness = base.filter((r) => {
     const f = freshnessOf(r)
+    // eslint-disable-next-line no-console
+    console.log('Row', r.id, 'freshness:', f)
     if (f === 'fresh') return true
     if (f === 'stale') return !!includeStale
     if (f === 'degraded') return !!includeDegraded
     return true
   })
+  // eslint-disable-next-line no-console
+  console.log('After freshness filter:', byFreshness)
 
   const topN = (arr) => (Array.isArray(arr) ? arr.slice(0, 100) : [])
   if (!compareSearch) return topN(byFreshness)
@@ -73,11 +80,11 @@ export function computeFilteredCompareOptions({
  * @returns {Set<string>} matching ids
  */
 export function filterRowsByTokenQuery({
-  rows,
-  query,
-  includeStale = false,
-  includeDegraded = false,
-}) {
+                                         rows,
+                                         query,
+                                         includeStale = false,
+                                         includeDegraded = false,
+                                       }) {
   const list = Array.isArray(rows) ? rows : []
   const uniq = uniqueById(list)
   if (!query) {
@@ -131,21 +138,16 @@ export function filterRowsByTokenQuery({
 }
 
 /**
- * Return a new array with unique items by id. First occurrence wins to preserve stable ordering.
+ * Deduplicate an array of objects by their 'id' property, keeping the first occurrence.
  * @template T extends { id: string }
- * @param {T[]} list
+ * @param {T[]} arr
  * @returns {T[]}
  */
-export function uniqueById(list) {
-  if (!Array.isArray(list)) return []
+export function uniqueById(arr) {
   const seen = new Set()
-  const out = []
-  for (const item of list) {
-    const id = item?.id
-    if (id == null) continue
-    if (seen.has(id)) continue
-    seen.add(id)
-    out.push(item)
-  }
-  return out
+  return arr.filter((item) => {
+    if (seen.has(item.id)) return false
+    seen.add(item.id)
+    return true
+  })
 }

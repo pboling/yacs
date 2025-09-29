@@ -848,19 +848,42 @@ const Row = memo(
                 <div style={{ fontWeight: 500 }}>
                   Exchange: {t.exchange || <span style={{ color: 'var(--accent-down)' }}>N/A</span>}
                 </div>
-                <div style={{ display: 'flex', gap: 16 }}>
-                  {/* Social icons, always rendered, colored by down accent color to indicate missing data */}
-                  <span title="Website" style={{ color: 'var(--accent-down)' }}>
-                    <LinkIcon size={20} />
+                <div className="social-links" style={{ display: 'flex', flexDirection: 'row', gap: 16 }}>
+                  <span title="Website" style={{ color: t.audit?.linkWebsite ? 'var(--accent-up)' : 'var(--accent-down)' }}>
+                    {t.audit?.linkWebsite ? (
+                      <a href={t.audit.linkWebsite} target="_blank" rel="noopener noreferrer">
+                        <LinkIcon size={20} />
+                      </a>
+                    ) : (
+                      <LinkIcon size={20} />
+                    )}
                   </span>
-                  <span title="Twitter" style={{ color: 'var(--accent-down)' }}>
-                    <Twitter size={20} />
+                  <span title="Twitter" style={{ color: t.audit?.linkTwitter ? 'var(--accent-up)' : 'var(--accent-down)' }}>
+                    {t.audit?.linkTwitter ? (
+                      <a href={t.audit.linkTwitter} target="_blank" rel="noopener noreferrer">
+                        <Twitter size={20} />
+                      </a>
+                    ) : (
+                      <Twitter size={20} />
+                    )}
                   </span>
-                  <span title="Telegram" style={{ color: 'var(--accent-down)' }}>
-                    <MessageCircle size={20} />
+                  <span title="Telegram" style={{ color: t.audit?.linkTelegram ? 'var(--accent-up)' : 'var(--accent-down)' }}>
+                    {t.audit?.linkTelegram ? (
+                      <a href={t.audit.linkTelegram} target="_blank" rel="noopener noreferrer">
+                        <MessageCircle size={20} />
+                      </a>
+                    ) : (
+                      <MessageCircle size={20} />
+                    )}
                   </span>
-                  <span title="Discord" style={{ color: 'var(--accent-down)' }}>
-                    <Users size={20} />
+                  <span title="Discord" style={{ color: t.audit?.linkDiscord ? 'var(--accent-up)' : 'var(--accent-down)' }}>
+                    {t.audit?.linkDiscord ? (
+                      <a href={t.audit.linkDiscord} target="_blank" rel="noopener noreferrer">
+                        <Users size={20} />
+                      </a>
+                    ) : (
+                      <Users size={20} />
+                    )}
                   </span>
                 </div>
               </div>
