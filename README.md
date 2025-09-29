@@ -44,6 +44,8 @@ It features robust filtering, sorting, and live updates via WebSocket, with a fo
 - **Chart Integration:** Mini price charts for tokens, and large price charts in a Detail / Compare modal.
 - **Export Functionality:** Export token data as CSV for analysis.
 - **Advanced Filtering:** Additional controls for power users.
+- **Mock Server Backend:** Tests run against a mock server, fixtures, or configurable live server.
+- **Mock Server Frontend:** Auto Tick feature to allow front-end realism when the WebSocket isn't pushing events. (NOTE: This is an interface demo, not a real product!)
 
 ## Getting Started
 1. Install dependencies: `pnpm install`
