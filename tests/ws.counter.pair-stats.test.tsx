@@ -162,6 +162,10 @@ describe('Pair-Stats Counter', () => {
         },
         migrationProgress: '0',
         callCount: 1,
+        socialLinks: [
+          { type: 'twitter', url: 'https://twitter.com/mocktoken' },
+          { type: 'telegram', url: 'https://t.me/mocktoken' }
+        ],
       },
     }
 
@@ -179,5 +183,70 @@ describe('Pair-Stats Counter', () => {
       const count = m ? parseInt(m[1], 10) : NaN
       expect(Number.isFinite(count) ? count : NaN).toBe(initialCount + 1)
     }, { timeout: 3000 })
+
+    // Check that social links are rendered
+    expect(screen.getByText('twitter')).toBeDefined()
+    expect(screen.getByText('telegram')).toBeDefined()
+
+  })
+
+  it('updates social links when pair-stats event changes', async () => {
+    render(<App />)
+    await waitFor(() => {
+      expect(mockWs).toBeDefined()
+      expect((mockWs as IMockWebSocket).readyState).toBe(MockWebSocket.OPEN)
+    }, { timeout: 3000 })
+
+    // Initial event with one set of social links
+    const initialEvent = {
+      event: 'pair-stats',
+      data: {
+        pair: {
+          pairAddress: '0x1234567890123456789012345678901234567890',
+          token1Address: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+          chain: 'ETH',
+        },
+        pairStats: {},
+        migrationProgress: '0',
+        callCount: 1,
+        socialLinks: [
+          { type: 'twitter', url: 'https://twitter.com/initialtoken' }
+        ],
+      },
+    }
+    await act(async () => {
+      (mockWs as IMockWebSocket).simulateMessage(initialEvent)
+      await new Promise((r) => setTimeout(r, 150))
+    })
+    expect(screen.getByText('twitter')).toBeDefined()
+    expect(screen.queryByText('telegram')).toBeNull()
+
+    // Update event with new social links
+    const updatedEvent = {
+      event: 'pair-stats',
+      data: {
+        pair: {
+          pairAddress: '0x1234567890123456789012345678901234567890',
+          token1Address: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+          chain: 'ETH',
+        },
+        pairStats: {},
+        migrationProgress: '0',
+        callCount: 2,
+        socialLinks: [
+          { type: 'twitter', url: 'https://twitter.com/updatedtoken' },
+          { type: 'telegram', url: 'https://t.me/updatedtoken' }
+        ],
+      },
+    }
+    await act(async () => {
+      (mockWs as IMockWebSocket).simulateMessage(updatedEvent)
+      await new Promise((r) => setTimeout(r, 150))
+    })
+    expect(screen.getByText('twitter')).toBeDefined()
+    expect(screen.getByText('telegram')).toBeDefined()
+    expect(screen.queryByText('https://twitter.com/initialtoken')).toBeNull()
+    expect(screen.getByText('https://twitter.com/updatedtoken')).toBeDefined()
+    expect(screen.getByText('https://t.me/updatedtoken')).toBeDefined()
   })
 })
