@@ -502,6 +502,7 @@ const Row = memo(
               <Globe size={14} />
               <button
                 type="button"
+                className={'expand-metadata' + (expanded ? ' expanded' : '')}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                 onClick={() => {
                   setExpanded((v) => !v)
@@ -805,6 +806,7 @@ const Row = memo(
                       extraIcon={
                         <button
                           type="button"
+                          className={'expand-metadata' + (expanded ? ' expanded' : '')}
                           style={{
                             background: 'none',
                             border: 'none',
@@ -848,8 +850,8 @@ const Row = memo(
                 <div style={{ fontWeight: 500 }}>
                   Exchange: {t.exchange || <span style={{ color: 'var(--accent-down)' }}>N/A</span>}
                 </div>
-                <div className="social-links" style={{ display: 'flex', flexDirection: 'row', gap: 16 }}>
-                  <span title="Website" style={{ color: t.audit?.linkWebsite ? 'var(--accent-up)' : 'var(--accent-down)' }}>
+                <div className="social-links" data-testid={`social-links-${idx}`} style={{ display: 'flex', flexDirection: 'row', gap: 16 }}>
+                  <span data-testid={`social-website-${idx}`} title="Website" style={{ color: t.audit?.linkWebsite ? 'var(--accent-up)' : 'var(--accent-down)' }}>
                     {t.audit?.linkWebsite ? (
                       <a href={t.audit.linkWebsite} target="_blank" rel="noopener noreferrer">
                         <LinkIcon size={20} />
@@ -858,7 +860,7 @@ const Row = memo(
                       <LinkIcon size={20} />
                     )}
                   </span>
-                  <span title="Twitter" style={{ color: t.audit?.linkTwitter ? 'var(--accent-up)' : 'var(--accent-down)' }}>
+                  <span data-testid={`social-twitter-${idx}`} title="Twitter" style={{ color: t.audit?.linkTwitter ? 'var(--accent-up)' : 'var(--accent-down)' }}>
                     {t.audit?.linkTwitter ? (
                       <a href={t.audit.linkTwitter} target="_blank" rel="noopener noreferrer">
                         <Twitter size={20} />
@@ -867,7 +869,7 @@ const Row = memo(
                       <Twitter size={20} />
                     )}
                   </span>
-                  <span title="Telegram" style={{ color: t.audit?.linkTelegram ? 'var(--accent-up)' : 'var(--accent-down)' }}>
+                  <span data-testid={`social-telegram-${idx}`} title="Telegram" style={{ color: t.audit?.linkTelegram ? 'var(--accent-up)' : 'var(--accent-down)' }}>
                     {t.audit?.linkTelegram ? (
                       <a href={t.audit.linkTelegram} target="_blank" rel="noopener noreferrer">
                         <MessageCircle size={20} />
@@ -876,7 +878,7 @@ const Row = memo(
                       <MessageCircle size={20} />
                     )}
                   </span>
-                  <span title="Discord" style={{ color: t.audit?.linkDiscord ? 'var(--accent-up)' : 'var(--accent-down)' }}>
+                  <span data-testid={`social-discord-${idx}`} title="Discord" style={{ color: t.audit?.linkDiscord ? 'var(--accent-up)' : 'var(--accent-down)' }}>
                     {t.audit?.linkDiscord ? (
                       <a href={t.audit.linkDiscord} target="_blank" rel="noopener noreferrer">
                         <Users size={20} />
