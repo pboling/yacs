@@ -21,7 +21,7 @@ It features robust filtering, sorting, and live updates via WebSocket, with a fo
 
 ### Filtering & Sorting
 - **Client-side Filtering:** Users can filter tokens by chain (ETH, SOL, BASE, BSC), minimum volume, maximum age, minimum market cap, and exclude honeypots.
-- **Server-side Sorting:** Sorting is performed via API parameters for scalability and accuracy.
+- **Server-side Sorting:** Client side sorting for speed.
 - **Responsive Controls:** Filtering controls are intuitive and update the table instantly.
 
 ### UI/UX
