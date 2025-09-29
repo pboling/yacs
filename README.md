@@ -28,8 +28,8 @@ It features robust filtering, sorting, and live updates via WebSocket, with a fo
 - **Loading States:** Visual indicators during data fetches and updates.
 - **Error States:** Clear messaging and recovery options for API/WebSocket errors.
 - **Empty States:** Informative UI when no tokens match the filters.
-- **Color Coding:** Price changes are color-coded (green for up, red for down) for quick visual feedback.
-- **A11y (Accessibility)** Entire app is themed with multiple themes friendly to colorblind users.
+- **Color Coding:** Price changes are color-coded and themaable (e.g., green for up, red for down) for quick visual feedback.
+- **A11y (Accessibility):** Entire app is themed with multiple themes friendly to colorblind users (orange/blue, yellow/purple).
 
 ## Main Features
 1. **React App:** Runnable SPA with tables and filters.
