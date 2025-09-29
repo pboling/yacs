@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import NumberCell from './NumberCell'
 import AuditIcons from './AuditIcons'
-import { Globe, Eye, ChartNoAxesCombined, Play, Pause } from 'lucide-react'
+import { Globe, Eye, ChartNoAxesCombined, Play, Pause, ArrowDownFromLine, Twitter, MessageCircle, Users, Link as LinkIcon } from 'lucide-react'
 import { formatAge } from '../helpers/format'
 import type { Token as TokenRow } from '../models/Token'
 import { onUpdate } from '../updates.bus'
@@ -55,6 +55,7 @@ const Row = memo(
     // Temporary stroke color pulse to match the incoming dot color
     const pulseColorRef = useRef<string>('')
     const pulseUntilRef = useRef<number>(0)
+    const [expanded, setExpanded] = useState(false)
 
     useEffect(() => {
       lastPriceRef.current = t.priceUsd
@@ -379,403 +380,439 @@ const Row = memo(
       honeypot: t.audit?.honeypot,
     }
     return (
-      <tr
-        key={composedId}
-        data-row-id={composedId}
-        ref={(el) => {
-          // Keep a local ref to the <tr> for visibility events while still registering with Table
-          trRef.current = el
-          registerRow(el, t)
-        }}
-        {...(idx === rowsLen - 1 ? ({ 'data-last-row': '1' } as Record<string, string>) : {})}
-        {...(idx === Math.max(0, rowsLen - 10)
-          ? ({ 'data-scroll-trigger': '1' } as Record<string, string>)
-          : {})}
-      >
-        <td>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span>
-                <strong title={`${t.tokenName}/${t.tokenSymbol}/${t.chain}`}>
-                  {ellipsed(t.tokenName.toUpperCase() + '/' + t.tokenSymbol, 6)}
-                </strong>
-                /{t.chain}
-              </span>
-            </div>
-            <div
-              className="muted"
-              style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}
-            >
-              {(() => {
-                const st = getRowStatus?.(t)
-                const tip = st?.tooltip ?? (st ? st.state : '')
-                // Use app accent variables for the indicator: up (subscribed), neutral (unsubscribed), down (disabled)
-                const dotColor =
-                  st?.state === 'subscribed'
-                    ? 'var(--accent-up)'
-                    : st?.state === 'disabled'
-                      ? 'var(--accent-down)'
-                      : 'var(--muted, #9CA3AF)'
-                return (
-                  <span
-                    title={tip}
-                    style={{
-                      display: 'inline-block',
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      background: dotColor,
-                    }}
-                  />
-                )
-              })()}
-              <button
-                type="button"
-                className="link"
-                onClick={() => onOpenRowDetails?.(t)}
-                title={`Open details for row #${idx + 1}`}
-                aria-label={`Open details for row #${idx + 1}`}
-                style={{ padding: '0 6px', fontSize: 11 }}
+      <>
+        <tr
+          key={composedId}
+          data-row-id={composedId}
+          ref={(el) => {
+            // Keep a local ref to the <tr> for visibility events while still registering with Table
+            trRef.current = el
+            registerRow(el, t)
+          }}
+          {...(idx === rowsLen - 1 ? ({ 'data-last-row': '1' } as Record<string, string>) : {})}
+          {...(idx === Math.max(0, rowsLen - 10)
+            ? ({ 'data-scroll-trigger': '1' } as Record<string, string>)
+            : {})}
+        >
+          <td>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>
+                  <strong title={`${t.tokenName}/${t.tokenSymbol}/${t.chain}`}>
+                    {ellipsed(t.tokenName.toUpperCase() + '/' + t.tokenSymbol, 6)}
+                  </strong>
+                  /{t.chain}
+                </span>
+              </div>
+              <div
+                className="muted"
+                style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}
               >
-                {idx + 1}
-              </button>
-              {(() => {
-                // Color the details (chart) icon based on row freshness (same rules/colors as DetailModal)
-                interface Timestamps {
-                  scannerAt?: unknown
-                  tickAt?: unknown
-                  pairStatsAt?: unknown
-                }
-                const ts = t as unknown as Timestamps
-                const s = typeof ts.scannerAt === 'number' ? ts.scannerAt : null
-                const ti = typeof ts.tickAt === 'number' ? ts.tickAt : null
-                const p = typeof ts.pairStatsAt === 'number' ? ts.pairStatsAt : null
-                const hasAny = [s, ti, p].some((v) => v != null)
-                const ONE_HOUR_MS = 60 * 60 * 1000
-                const now = Date.now()
-                const recent = [s, ti, p].some(
-                  (v) => typeof v === 'number' && now - v < ONE_HOUR_MS,
-                )
-                const freshness: 'fresh' | 'stale' | 'degraded' = hasAny
-                  ? recent
-                    ? 'fresh'
-                    : 'stale'
-                  : 'degraded'
-                const iconColor =
-                  freshness === 'fresh'
-                    ? 'var(--accent-up)'
-                    : freshness === 'degraded'
-                      ? 'var(--accent-down)'
-                      : '#e5e7eb'
-                const label = `Open details (${freshness})`
-                return (
-                  <button
-                    type="button"
-                    className="link"
-                    onClick={() => onOpenRowDetails?.(t)}
-                    title={label}
-                    aria-label={label}
-                  >
-                    <ChartNoAxesCombined size={14} style={{ color: iconColor }} />
-                  </button>
-                )
-              })()}
-            </div>
-          </div>
-        </td>
-        <td title={t.exchange} style={{ textAlign: 'center' }}>
-          <Globe size={14} />
-        </td>
-        <td colSpan={2} style={{ textAlign: 'right', verticalAlign: 'top' }}>
-          <div
-            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', alignItems: 'start', gap: 4 }}
-          >
-            <div style={{ textAlign: 'right' }}>
-              <NumberCell value={t.priceUsd} prefix="$" maxSigDigits={4} />
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <NumberCell value={t.mcap} prefix="$" maxSigDigits={4} />
-            </div>
-            {(() => {
-              // Single sparkline of Price spanning both Price and MCap columns (no labels)
-              // Render a rolling 5-minute window that advances every tick / pulse.
-              // If there are no new data points, the line flatlines at the last known value.
-              interface MaybeHistory {
-                history?: { ts?: unknown; price?: unknown }
-              }
-              const h = (t as unknown as MaybeHistory).history
-              const tsUnknown = h?.ts
-              const pricesUnknown = h?.price
-              const tsRaw = Array.isArray(tsUnknown) ? (tsUnknown as (number | string)[]) : []
-              const pricesArr = Array.isArray(pricesUnknown)
-                ? (pricesUnknown as (number | string)[]).map((v) => Number(v))
-                : []
-              // Normalize timestamps to milliseconds if they look like seconds precision
-              const tsArr = tsRaw.map((v) => {
-                const n = Number(v)
-                // Heuristic: Unix seconds are < 1e12 for the foreseeable future; ms are >= 1e12
-                return n < 1e12 ? Math.floor(n * 1000) : Math.floor(n)
-              })
-
-              const now = Date.now()
-              // Build a higher-resolution series: include all raw history points inside the
-              // recent WINDOW_MS (default 5 minutes) without coarse bucketing so short bursts
-              // of ticks produce volatility in the sparkline. Cap total points to avoid
-              // excessively large arrays (downsample deterministically when needed).
-              const WINDOW_MS = 5 * 60_000 // 5 minutes
-              const MAX_POINTS = 120
-
-              let data: number[] = []
-              if (tsArr.length > 0 && pricesArr.length === tsArr.length) {
-                for (let i = 0; i < tsArr.length; i++) {
-                  const ts = tsArr[i]
-                  const p = pricesArr[i]
-                  if (!Number.isFinite(ts) || !Number.isFinite(p)) continue
-                  if (ts >= now - WINDOW_MS) data.push(p)
-                }
-              }
-
-              // If no recent points were found, fall back to a small tail from history
-              if (data.length === 0 && tsArr.length > 0 && pricesArr.length === tsArr.length) {
-                const take = Math.min(5, pricesArr.length)
-                data = pricesArr.slice(Math.max(0, pricesArr.length - take))
-              }
-
-              // Final fallback: use the current price as a tiny flat series so the sparkline renders
-              if (data.length === 0) {
-                const base = Number(t.priceUsd)
-                data = Array.from({ length: 5 }, () => base)
-              }
-
-              // Downsample deterministically when we have too many points
-              if (data.length > MAX_POINTS) {
-                const out: number[] = []
-                const step = data.length / MAX_POINTS
-                for (let i = 0; i < MAX_POINTS; i++) {
-                  out.push(data[Math.floor(i * step)])
-                }
-                data = out
-              }
-
-              // If we have a fresh live override (from incoming tick), apply it to the last point
-              try {
-                const ov = latestOverride
-                if (ov && now - ov.at < 60_000) {
-                  data[data.length - 1] = ov.price
-                }
-              } catch {}
-
-              const height = sparkHeight
-              const pad = 2
-              const max = Math.max(...data)
-              const min = Math.min(...data)
-              // const range = Math.max(1e-6, max - min) // unused; kept computation removed
-              const len = data.length
-              // Prefer the measured sparkWidth so the graph spans the full available cell width
-              const w = sparkWidth && sparkWidth > 0 ? sparkWidth : Math.max(60, len * 2)
-              const xStep = len > 1 ? (w - pad * 2) / (len - 1) : 0
-              const trendUp = data[len - 1] >= data[0]
-              let color = trendUp ? 'var(--accent-up)' : 'var(--accent-down)'
-              // If a pulse is active, override stroke color temporarily to match the incoming dot
-              try {
-                if (pulseUntilRef.current > now && pulseColorRef.current) {
-                  color = pulseColorRef.current || color
-                }
-              } catch {}
-              // Fractional left-shift so the chart advances smoothly each second
-              const MINUTE = 60_000
-              const secsFrac = (now % MINUTE) / MINUTE
-              const offset = secsFrac * xStep
-              return (
-                <div style={{ gridColumn: '1 / span 2' }} ref={sparkRef}>
-                  <Sparkline
-                    data={data}
-                    // allow SVG to expand to the full cell width
-                    width="100%"
-                    height={height}
-                    pad={pad}
-                    strokeColor={color}
-                    strokeWidth={1.5}
-                    showDots={true}
-                    baseline={true}
-                    offsetPx={offset}
-                    viewBoxWidth={w}
-                    multiplier={sparkMultiplier}
-                    ariaLabel={`Price sparkline. Y-axis from $${min.toLocaleString(undefined, {
-                      maximumSignificantDigits: 4,
-                    })} to $${max.toLocaleString(undefined, { maximumSignificantDigits: 4 })}. Click to open details.`}
-                    onClick={() => onOpenRowDetails?.(t)}
-                  />
-                </div>
-              )
-            })()}
-          </div>
-        </td>
-        <td style={{ textAlign: 'right' }}>
-          <NumberCell value={t.volumeUsd} maxSigDigits={3} />
-        </td>
-        <td>
-          <div
-            className="muted"
-            style={{ display: 'grid', gridTemplateColumns: 'repeat(2,auto)', gap: 4 }}
-          >
-            <span
-              style={{
-                color: t.priceChangePcs['5m'] >= 0 ? 'var(--accent-up)' : 'var(--accent-down)',
-              }}
-            >
-              {t.priceChangePcs['5m'] >= 0 ? '+' : ''}
-              {t.priceChangePcs['5m'].toFixed(1)}%
-            </span>
-            <span
-              style={{
-                color: t.priceChangePcs['1h'] >= 0 ? 'var(--accent-up)' : 'var(--accent-down)',
-              }}
-            >
-              {t.priceChangePcs['1h'] >= 0 ? '+' : ''}
-              {t.priceChangePcs['1h'].toFixed(1)}%
-            </span>
-            <span
-              style={{
-                color: t.priceChangePcs['6h'] >= 0 ? 'var(--accent-up)' : 'var(--accent-down)',
-              }}
-            >
-              {t.priceChangePcs['6h'] >= 0 ? '+' : ''}
-              {t.priceChangePcs['6h'].toFixed(1)}%
-            </span>
-            <span
-              style={{
-                color: t.priceChangePcs['24h'] >= 0 ? 'var(--accent-up)' : 'var(--accent-down)',
-              }}
-            >
-              {t.priceChangePcs['24h'] >= 0 ? '+' : ''}
-              {t.priceChangePcs['24h'].toFixed(2)}%
-            </span>
-          </div>
-        </td>
-        <td style={{ textAlign: 'right' }}>{formatAge(t.tokenCreatedTimestamp)}</td>
-        <td>
-          <div
-            className="muted"
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}
-          >
-            <span
-              title="Buys"
-              style={{
-                display: 'inline-flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                lineHeight: 1,
-              }}
-            >
-              {/* Colors come from CSS variables */}
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="var(--accent-up)"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M12 19V6" />
-                <path d="M5 12l7-7 7 7" />
-              </svg>
-              <span>{t.transactions.buys}</span>
-            </span>
-            <span
-              title="Sells"
-              style={{
-                display: 'inline-flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                lineHeight: 1,
-              }}
-            >
-              <span>{t.transactions.sells}</span>
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="var(--accent-down)"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M12 5v13" />
-                <path d="M19 12l-7 7-7-7" />
-              </svg>
-            </span>
-          </div>
-        </td>
-        <td style={{ textAlign: 'right' }}>
-          <NumberCell value={t.liquidity.current} prefix="$" maxSigDigits={3} />
-        </td>
-        {(() => {
-          interface Timestamps {
-            scannerAt?: unknown
-            tickAt?: unknown
-            pairStatsAt?: unknown
-          }
-          const ts = t as unknown as Timestamps
-          const s = typeof ts.scannerAt === 'number' ? ts.scannerAt : null
-          const ti = typeof ts.tickAt === 'number' ? ts.tickAt : null
-          const p = typeof ts.pairStatsAt === 'number' ? ts.pairStatsAt : null
-          const hasAny = [s, ti, p].some((v) => v != null)
-          const ONE_HOUR_MS = 60 * 60 * 1000
-          const now = Date.now()
-          const recent = [s, ti, p].some((v) => typeof v === 'number' && now - v < ONE_HOUR_MS)
-          const freshness: 'fresh' | 'stale' | 'degraded' = hasAny
-            ? recent
-              ? 'fresh'
-              : 'stale'
-            : 'degraded'
-          const freshColor =
-            freshness === 'fresh'
-              ? 'var(--accent-up)'
-              : freshness === 'degraded'
-                ? 'var(--accent-down)'
-                : '#e5e7eb'
-          return (
-            <>
-              <td style={{ textAlign: 'center' }}>
                 {(() => {
-                  const st2 = getRowStatus?.(t)
-                  const isEnabled = st2?.state === 'subscribed'
-                  const title2 = isEnabled
-                    ? 'click to pause data subscription for this token'
-                    : 'click to re-enable data subscription for this token'
+                  const st = getRowStatus?.(t)
+                  const tip = st?.tooltip ?? (st ? st.state : '')
+                  // Use app accent variables for the indicator: up (subscribed), neutral (unsubscribed), down (disabled)
+                  const dotColor =
+                    st?.state === 'subscribed'
+                      ? 'var(--accent-up)'
+                      : st?.state === 'disabled'
+                        ? 'var(--accent-down)'
+                        : 'var(--muted, #9CA3AF)'
+                  return (
+                    <span
+                      title={tip}
+                      style={{
+                        display: 'inline-block',
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        background: dotColor,
+                      }}
+                    />
+                  )
+                })()}
+                <button
+                  type="button"
+                  className="link"
+                  onClick={() => onOpenRowDetails?.(t)}
+                  title={`Open details for row #${idx + 1}`}
+                  aria-label={`Open details for row #${idx + 1}`}
+                  style={{ padding: '0 6px', fontSize: 11 }}
+                >
+                  {idx + 1}
+                </button>
+                {(() => {
+                  // Color the details (chart) icon based on row freshness (same rules/colors as DetailModal)
+                  interface Timestamps {
+                    scannerAt?: unknown
+                    tickAt?: unknown
+                    pairStatsAt?: unknown
+                  }
+                  const ts = t as unknown as Timestamps
+                  const s = typeof ts.scannerAt === 'number' ? ts.scannerAt : null
+                  const ti = typeof ts.tickAt === 'number' ? ts.tickAt : null
+                  const p = typeof ts.pairStatsAt === 'number' ? ts.pairStatsAt : null
+                  const hasAny = [s, ti, p].some((v) => v != null)
+                  const ONE_HOUR_MS = 60 * 60 * 1000
+                  const now = Date.now()
+                  const recent = [s, ti, p].some(
+                    (v) => typeof v === 'number' && now - v < ONE_HOUR_MS,
+                  )
+                  const freshness: 'fresh' | 'stale' | 'degraded' = hasAny
+                    ? recent
+                      ? 'fresh'
+                      : 'stale'
+                    : 'degraded'
+                  const iconColor =
+                    freshness === 'fresh'
+                      ? 'var(--accent-up)'
+                      : freshness === 'degraded'
+                        ? 'var(--accent-down)'
+                        : '#e5e7eb'
+                  const label = `Open details (${freshness})`
                   return (
                     <button
                       type="button"
-                      title={title2}
-                      aria-label={title2}
-                      onClick={() => onToggleRowSubscription?.(t)}
-                      ref={eyeRef}
-                      style={{
-                        color: freshColor,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 4,
-                      }}
+                      className="link"
+                      onClick={() => onOpenRowDetails?.(t)}
+                      title={label}
+                      aria-label={label}
                     >
-                      <Eye size={14} />
-                      {isEnabled ? <Pause size={12} /> : <Play size={12} />}
+                      <ChartNoAxesCombined size={14} style={{ color: iconColor }} />
                     </button>
                   )
                 })()}
-              </td>
-              <td>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <AuditIcons flags={auditFlags} />
+              </div>
+            </div>
+          </td>
+          <td title={t.exchange} style={{ textAlign: 'center', verticalAlign: 'top' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <Globe size={14} />
+              <button
+                type="button"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                onClick={() => setExpanded((v) => !v)}
+                aria-label={expanded ? 'Hide exchange details' : 'Show exchange details'}
+              >
+                <ArrowDownFromLine size={16} />
+              </button>
+            </div>
+          </td>
+          <td colSpan={2} style={{ textAlign: 'right', verticalAlign: 'top' }}>
+            <div
+              style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', alignItems: 'start', gap: 4 }}
+            >
+              <div style={{ textAlign: 'right' }}>
+                <NumberCell value={t.priceUsd} prefix="$" maxSigDigits={4} />
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <NumberCell value={t.mcap} prefix="$" maxSigDigits={4} />
+              </div>
+              {(() => {
+                // Single sparkline of Price spanning both Price and MCap columns (no labels)
+                // Render a rolling 5-minute window that advances every tick / pulse.
+                // If there are no new data points, the line flatlines at the last known value.
+                interface MaybeHistory {
+                  history?: { ts?: unknown; price?: unknown }
+                }
+                const h = (t as unknown as MaybeHistory).history
+                const tsUnknown = h?.ts
+                const pricesUnknown = h?.price
+                const tsRaw = Array.isArray(tsUnknown) ? (tsUnknown as (number | string)[]) : []
+                const pricesArr = Array.isArray(pricesUnknown)
+                  ? (pricesUnknown as (number | string)[]).map((v) => Number(v))
+                  : []
+                // Normalize timestamps to milliseconds if they look like seconds precision
+                const tsArr = tsRaw.map((v) => {
+                  const n = Number(v)
+                  // Heuristic: Unix seconds are < 1e12 for the foreseeable future; ms are >= 1e12
+                  return n < 1e12 ? Math.floor(n * 1000) : Math.floor(n)
+                })
+
+                const now = Date.now()
+                // Build a higher-resolution series: include all raw history points inside the
+                // recent WINDOW_MS (default 5 minutes) without coarse bucketing so short bursts
+                // of ticks produce volatility in the sparkline. Cap total points to avoid
+                // excessively large arrays (downsample deterministically when needed).
+                const WINDOW_MS = 5 * 60_000 // 5 minutes
+                const MAX_POINTS = 120
+
+                let data: number[] = []
+                if (tsArr.length > 0 && pricesArr.length === tsArr.length) {
+                  for (let i = 0; i < tsArr.length; i++) {
+                    const ts = tsArr[i]
+                    const p = pricesArr[i]
+                    if (!Number.isFinite(ts) || !Number.isFinite(p)) continue
+                    if (ts >= now - WINDOW_MS) data.push(p)
+                  }
+                }
+
+                // If no recent points were found, fall back to a small tail from history
+                if (data.length === 0 && tsArr.length > 0 && pricesArr.length === tsArr.length) {
+                  const take = Math.min(5, pricesArr.length)
+                  data = pricesArr.slice(Math.max(0, pricesArr.length - take))
+                }
+
+                // Final fallback: use the current price as a tiny flat series so the sparkline renders
+                if (data.length === 0) {
+                  const base = Number(t.priceUsd)
+                  data = Array.from({ length: 5 }, () => base)
+                }
+
+                // Downsample deterministically when we have too many points
+                if (data.length > MAX_POINTS) {
+                  const out: number[] = []
+                  const step = data.length / MAX_POINTS
+                  for (let i = 0; i < MAX_POINTS; i++) {
+                    out.push(data[Math.floor(i * step)])
+                  }
+                  data = out
+                }
+
+                // If we have a fresh live override (from incoming tick), apply it to the last point
+                try {
+                  const ov = latestOverride
+                  if (ov && now - ov.at < 60_000) {
+                    data[data.length - 1] = ov.price
+                  }
+                } catch {}
+
+                const height = sparkHeight
+                const pad = 2
+                const max = Math.max(...data)
+                const min = Math.min(...data)
+                // const range = Math.max(1e-6, max - min) // unused; kept computation removed
+                const len = data.length
+                // Prefer the measured sparkWidth so the graph spans the full available cell width
+                const w = sparkWidth && sparkWidth > 0 ? sparkWidth : Math.max(60, len * 2)
+                const xStep = len > 1 ? (w - pad * 2) / (len - 1) : 0
+                const trendUp = data[len - 1] >= data[0]
+                let color = trendUp ? 'var(--accent-up)' : 'var(--accent-down)'
+                // If a pulse is active, override stroke color temporarily to match the incoming dot
+                try {
+                  if (pulseUntilRef.current > now && pulseColorRef.current) {
+                    color = pulseColorRef.current || color
+                  }
+                } catch {}
+                // Fractional left-shift so the chart advances smoothly each second
+                const MINUTE = 60_000
+                const secsFrac = (now % MINUTE) / MINUTE
+                const offset = secsFrac * xStep
+                return (
+                  <div style={{ gridColumn: '1 / span 2' }} ref={sparkRef}>
+                    <Sparkline
+                      data={data}
+                      // allow SVG to expand to the full cell width
+                      width="100%"
+                      height={height}
+                      pad={pad}
+                      strokeColor={color}
+                      strokeWidth={1.5}
+                      showDots={true}
+                      baseline={true}
+                      offsetPx={offset}
+                      viewBoxWidth={w}
+                      multiplier={sparkMultiplier}
+                      ariaLabel={`Price sparkline. Y-axis from $${min.toLocaleString(undefined, {
+                        maximumSignificantDigits: 4,
+                      })} to $${max.toLocaleString(undefined, { maximumSignificantDigits: 4 })}. Click to open details.`}
+                      onClick={() => onOpenRowDetails?.(t)}
+                    />
+                  </div>
+                )
+              })()}
+            </div>
+          </td>
+          <td style={{ textAlign: 'right' }}>
+            <NumberCell value={t.volumeUsd} maxSigDigits={3} />
+          </td>
+          <td>
+            <div
+              className="muted"
+              style={{ display: 'grid', gridTemplateColumns: 'repeat(2,auto)', gap: 4 }}
+            >
+              <span
+                style={{
+                  color: t.priceChangePcs['5m'] >= 0 ? 'var(--accent-up)' : 'var(--accent-down)',
+                }}
+              >
+                {t.priceChangePcs['5m'] >= 0 ? '+' : ''}
+                {t.priceChangePcs['5m'].toFixed(1)}%
+              </span>
+              <span
+                style={{
+                  color: t.priceChangePcs['1h'] >= 0 ? 'var(--accent-up)' : 'var(--accent-down)',
+                }}
+              >
+                {t.priceChangePcs['1h'] >= 0 ? '+' : ''}
+                {t.priceChangePcs['1h'].toFixed(1)}%
+              </span>
+              <span
+                style={{
+                  color: t.priceChangePcs['6h'] >= 0 ? 'var(--accent-up)' : 'var(--accent-down)',
+                }}
+              >
+                {t.priceChangePcs['6h'] >= 0 ? '+' : ''}
+                {t.priceChangePcs['6h'].toFixed(1)}%
+              </span>
+              <span
+                style={{
+                  color: t.priceChangePcs['24h'] >= 0 ? 'var(--accent-up)' : 'var(--accent-down)',
+                }}
+              >
+                {t.priceChangePcs['24h'] >= 0 ? '+' : ''}
+                {t.priceChangePcs['24h'].toFixed(2)}%
+              </span>
+            </div>
+          </td>
+          <td style={{ textAlign: 'right' }}>{formatAge(t.tokenCreatedTimestamp)}</td>
+          <td>
+            <div
+              className="muted"
+              style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}
+            >
+              <span
+                title="Buys"
+                style={{
+                  display: 'inline-flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  lineHeight: 1,
+                }}
+              >
+                {/* Colors come from CSS variables */}
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="var(--accent-up)"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 19V6" />
+                  <path d="M5 12l7-7 7 7" />
+                </svg>
+                <span>{t.transactions.buys}</span>
+              </span>
+              <span
+                title="Sells"
+                style={{
+                  display: 'inline-flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  lineHeight: 1,
+                }}
+              >
+                <span>{t.transactions.sells}</span>
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="var(--accent-down)"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 5v13" />
+                  <path d="M19 12l-7 7-7-7" />
+                </svg>
+              </span>
+            </div>
+          </td>
+          <td style={{ textAlign: 'right' }}>
+            <NumberCell value={t.liquidity.current} prefix="$" maxSigDigits={3} />
+          </td>
+          {(() => {
+            interface Timestamps {
+              scannerAt?: unknown
+              tickAt?: unknown
+              pairStatsAt?: unknown
+            }
+            const ts = t as unknown as Timestamps
+            const s = typeof ts.scannerAt === 'number' ? ts.scannerAt : null
+            const ti = typeof ts.tickAt === 'number' ? ts.tickAt : null
+            const p = typeof ts.pairStatsAt === 'number' ? ts.pairStatsAt : null
+            const hasAny = [s, ti, p].some((v) => v != null)
+            const ONE_HOUR_MS = 60 * 60 * 1000
+            const now = Date.now()
+            const recent = [s, ti, p].some((v) => typeof v === 'number' && now - v < ONE_HOUR_MS)
+            const freshness: 'fresh' | 'stale' | 'degraded' = hasAny
+              ? recent
+                ? 'fresh'
+                : 'stale'
+              : 'degraded'
+            const freshColor =
+              freshness === 'fresh'
+                ? 'var(--accent-up)'
+                : freshness === 'degraded'
+                  ? 'var(--accent-down)'
+                  : '#e5e7eb'
+            return (
+              <>
+                <td style={{ textAlign: 'center' }}>
+                  {(() => {
+                    const st2 = getRowStatus?.(t)
+                    const isEnabled = st2?.state === 'subscribed'
+                    const title2 = isEnabled
+                      ? 'click to pause data subscription for this token'
+                      : 'click to re-enable data subscription for this token'
+                    return (
+                      <button
+                        type="button"
+                        title={title2}
+                        aria-label={title2}
+                        onClick={() => onToggleRowSubscription?.(t)}
+                        ref={eyeRef}
+                        style={{
+                          color: freshColor,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                      >
+                        <Eye size={14} />
+                        {isEnabled ? <Pause size={12} /> : <Play size={12} />}
+                      </button>
+                    )
+                  })()}
+                </td>
+                <td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <AuditIcons flags={auditFlags} />
+                  </div>
+                </td>
+              </>
+            )
+          })()}
+        </tr>
+        {expanded && (
+          <tr>
+            <td colSpan={6} style={{ padding: '12px 24px', background: '#f9fafb' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontWeight: 500, marginBottom: 4 }}>Exchange: {t.exchange || <span style={{ color: 'var(--accent-down)' }}>N/A</span>}</div>
+                <div style={{ display: 'flex', gap: 16 }}>
+                  {/* Social icons, always rendered, colored by down accent color to indicate missing data */}
+                  <span title="Website" style={{ color: 'var(--accent-down)' }}>
+                    <LinkIcon size={20} />
+                  </span>
+                  <span title="Twitter" style={{ color: 'var(--accent-down)' }}>
+                    <Twitter size={20} />
+                  </span>
+                  <span title="Telegram" style={{ color: 'var(--accent-down)' }}>
+                    <MessageCircle size={20} />
+                  </span>
+                  <span title="Discord" style={{ color: 'var(--accent-down)' }}>
+                    <Users size={20} />
+                  </span>
                 </div>
-              </td>
-            </>
-          )
-        })()}
-      </tr>
+              </div>
+            </td>
+          </tr>
+        )}
+      </>
     )
   },
   // Memo comparator: rely on object identity for row and stable scalar props

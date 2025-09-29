@@ -170,34 +170,6 @@ function TopBar({
           </button>
         </h1>
         <h2 style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <span
-            className="muted"
-            title="Active subscriptions across all panes"
-            style={{
-              fontSize: 11,
-              padding: '2px 6px',
-              border: '1px solid #4b5563',
-              borderRadius: 12,
-              background: 'rgba(255,255,255,0.06)',
-              letterSpacing: 0.5,
-            }}
-          >
-            VisSubs: <strong style={{ marginLeft: 4 }}>{subCount}</strong>
-          </span>
-          <span
-            className="muted"
-            title="InvisSubs = active invisible subscriptions (queue length). Rotates within a quota computed from the Throttle base + 10% of the remainder; not the total invisible rows."
-            style={{
-              fontSize: 11,
-              padding: '2px 6px',
-              border: '1px solid #4b5563',
-              borderRadius: 12,
-              background: 'rgba(255,255,255,0.06)',
-              letterSpacing: 0.5,
-            }}
-          >
-            InvisSubs: <strong style={{ marginLeft: 4 }}>{invisCount}</strong>
-          </span>
           {(
             [
               ['scanner-pairs', 'Scanner'],
@@ -236,6 +208,36 @@ function TopBar({
               </button>
             )
           })}
+        </h2>
+        <h2 style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <span
+            className="muted"
+            title="Active subscriptions across all panes"
+            style={{
+              fontSize: 11,
+              padding: '2px 6px',
+              border: '1px solid #4b5563',
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.06)',
+              letterSpacing: 0.5,
+            }}
+          >
+            VisSubs: <strong style={{ marginLeft: 4 }}>{subCount}</strong>
+          </span>
+          <span
+            className="muted"
+            title="InvisSubs = active invisible subscriptions (queue length). Rotates within a quota computed from the Throttle base + 10% of the remainder; not the total invisible rows."
+            style={{
+              fontSize: 11,
+              padding: '2px 6px',
+              border: '1px solid #4b5563',
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.06)',
+              letterSpacing: 0.5,
+            }}
+          >
+            InvisSubs: <strong style={{ marginLeft: 4 }}>{invisCount}</strong>
+          </span>
         </h2>
         {!showOverlay && (
           <Toast>
@@ -2012,7 +2014,7 @@ function App() {
           allRows={Object.values((state as unknown as { byId: Record<string, TokenRow> }).byId)}
         />
         <TopBar
-          title="Dexcelerate Scanner"
+          title="YACS (Demo)"
           version={(state as unknown as { version?: number }).version ?? 0}
           theme={theme}
           onThemeChange={(v) => {
