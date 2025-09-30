@@ -83,6 +83,56 @@ maximize performance with browser native tools, and leverage cross compatibility
 2. Start the app: `pnpm run dev`, or to run the local mock server as well: `pnpm run dev:serve`
 3. Run tests: `pnpm test`
 
+## Development modes and environment flags
+
+This project supports flexible local setups via a few environment variables. Put them in `.env.local` (the repo uses shell-style `export` lines, friendly to direnv) and restart the dev server after changes.
+
+### Dev modes
+
+- `pnpm run dev`
+  - Starts only the Vite dev server.
+  - REST: defaults to the public API unless you set `VITE_API_BASE`.
+  - WebSocket: tries endpoints in this order: `/ws` (Vite proxy, dev only) → `VITE_WS_URL` → production `wss://api-rs.dexcelerate.com/ws`.
+- `pnpm run dev:serve`
+  - Starts the local Express mock backend and Vite together.
+  - Vite proxies:
+    - `/scanner` → `http://localhost:3001`
+    - `/ws` → `ws://localhost:3001/ws`
+  - If you set `VITE_API_BASE="/"`, REST requests hit the Vite proxy. Otherwise, an absolute `VITE_API_BASE` (e.g., `http://localhost:8000`) bypasses the proxy and talks directly to that host.
+
+### Flags
+
+- `VITE_API_BASE`
+  - Controls the REST base URL used by the app when calling `GET /scanner`.
+  - Default: `https://api-rs.dexcelerate.com`
+  - Common setups:
+    - Use Vite proxy (works best with `dev:serve`):
+      ```bash
+      export VITE_API_BASE="/"
+      ```
+    - Point at a local server directly (bypasses Vite proxy):
+      ```bash
+      export VITE_API_BASE="http://localhost:8000"
+      ```
+- `VITE_WS_URL`
+  - (Optional) Override the WebSocket endpoint explicitly.
+  - Example:
+    ```bash
+    export VITE_WS_URL="ws://localhost:9000/ws"
+    ```
+  - In dev, the connection order is: `/ws` → `VITE_WS_URL` → production. Set this to force a specific WS server without changing code.
+- `VITE_DISABLE_WS`
+  - Disable all WebSocket behavior (no connection attempts, no fallbacks, no reuse).
+  - Accepts typical truthy values: `1`, `true`, `yes`, `on`.
+  - Example:
+    ```bash
+    export VITE_DISABLE_WS=1
+    ```
+  - Useful for testing REST-only behavior, or preventing a fallback to the production WS when no local WS is running.
+  - Allows for experimentation with the faux events that can be triggered in the UI, without data mixing from the real WS.
+
+> After editing `.env.local`, run `direnv allow` and restart the dev server so Vite picks up the changes.
+
 ## © Copyright
 
 <ul>

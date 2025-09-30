@@ -55,4 +55,6 @@ export interface Token {
 
   // Persisted 1-hour rolling history for charts on load
   history?: TokenHistory
+  // Mark tokens that are derived from local faux events (AutoTick/Inject buttons)
+  faux?: boolean
 }

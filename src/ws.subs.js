@@ -13,6 +13,10 @@
  * The function is defensive: it accepts any array and tries to extract
  * the expected fields when present.
  *
+ * Case-insensitive behavior:
+ * - Dedupe by lowercasing pair/token for the key, but preserve the original
+ *   casing in the output (so the common "0x" prefix stays lowercase when present).
+ *
  * @param {Array<any>} items
  * @returns {{ pair: string, token: string, chain: string }[]}
  */
@@ -48,13 +52,13 @@ export function computePairPayloads(items) {
           : undefined
     if (!pair || !token || chainIdNum == null || Number.isNaN(chainIdNum)) continue
 
-    const chainName = idToName(chainIdNum)
+    const chain = idToName(chainIdNum)
 
-    // Emit only the SupportedChainName variant to conform to PairSubscriptionPayload
-    const chain = chainName
-    const key = pair + '|' + token + '|' + chain
-    if (!seen.has(key)) {
-      seen.add(key)
+    // Case-insensitive de-dupe using lowercased addresses for the key
+    const normKey = pair.toLowerCase() + '|' + token.toLowerCase() + '|' + chain
+    if (!seen.has(normKey)) {
+      seen.add(normKey)
+      // Preserve original casing from the first occurrence to match expected key strings
       out.push({ pair, token, chain })
     }
   }

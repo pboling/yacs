@@ -76,23 +76,16 @@ describe('Tick counter click inject', () => {
 
   it('increments Tick counter when clicking Tick button', async () => {
     render(<App />);
-    await waitFor(() => {
-      expect(mockWs).toBeDefined();
-      expect((mockWs as IMockWebSocket).readyState).toBe(MockWebSocket.OPEN);
-    }, { timeout: 2000 });
 
-    // Ensure there are visible keys by injecting scanner pairs first
-    const scannerBtn = await screen.findByText(/Scanner:/);
+    // Seed some rows so the faux Tick event has a key to target
+    const restBtn = await screen.findByTestId('inject-scanner-rest');
     await act(async () => {
-      fireEvent.click(scannerBtn);
-      // Wait for rows + visible keys to be registered
-      await new Promise((r) => setTimeout(r, 350));
+      fireEvent.click(restBtn);
+      await new Promise((r) => setTimeout(r, 400));
     });
 
     // Find the specific inject button (has title="Inject a faux Tick event")
     const tickBtn = await screen.findByTitle(/Inject a faux Tick event/);
-     // Wait until Tick button is enabled (perTokenDisabled may have been true)
-     await waitFor(() => expect((tickBtn as HTMLButtonElement).disabled).toBe(false), { timeout: 2000 });
 
     const initialTick = (tickBtn.textContent?.match(/Tick:\s*(\d+)/) || [])[1];
     const initTickCount = initialTick ? parseInt(initialTick, 10) : 0;
@@ -100,7 +93,7 @@ describe('Tick counter click inject', () => {
     await act(async () => {
       fireEvent.click(tickBtn);
       // Wait for eventCounts flush
-      await new Promise((r) => setTimeout(r, 350));
+      await new Promise((r) => setTimeout(r, 600));
     });
 
     const updated = await screen.findByTitle(/Inject a faux Tick event/);

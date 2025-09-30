@@ -92,6 +92,8 @@ function TopBar({
   subBaseLimit,
   setSubBaseLimit,
   onInject,
+  onInjectScannerWs,
+  onInjectScannerRest,
   isAutoPlaying,
   onToggleAutoPlay,
   showOverlay,
@@ -115,6 +117,8 @@ function TopBar({
   subBaseLimit: number
   setSubBaseLimit: (n: number) => void
   onInject: (ev: 'scanner-pairs' | 'tick' | 'pair-stats' | 'wpeg-prices') => void
+  onInjectScannerWs: () => void
+  onInjectScannerRest: () => void
   isAutoPlaying: boolean
   onToggleAutoPlay: () => void
   showOverlay: boolean
@@ -131,11 +135,10 @@ function TopBar({
         marginBottom: 8,
       }}
     >
-      {/* Left column: Title */}
+      {/* Left column: Title and counters */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
         <h1 style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           {title}
-
           <button
             type="button"
             data-testid={`open-token-compare`}
@@ -149,50 +152,122 @@ function TopBar({
               style={{
                 fontSize: 13,
                 fontWeight: 600,
-                color: '#e5e7eb', // Changed to light color for visibility
+                color: '#e5e7eb',
                 marginTop: 2,
                 letterSpacing: 0.5,
-                textShadow: '0 1px 2px rgba(0,0,0,0.25)', // Optional for extra contrast
+                textShadow: '0 1px 2px rgba(0,0,0,0.25)',
               }}
             >
               Compare
             </span>
           </button>
         </h1>
+        {/* Event counters */}
         <h2 style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <span
+            className="muted"
+            title={`Inject a faux Scanner event`}
+            style={{
+              fontSize: 11,
+              padding: '2px 6px',
+              border: '1px solid #4b5563',
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.06)',
+              letterSpacing: 0.5,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            Scanner: <strong style={{ marginLeft: 4 }}>{eventCounts['scanner-pairs']}</strong>
+          </span>
+          {/* Other event counters remain single buttons */}
           {(
             [
-              ['scanner-pairs', 'Scanner'],
               ['tick', 'Tick'],
               ['pair-stats', 'Pair Stats'],
               ['wpeg-prices', 'WPEG'],
             ] as const
-          ).map(([key, label]) => {
-            return (
-              <button
-                type="button"
-                key={key}
-                className="muted"
-                title={`Inject a faux ${label} event`}
-                onClick={() => {
-                  onInject(key)
-                }}
-                style={{
-                  fontSize: 11,
-                  padding: '2px 6px',
-                  border: '1px solid #4b5563',
-                  borderRadius: 12,
-                  background: 'rgba(255,255,255,0.06)',
-                  letterSpacing: 0.5,
-                  cursor: 'pointer',
-                  color: 'inherit',
-                }}
-              >
-                {label}: <strong style={{ marginLeft: 4 }}>{eventCounts[key]}</strong>
-              </button>
-            )
-          })}
+          ).map(([key, label]) => (
+            <button
+              type="button"
+              key={key}
+              className="muted"
+              title={`Inject a faux ${label} event`}
+              onClick={() => onInject(key)}
+              style={{
+                fontSize: 11,
+                padding: '2px 6px',
+                border: '1px solid #4b5563',
+                borderRadius: 12,
+                background: 'rgba(255,255,255,0.06)',
+                letterSpacing: 0.5,
+                cursor: 'pointer',
+                color: 'inherit',
+              }}
+            >
+              {label}: <strong style={{ marginLeft: 4 }}>{eventCounts[key]}</strong>
+            </button>
+          ))}
         </h2>
+        {/* AutoTick + Scanner WS/REST controls */}
+        <h2 style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="btn"
+            aria-pressed={isAutoPlaying}
+            onClick={onToggleAutoPlay}
+            title={isAutoPlaying ? 'Stop auto Tick' : 'Start auto Tick'}
+            style={{
+              background: '#111827',
+              color: '#e5e7eb',
+              border: '1px solid #374151',
+              borderRadius: 12,
+              padding: '2px 8px',
+              fontSize: 11,
+              letterSpacing: 0.5,
+            }}
+          >
+            Faux AutoTick: {isAutoPlaying ? 'On' : 'Off'}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            data-testid="inject-scanner-ws"
+            onClick={onInjectScannerWs}
+            title="Emit full-replace Scanner WS snapshots for both panes"
+            style={{
+              background: '#111827',
+              color: '#e5e7eb',
+              border: '1px solid #374151',
+              borderRadius: 12,
+              padding: '2px 8px',
+              fontSize: 11,
+              letterSpacing: 0.5,
+            }}
+          >
+            Faux Scanner WS
+          </button>
+          <button
+            type="button"
+            className="btn"
+            data-testid="inject-scanner-rest"
+            onClick={onInjectScannerRest}
+            title="Emit append-only Scanner REST-like pages (sorted per pane)"
+            style={{
+              background: '#111827',
+              color: '#e7e7eb',
+              border: '1px solid #374151',
+              borderRadius: 12,
+              padding: '2px 8px',
+              fontSize: 11,
+              letterSpacing: 0.5,
+            }}
+          >
+            Faux Scanner REST
+          </button>
+        </h2>
+        {/* Subscription counters */}
         <h2 style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           <span
             className="muted"
@@ -232,6 +307,7 @@ function TopBar({
           </Toast>
         )}
       </div>
+
       {/* Middle column: two rows */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 260, flex: 1 }}>
         {/* Row A: UpdateRate & Theme selector */}
@@ -275,7 +351,7 @@ function TopBar({
             </span>
           )}
         </div>
-        {/* Row B: Subs and WS event counters */}
+        {/* Row B: Throttle & Console toggle */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {/* Throttle selector: controls total allowed subscriptions */}
           <label
@@ -318,24 +394,6 @@ function TopBar({
           <button
             type="button"
             className="btn"
-            aria-pressed={isAutoPlaying}
-            onClick={onToggleAutoPlay}
-            title={isAutoPlaying ? 'Stop auto Tick' : 'Start auto Tick'}
-            style={{
-              background: '#111827',
-              color: '#e5e7eb',
-              border: '1px solid #374151',
-              borderRadius: 12,
-              padding: '2px 8px',
-              fontSize: 11,
-              letterSpacing: 0.5,
-            }}
-          >
-            AutoTick: {isAutoPlaying ? 'On' : 'Off'}
-          </button>
-          <button
-            type="button"
-            className="btn"
             aria-pressed={consoleVisible}
             onClick={onToggleConsole}
             title={consoleVisible ? 'Hide WebSocket console' : 'Show WebSocket console'}
@@ -353,6 +411,7 @@ function TopBar({
           </button>
         </div>
       </div>
+
       {/* Right column: console fills remaining space */}
       <div
         style={{
@@ -639,6 +698,41 @@ function App() {
 
   // WebSocket connection with fallback and subscriptions
   useEffect(() => {
+    // Allow disabling all WebSocket behavior via env flag (e.g., VITE_DISABLE_WS=1)
+    // This is useful to test REST-only behavior or avoid falling back to prod WS when no local server is running.
+    const disableWs = (() => {
+      try {
+        const val = (import.meta as any)?.env?.VITE_DISABLE_WS
+        if (val == null) return false
+        const s = String(val).toLowerCase()
+        return s === '1' || s === 'true' || s === 'yes' || s === 'on'
+      } catch {
+        return false
+      }
+    })()
+
+    if (disableWs) {
+      try {
+        // If a shared WS exists from a previous mount/hot-reload, ensure it's not used further
+        const anyWin = window as unknown as { __APP_WS__?: WebSocket }
+        const existing = anyWin.__APP_WS__
+        if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
+          try {
+            // Best-effort close; ignore errors
+            existing.close()
+          } catch {}
+        }
+        // Remove the handle so other modules won't attempt to send
+        anyWin.__APP_WS__ = undefined
+      } catch {}
+      try {
+        console.info('WS: disabled by VITE_DISABLE_WS; skipping connection and reuse')
+      } catch {}
+      return () => {
+        // no-op when disabled
+      }
+    }
+
     let cancelled = false
     let opened = false
     let attempt = 0
@@ -669,6 +763,17 @@ function App() {
               return
             }
             const event = typeof parsed?.event === 'string' ? parsed.event : undefined
+            // If we are in a window where REST appends are being demoed, ignore real scanner-pairs to avoid replacement flicker
+            if (event === 'scanner-pairs') {
+              const nowTs = Date.now()
+              const until = ignoreScannerPairsUntilRef.current || 0
+              if (nowTs < until) {
+                try {
+                  debugLog('[WS reuse] ignoring scanner-pairs during REST-append window')
+                } catch {}
+                return
+              }
+            }
             // Bump and emit minimal per-key updates to keep UI reactive
             try {
               if (event === 'tick' || event === 'pair-stats') bumpEventCount(event)
@@ -974,6 +1079,17 @@ function App() {
               }
               const parseEnd = performance.now()
               const event = typeof parsed?.event === 'string' ? parsed.event : undefined
+              // Ignore scanner-pairs during active REST-append window so demo append is visible
+              if (event === 'scanner-pairs') {
+                const nowTs = Date.now()
+                const until = ignoreScannerPairsUntilRef.current || 0
+                if (nowTs < until) {
+                  try {
+                    debugLog('[WS main] ignoring scanner-pairs during REST-append window')
+                  } catch {}
+                  return
+                }
+              }
               const data =
                 typeof parsed?.data === 'object' && parsed?.data !== null ? parsed.data : undefined
               // Validation
@@ -1064,7 +1180,7 @@ function App() {
                       chainStr = typeof ch === 'string' || typeof ch === 'number' ? String(ch) : ''
                     }
                   }
-                  logWsInfo(`[in] tick swaps=${swapsLen} chain=${chainStr}`)
+                  logWsInfo(`[in] tick swaps=${swapsLen} chain=${chainStr})`)
                 } else if (event === 'pair-stats') {
                   let chainStr = ''
                   const d = data
@@ -1347,6 +1463,9 @@ function App() {
   const countsRef = useRef<WsCounts>({ ...zeroCounts })
   const [eventCounts, setEventCounts] = useState<WsCounts>({ ...zeroCounts })
   const flushTimerRef = useRef<number | null>(null)
+  // Gate to temporarily ignore real WS scanner-pairs (full replacements) when simulating REST appends
+  const ignoreScannerPairsUntilRef = useRef<number>(0)
+
   // Strict event counter: only count known, exact event names
   const bumpEventCount = (ev: unknown) => {
     const k =
@@ -1461,32 +1580,6 @@ function App() {
           updatedAt: nowIso,
         },
       }
-    } else if (ev === 'scanner-pairs') {
-      // Build a tiny WS-like scanner payload with 2 items
-      const baseChain = pick(['ETH', 'BSC', 'BASE', 'SOL'])! || 'ETH'
-      const mk = (i: number) => ({
-        id: `${baseChain}-FAUX-${Date.now()}-${i}`,
-        tokenName: `Faux ${i}`,
-        tokenSymbol: `FX${i}`,
-        tokenAddress: `0x${(Math.random() * 1e16).toString(16).slice(0, 16).padEnd(16, '0')}`,
-        pairAddress: `0x${(Math.random() * 1e16).toString(16).slice(0, 16).padEnd(16, '0')}`,
-        chain: baseChain,
-        exchange: 'DEX',
-        priceUsd: Math.random() * 2,
-        volumeUsd: Math.random() * 10_000,
-        mcap: Math.random() * 1_000_000,
-        priceChangePcs: { '5m': 0, '1h': 0, '6h': 0, '24h': 0 },
-        transactions: { buys: 0, sells: 0 },
-        liquidity: { current: Math.random() * 100_000, changePc: 0 },
-        tokenCreatedTimestamp: nowIso,
-      })
-      parsed = {
-        event: 'scanner-pairs',
-        data: {
-          filter: { page: TRENDING_PAGE },
-          results: { pairs: [mk(1), mk(2)] },
-        },
-      }
     } else if (ev === 'wpeg-prices') {
       parsed = {
         event: 'wpeg-prices',
@@ -1530,6 +1623,199 @@ function App() {
       d(action as Action)
     }
   }
+
+  // Faux generators split
+  // 1) WS snapshot: full dataset replacement for both panes (pages 101 and 201)
+  const emitFauxScannerWsSnapshot = useCallback(() => {
+    const CHAINS = ['ETH', 'BSC', 'BASE', 'SOL'] as const
+    const EXCHANGES: Record<(typeof CHAINS)[number], string[]> = {
+      ETH: ['Uniswap', 'SushiSwap'],
+      BSC: ['PancakeSwap', 'ApeSwap'],
+      BASE: ['BaseSwap', 'Aerodrome'],
+      SOL: ['Raydium', 'Orca'],
+    }
+    const mkAddr = () => `0x${(Math.random() * 1e16).toString(16).slice(0, 16).padEnd(16, '0')}`
+    const randBetween = (min: number, max: number) => Math.random() * (max - min) + min
+    const pickTld = () => (Math.random() < 0.5 ? 'io' : 'xyz')
+    const size = 50
+    const now = Date.now()
+    const items = Array.from({ length: size }, (_, idx) => {
+      const i = idx + 1
+      const chain = CHAINS[idx % CHAINS.length]
+      const pairAddress = mkAddr()
+      const tokenAddress = mkAddr()
+      const baseSymbol = `FX${i}`
+      const tokenName = `Faux ${i}`
+      const tokenSymbol = `${baseSymbol}`
+      const exchangePool = EXCHANGES[chain] || ['DEX']
+      const exchange = exchangePool[idx % exchangePool.length]
+      const priceUsd = 0.05 + Math.random() * (1 + (idx % 10) / 3)
+      const token1TotalSupply = Math.floor(1_000_000 + Math.random() * 1_000_000_000)
+      const token1TotalSupplyFormatted = String(token1TotalSupply)
+      const mcap = priceUsd * token1TotalSupply
+      const volumeUsd = Math.random() * 25_000 + idx * 250
+      const buys = Math.floor(Math.random() * 50 + (idx % 7))
+      const sells = Math.floor(Math.random() * 50 + ((idx + 3) % 9))
+      const liqCurrent = Math.random() * 150_000 + (idx % 5) * 1_000
+      const liqChangePc = randBetween(-5, 5)
+      const priceChangePcs = {
+        '5m': +randBetween(-3, 3).toFixed(2),
+        '1h': +randBetween(-10, 10).toFixed(2),
+        '6h': +randBetween(-25, 25).toFixed(2),
+        '24h': +randBetween(-60, 60).toFixed(2),
+      }
+      const ageMs = Math.floor(Math.random() * 7 * 24 * 3600 * 1000)
+      const tokenCreatedTimestamp = new Date(now - ageMs).toISOString()
+      const suffix = pairAddress.slice(-4).toLowerCase()
+      const baseHandle = baseSymbol.toLowerCase()
+      const audit = {
+        mintable: Math.random() < 0.2,
+        freezable: Math.random() < 0.15,
+        honeypot: Math.random() < 0.05,
+        contractVerified: Math.random() < 0.6,
+        linkWebsite: `https://www.${baseHandle}-${suffix}.${pickTld()}`,
+        linkTwitter: `https://twitter.com/${baseHandle}${suffix}`,
+        linkTelegram: `https://t.me/${baseHandle}_${suffix}`,
+        linkDiscord: `https://discord.gg/${baseHandle}${suffix}`,
+      }
+      const security = { renounced: Math.random() < 0.25, locked: Math.random() < 0.4 }
+      return {
+        id: `${chain}-FAUX-${now}-${i}`,
+        tokenName,
+        tokenSymbol,
+        tokenAddress,
+        pairAddress,
+        chain,
+        exchange,
+        priceUsd,
+        volumeUsd,
+        mcap,
+        priceChangePcs,
+        transactions: { buys, sells },
+        audit,
+        security,
+        tokenCreatedTimestamp,
+        liquidity: { current: liqCurrent, changePc: liqChangePc },
+        token1TotalSupplyFormatted,
+        // mark this as faux so panes don't attempt WS subscriptions
+        faux: true,
+      }
+    })
+    for (const page of [TRENDING_PAGE, NEW_PAGE]) {
+      const parsed = { event: 'scanner-pairs' as const, data: { filter: { page }, results: { pairs: items } } }
+      bumpEventCount('scanner-pairs')
+      const action = mapIncomingMessageToActionSafe(parsed)
+      if (action) d(action as Action)
+    }
+  }, [d, mapIncomingMessageToActionSafe])
+
+  // 2) REST pages: append to each pane; same 50 tokens but different sort
+  const __restPageRef = useRef<number>(0)
+  const emitFauxScannerRestPage = useCallback(() => {
+    // For a short window, ignore real WS scanner-pairs (which are full replacements)
+    // so the UI clearly demonstrates append-only behavior from this faux REST action.
+    try {
+      ignoreScannerPairsUntilRef.current = Date.now() + 5000
+    } catch {}
+    __restPageRef.current = (__restPageRef.current || 0) + 1
+    const pageNum = __restPageRef.current
+    try {
+      const restPages =
+        ((window as unknown as { __REST_PAGES__?: Record<number, number> }).__REST_PAGES__ ||= {})
+      restPages[TRENDING_PAGE] = pageNum
+      restPages[NEW_PAGE] = pageNum
+    } catch {}
+    const CHAINS = ['ETH', 'BSC', 'BASE', 'SOL'] as const
+    const EXCHANGES: Record<(typeof CHAINS)[number], string[]> = {
+      ETH: ['Uniswap', 'SushiSwap'],
+      BSC: ['PancakeSwap', 'ApeSwap'],
+      BASE: ['BaseSwap', 'Aerodrome'],
+      SOL: ['Raydium', 'Orca'],
+    }
+    const mkAddr = () => `0x${(Math.random() * 1e16).toString(16).slice(0, 16).padEnd(16, '0')}`
+    const randBetween = (min: number, max: number) => Math.random() * (max - min) + min
+    const pickTld = () => (Math.random() < 0.5 ? 'io' : 'xyz')
+    const size = 50
+    const now = Date.now()
+    const pageSuffix = `-p${pageNum}`
+    const baseItems = Array.from({ length: size }, (_, idx) => {
+      const i = idx + 1
+      const chain = CHAINS[idx % CHAINS.length]
+      const pairAddress = mkAddr()
+      const tokenAddress = mkAddr()
+      const baseSymbol = `FX${i}`
+      const tokenName = `Faux ${i}${pageSuffix}`
+      const tokenSymbol = `${baseSymbol}${pageSuffix}`
+      const exchangePool = EXCHANGES[chain] || ['DEX']
+      const exchange = exchangePool[idx % exchangePool.length]
+      const priceUsd = 0.05 + Math.random() * (1 + (idx % 10) / 3)
+      const token1TotalSupply = Math.floor(1_000_000 + Math.random() * 1_000_000_000)
+      const token1TotalSupplyFormatted = String(token1TotalSupply)
+      const mcap = priceUsd * token1TotalSupply
+      const volumeUsd = Math.random() * 25_000 + idx * 250
+      const buys = Math.floor(Math.random() * 50 + (idx % 7))
+      const sells = Math.floor(Math.random() * 50 + ((idx + 3) % 9))
+      const liqCurrent = Math.random() * 150_000 + (idx % 5) * 1_000
+      const liqChangePc = randBetween(-5, 5)
+      const priceChangePcs = {
+        '5m': +randBetween(-3, 3).toFixed(2),
+        '1h': +randBetween(-10, 10).toFixed(2),
+        '6h': +randBetween(-25, 25).toFixed(2),
+        '24h': +randBetween(-60, 60).toFixed(2),
+      }
+      const ageMs = Math.floor(Math.random() * 7 * 24 * 3600 * 1000)
+      const tokenCreatedTimestamp = new Date(now - ageMs).toISOString()
+      const suffix = pairAddress.slice(-4).toLowerCase()
+      const baseHandle = baseSymbol.toLowerCase()
+      const audit = {
+        mintable: Math.random() < 0.2,
+        freezable: Math.random() < 0.15,
+        honeypot: Math.random() < 0.05,
+        contractVerified: Math.random() < 0.6,
+        linkWebsite: `https://www.${baseHandle}-${suffix}.${pickTld()}`,
+        linkTwitter: `https://twitter.com/${baseHandle}${suffix}`,
+        linkTelegram: `https://t.me/${baseHandle}_${suffix}`,
+        linkDiscord: `https://discord.gg/${baseHandle}${suffix}`,
+      }
+      const security = { renounced: Math.random() < 0.25, locked: Math.random() < 0.4 }
+      return {
+        id: `${chain}-FAUX-${now}-${i}${pageSuffix}`,
+        tokenName,
+        tokenSymbol,
+        tokenAddress,
+        pairAddress,
+        chain,
+        exchange,
+        priceUsd,
+        volumeUsd,
+        mcap,
+        priceChangePcs,
+        transactions: { buys, sells },
+        audit,
+        security,
+        tokenCreatedTimestamp,
+        liquidity: { current: liqCurrent, changePc: liqChangePc },
+        token1TotalSupplyFormatted,
+        // mark this as faux so panes don't attempt WS subscriptions
+        faux: true,
+      }
+    })
+    const trendingItems = [...baseItems].sort((a, b) => b.volumeUsd - a.volumeUsd)
+    const newItems = [...baseItems].sort(
+      (a, b) => new Date(b.tokenCreatedTimestamp).getTime() - new Date(a.tokenCreatedTimestamp).getTime(),
+    )
+    const payloads = [
+      { page: TRENDING_PAGE, pairs: trendingItems },
+      { page: NEW_PAGE, pairs: newItems },
+    ]
+    for (const { page, pairs } of payloads) {
+      const parsed = { event: 'scanner-pairs' as const, data: { filter: { page }, append: true, results: { pairs } } }
+      bumpEventCount('scanner-pairs')
+      const action = mapIncomingMessageToActionSafe(parsed)
+      if (action) d(action as Action)
+    }
+  }, [d, mapIncomingMessageToActionSafe])
+
   // Live subscriptions count (polled)
   const [subCount, setSubCount] = useState<number>(0)
   // Invisible subs count (polled)
@@ -1683,7 +1969,7 @@ function App() {
           }
           return next.trending === prev.trending && next.newer === prev.newer ? prev : next
         })
-        // If we already have any rows/pages, also nudge appReady so the UI can progress.
+        // If we already have any rows, also nudge appReady so the UI can progress.
         if (!appReady && (hasTrending || hasNew || hasAnyRows)) {
           setAppReady(true)
         }
@@ -1929,6 +2215,8 @@ function App() {
       }
       const pair = row.pairAddress ?? ''
       const token = row.tokenAddress ?? ''
+      // Do not manage WS subscriptions for faux tokens at all
+      if (row.faux) return
       if (pair && token) {
         const chain = row.chain
         wsSendSubscribeSafe({ pair, token, chain })
@@ -2089,6 +2377,8 @@ function App() {
           ;(setSubBaseLimit as (n: number) => void)(n)
         }}
         onInject={injectFauxWsEvent}
+        onInjectScannerWs={emitFauxScannerWsSnapshot}
+        onInjectScannerRest={emitFauxScannerRestPage}
         isAutoPlaying={autoPlaying}
         onToggleAutoPlay={() => {
           setAutoPlaying((s) => !s)
@@ -2419,7 +2709,7 @@ function App() {
                   | ScannerAppendTokensAction
                 >
               }
-              defaultSort={initialSort ?? { key: 'tokenName', dir: 'asc' }}
+              defaultSort={initialSort ?? { key: 'volumeUsd', dir: 'desc' }}
               clientFilters={
                 state.filters as unknown as {
                   chains?: string[]
@@ -2476,7 +2766,7 @@ function App() {
                   | ScannerAppendTokensAction
                 >
               }
-              defaultSort={initialSort ?? { key: 'tokenName', dir: 'asc' }}
+              defaultSort={initialSort ?? { key: 'age', dir: 'desc' }}
               clientFilters={
                 state.filters as unknown as {
                   chains?: string[]

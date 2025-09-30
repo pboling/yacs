@@ -288,5 +288,7 @@ export function mapWSPairsItemToToken(item) {
     security: item.security,
     tokenCreatedTimestamp,
     liquidity: item.liquidity || { current: 0, changePc: 0 },
+    // mark faux tokens (created by local generators) so panes can skip WS subscriptions
+    faux: !!item.faux,
   }
 }

@@ -46,7 +46,7 @@ vi.mock('../src/scanner.client.js', () => ({
   fetchScanner: vi.fn().mockResolvedValue({ tokens: [], raw: { scannerPairs: [] } }),
 }))
 
-describe('Scanner counter click inject', () => {
+describe('Scanner page suffix injection', () => {
   let mockWs: IMockWebSocket | undefined;
   let origWS: typeof global.WebSocket;
   let origIO: typeof global.IntersectionObserver;
@@ -67,6 +67,8 @@ describe('Scanner counter click inject', () => {
     Object.defineProperty(window, 'localStorage', { writable: true, value: { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn() } });
     Object.defineProperty(window, 'sessionStorage', { writable: true, value: { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn(), clear: vi.fn() } });
     Object.defineProperty(window, '__BYPASS_BOOT__', { writable: true, value: true });
+    // Initialize REST page map to page 1 for both panes (legacy helper; app manages its own counter)
+    ;(window as any).__REST_PAGES__ = { 101: 1, 201: 1 };
   });
   afterEach(() => {
     global.WebSocket = origWS;
@@ -74,27 +76,46 @@ describe('Scanner counter click inject', () => {
     vi.clearAllMocks();
   });
 
-  it('increments Scanner counter when clicking Faux Scanner REST button', async () => {
-    render(<App />);
+  it('injects Faux rows with -p<page> suffix based on pane REST page (starts at p1, then p2)', async () => {
+    // Disable virtualization so all rows render in DOM (for reliable selectors)
+    try {
+      window.history.replaceState(null, '', '?virtual=false')
+    } catch {}
 
-    // Read initial counter from the label container
-    const label = await screen.findByText(/Scanner:/);
-    const initial = (label.textContent?.match(/Scanner:\s*(\d+)/) || [])[1];
-    const initCount = initial ? parseInt(initial, 10) : 0;
+    const { container } = render(<App />);
 
-    // Click the Faux Scanner REST button twice
+    // Use the Faux Scanner REST control that appends pages for both panes
     const restBtn = await screen.findByTestId('inject-scanner-rest');
+
+    // First click should produce -p1 rows for Trending
     await act(async () => {
       fireEvent.click(restBtn);
+    });
+
+    // Wait until Trending has some rows and -p1 appears
+    await waitFor(() => {
+      const countEl = screen.getByTestId('rows-count-trending') as HTMLElement;
+      const n = Number(countEl.textContent || '0');
+      expect(n).toBeGreaterThan(0);
+    }, { timeout: 5000 });
+    await waitFor(() => {
+      const rowsP1 = container.querySelectorAll('tr[data-row-id*="-p1::TREND"]');
+      expect(rowsP1.length).toBeGreaterThan(0);
+    }, { timeout: 5000 });
+
+    // Second click should advance to -p2 rows
+    await act(async () => {
       fireEvent.click(restBtn);
-      await new Promise((r) => setTimeout(r, 350));
     });
 
     await waitFor(() => {
-      const updated = screen.getByText(/Scanner:/);
-      const num = (updated.textContent?.match(/Scanner:\s*(\d+)/) || [])[1];
-      // Each click emits scanner-pairs for both panes → +2 per click → +4 total after two clicks
-      expect(parseInt(num || '0', 10)).toBe(initCount + 4);
-    }, { timeout: 2000 });
-  });
+      const countEl = screen.getByTestId('rows-count-trending') as HTMLElement;
+      const n = Number(countEl.textContent || '0');
+      expect(n).toBeGreaterThan(50);
+    }, { timeout: 8000 });
+    await waitFor(() => {
+      const rowsP2 = container.querySelectorAll('tr[data-row-id*="-p2::TREND"]');
+      expect(rowsP2.length).toBeGreaterThan(0);
+    }, { timeout: 8000 });
+  }, 15000);
 });

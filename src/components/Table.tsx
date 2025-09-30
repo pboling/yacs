@@ -746,92 +746,93 @@ export default function Table({
               </tr>
             </thead>
             {enableVirtual && rows.length > 50 ? (
-              <tbody
-                style={{
-                  display: 'block',
-                  position: 'relative',
-                  height: virtualizer.getTotalSize(),
-                  minHeight: 1,
-                }}
-              >
-                {virtualizer.getVirtualItems().map((item) => {
-                  const idx = item.index
-                  const t = rows[idx]
-                  if (!t) return null
-                  const suffix =
-                    title === 'Trending Tokens'
-                      ? 'TREND'
-                      : title === 'New Tokens'
-                        ? 'NEW'
-                        : title.replace(/\s+/g, '-').toUpperCase()
-                  const composedId = `${t.id}::${suffix}`
+              <tbody>
+                {(() => {
+                  const items = virtualizer.getVirtualItems()
+                  const total = virtualizer.getTotalSize()
+                  const paddingTop = items.length > 0 ? items[0].start : 0
+                  const paddingBottom =
+                    items.length > 0 ? total - items[items.length - 1].end : 0
                   return (
-                    <Row
-                      key={composedId}
-                      row={t}
-                      idx={idx}
-                      rowsLen={rows.length}
-                      composedId={composedId}
-                      getRowStatus={getRowStatus}
-                      onOpenRowDetails={onOpenRowDetails}
-                      onToggleRowSubscription={onToggleRowSubscription}
-                      registerRow={(el) => {
-                        if (el) {
-                          try {
-                            // absolutely position the <tr> at the virtual offset
-                            el.style.position = 'absolute'
-                            el.style.top = '0'
-                            el.style.left = '0'
-                            el.style.right = '0'
-                            el.style.width = '100%'
-                            el.style.transform = `translateY(${item.start}px)`
-                          } catch {
-                            /* no-op */
-                          }
-                        }
-                        registerRowCb(el, t)
-                      }}
-                    />
+                    <>
+                      {paddingTop > 0 && (
+                        <tr aria-hidden="true">
+                          <td colSpan={11} style={{ padding: 0, border: 0, height: paddingTop }} />
+                        </tr>
+                      )}
+                      {items.map((item) => {
+                        const idx = item.index
+                        const t = rows[idx]
+                        if (!t) return null
+                        const suffix =
+                          title === 'Trending Tokens'
+                            ? 'TREND'
+                            : title === 'New Tokens'
+                              ? 'NEW'
+                              : title.replace(/\s+/g, '-').toUpperCase()
+                        const composedId = `${t.id}::${suffix}`
+                        return (
+                          <Row
+                            key={composedId}
+                            row={t}
+                            idx={idx}
+                            rowsLen={rows.length}
+                            composedId={composedId}
+                            getRowStatus={getRowStatus}
+                            onOpenRowDetails={onOpenRowDetails}
+                            onToggleRowSubscription={onToggleRowSubscription}
+                            registerRow={(el) => {
+                              registerRowCb(el, t)
+                            }}
+                          />
+                        )
+                      })}
+                      {paddingBottom > 0 && (
+                        <tr aria-hidden="true">
+                          <td colSpan={11} style={{ padding: 0, border: 0, height: paddingBottom }} />
+                        </tr>
+                      )}
+                    </>
                   )
-                })}
+                })()}
               </tbody>
             ) : (
               <tbody>
-                {rows.map((t, idx) => {
-                  const suffix =
-                    title === 'Trending Tokens'
-                      ? 'TREND'
-                      : title === 'New Tokens'
-                        ? 'NEW'
-                        : title.replace(/\s+/g, '-').toUpperCase()
-                  const composedId = `${t.id}::${suffix}`
-                  return (
-                    <Row
-                      key={composedId}
-                      row={t}
-                      idx={idx}
-                      rowsLen={rows.length}
-                      composedId={composedId}
-                      getRowStatus={getRowStatus}
-                      onOpenRowDetails={onOpenRowDetails}
-                      onToggleRowSubscription={onToggleRowSubscription}
-                      registerRow={(el) => {
-                        registerRowCb(el, t)
-                      }}
-                    />
-                  )
-                })}
-              </tbody>
-            )}
+                 {rows.map((t, idx) => {
+                   const suffix =
+                     title === 'Trending Tokens'
+                       ? 'TREND'
+                       : title === 'New Tokens'
+                         ? 'NEW'
+                         : title.replace(/\s+/g, '-').toUpperCase()
+                   const composedId = `${t.id}::${suffix}`
+                   return (
+                     <Row
+                       key={composedId}
+                       row={t}
+                       idx={idx}
+                       rowsLen={rows.length}
+                       composedId={composedId}
+                       getRowStatus={getRowStatus}
+                       onOpenRowDetails={onOpenRowDetails}
+                       onToggleRowSubscription={onToggleRowSubscription}
+                       registerRow={(el) => {
+                         registerRowCb(el, t)
+                       }}
+                     />
+                   )
+                 })}
+               </tbody>
+             )}
             <tfoot ref={tfootRef}>
-              <tr>
-                <td colSpan={12} style={{ textAlign: 'center', padding: '6px 0' }}>
-                  <span className="muted" style={{ fontSize: 12 }}>
-                    End of table
-                  </span>
-                </td>
-              </tr>
-            </tfoot>
+               <tr>
+                <td colSpan={11} style={{ textAlign: 'center', padding: '6px 0' }}>
+                   <span className="muted" style={{ fontSize: 12 }}>
+                     End of table
+                   </span>
+                 </td>
+               </tr>
+             </tfoot>
           </table>
         </div>
       </div>

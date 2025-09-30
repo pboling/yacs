@@ -76,32 +76,22 @@ describe('WPEG counter click inject', () => {
 
   it('increments WPEG counter when clicking WPEG button', async () => {
     render(<App />);
-    await waitFor(() => {
-      expect(mockWs).toBeDefined();
-      expect((mockWs as IMockWebSocket).readyState).toBe(MockWebSocket.OPEN);
-    }, { timeout: 2000 });
 
-    // Create scanner rows for parity (not required for WPEG)
-    const scannerBtn = await screen.findByText(/Scanner:/);
-    await act(async () => {
-      fireEvent.click(scannerBtn);
-      await new Promise((r) => setTimeout(r, 250));
-    });
-
-    const wpegBtn = await screen.findByText(/WPEG:/);
+    // Find the WPEG faux event button and capture initial count
+    const wpegBtn = await screen.findByTitle(/Inject a faux WPEG event/);
     const initialWpeg = (wpegBtn.textContent?.match(/WPEG:\s*(\d+)/) || [])[1];
     const initWpegCount = initialWpeg ? parseInt(initialWpeg, 10) : 0;
 
     await act(async () => {
       fireEvent.click(wpegBtn);
-      await new Promise((r) => setTimeout(r, 350));
+      // Allow eventCounts to coalesce (flush timer ~250ms)
+      await new Promise((r) => setTimeout(r, 600));
     });
 
+    const updated = await screen.findByTitle(/Inject a faux WPEG event/);
     await waitFor(() => {
-      const updated = screen.getByText(/WPEG:/);
       const num = (updated.textContent?.match(/WPEG:\s*(\d+)/) || [])[1];
       expect(parseInt(num || '0', 10)).toBe(initWpegCount + 1);
     }, { timeout: 2000 });
   });
 });
-

@@ -211,18 +211,20 @@ export function mapIncomingMessageToAction(msg) {
   // Gate all incoming events except allow-list when feature flag is OFF
   if (!isAllowedIncomingEvent(msg.event)) return null
   switch (msg.event) {
-    case 'scanner-pairs':
+    case 'scanner-pairs': {
       // Conform to test-task-types: { data: { filter, results: { pairs: [...] } } }
-      return {
-        type: 'scanner/ws',
-        payload: {
-          page: (msg.data && msg.data.filter && msg.data.filter.page) || 1,
-          scannerPairs:
-            msg.data && msg.data.results && Array.isArray(msg.data.results.pairs)
-              ? msg.data.results.pairs
-              : [],
-        },
+      const append = !!(msg?.data && (msg.data.append === true || msg.data.mode === 'append'))
+      const base = {
+        page: (msg.data && msg.data.filter && msg.data.filter.page) || 1,
+        scannerPairs:
+          msg.data && msg.data.results && Array.isArray(msg.data.results.pairs)
+            ? msg.data.results.pairs
+            : [],
       }
+      return append
+        ? { type: 'scanner/append', payload: base }
+        : { type: 'scanner/ws', payload: base }
+    }
     case 'tick': {
       // Canonical shape only: { data: { pair: { pair, token, chain }, swaps: [...] } }
       const d = msg.data || {}
@@ -237,6 +239,7 @@ export function mapIncomingMessageToAction(msg) {
       const d = (msg && typeof msg === 'object' ? msg.data : null) || {}
       const prices =
         d && typeof d === 'object' && d.prices && typeof d.prices === 'object' ? d.prices : {}
+      // Emit reducer-compatible action type with slash
       return { type: 'wpeg/prices', payload: { prices } }
     }
     // case 'pair-patch': {

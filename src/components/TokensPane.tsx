@@ -112,6 +112,8 @@ export default function TokensPane({
   // Root scroll container for the table (overflowing pane); used to scope infinite scroll
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const [bothEndsVisible, setBothEndsVisible] = useState(false)
+  // Track previous ids length so we can expand visibleCount when new ids are appended externally
+  const prevIdsLenRef = useRef<number>(0)
 
   // Build fixed server query params per pane, overriding only isNotHP from the client checkbox
   const isNotHP = useMemo(
@@ -237,8 +239,12 @@ export default function TokensPane({
             String(ws.readyState),
         )
         // If socket is OPEN, (re)send subscriptions for currently visible keys
-        if (ws.readyState === WebSocket.OPEN) {
-          try {
+        try {
+          const isOpen =
+            ws.readyState === 1 ||
+            (typeof (window as any).WebSocket !== 'undefined' &&
+              ws.readyState === (window as any).WebSocket.OPEN)
+          if (isOpen) {
             const keys = Array.from(visibleKeysRef.current)
             debugLog(
               '[TokensPane:' + title + '] late attach subscribing visible keys:',
@@ -252,9 +258,9 @@ export default function TokensPane({
                 sendSubscribe(ws, { pair, token, chain })
               }
             }
-          } catch (err) {
-            console.error(`[TokensPane:${title}] failed to send late subscriptions`, err)
           }
+        } catch (err) {
+          console.error(`[TokensPane:${title}] failed to send late subscriptions`, err)
         }
       }
       if (tries >= maxTries || wsRef.current) {
@@ -558,6 +564,28 @@ export default function TokensPane({
     } catch {}
     return finalRows
   }, [state.byId, state.pages, page, sort, clientFilters, visibleCount, title])
+
+  // When external appends add ids to this page (e.g., via Scanner REST faux button),
+  // expand the visible window so users actually see the new rows. Caps at client limit.
+  useEffect(() => {
+    const ids = state.pages[page] ?? []
+    const len = Array.isArray(ids) ? ids.length : 0
+    const prev = prevIdsLenRef.current || 0
+    if (len > prev) {
+      const delta = len - prev
+      setVisibleCount((v) => {
+        const limit =
+          clientFilters && typeof clientFilters.limit === 'number' && clientFilters.limit > 0
+            ? clientFilters.limit
+            : Number.POSITIVE_INFINITY
+        const inc = Math.min(50, delta) // typically append in batches of 50
+        return Math.min(v + inc, limit)
+      })
+      // If app considered out of pages earlier, allow more since rows were appended
+      if (!hasMore) setHasMore(true)
+    }
+    prevIdsLenRef.current = len
+  }, [state.pages, page, clientFilters, hasMore])
 
   // Keep an imperative copy of rows for imperative functions (loadMore, etc.).
   // Prior code relied on rowsRef.current being populated but did not update it;
@@ -981,6 +1009,8 @@ export default function TokensPane({
   // Central reconciliation happens in onScrollStop via SubscriptionQueue.setTableVisible.
   const handleRowVisibilityChange = useCallback(
     (row: TokenRow, visible: boolean) => {
+      // Skip WS visibility tracking for faux tokens entirely
+      if ((row as { faux?: boolean }).faux) return
       const pair = row.pairAddress ?? ''
       const tokenAddr = (row.tokenAddress ?? '').toLowerCase()
       if (!pair || !tokenAddr) return
@@ -1000,6 +1030,19 @@ export default function TokensPane({
     },
     [title],
   )
+
+  // Expose current REST page per pane to a global map for diagnostics and faux-data integration
+  useEffect(() => {
+    try {
+      const anyWin = window as unknown as {
+        __REST_PAGES__?: Record<number, number>
+      }
+      const map = (anyWin.__REST_PAGES__ = anyWin.__REST_PAGES__ || {})
+      map[page] = currentPage || 1
+    } catch {
+      /* no-op */
+    }
+  }, [currentPage, page])
 
   // Unsubscribe all visible on unmount (outside dev optional)
   useEffect(() => {
@@ -1062,6 +1105,8 @@ export default function TokensPane({
       }
       const sourceRows = rowsRef.current && rowsRef.current.length > 0 ? rowsRef.current : rows
       for (const r of sourceRows) {
+        // Exclude faux rows from the subscription universe
+        if ((r as { faux?: boolean }).faux) continue
         const pair = r.pairAddress ?? ''
         const tokenAddr = (r.tokenAddress ?? '').toLowerCase()
         const chain = r.chain
@@ -1232,6 +1277,8 @@ export default function TokensPane({
   }, [])
   const handleToggleRowSubscription = useCallback(
     (row: TokenRow) => {
+      // Faux tokens cannot be toggled; they never use WS subscriptions
+      if ((row as { faux?: boolean }).faux) return
       const dKey = disabledKeyFor(row)
       if (!dKey) return
       const set = disabledTokensRef.current
@@ -1273,7 +1320,7 @@ export default function TokensPane({
           const [pair, token, chain] = key.split('|')
           const { next } = markHidden(key)
           try {
-            SubscriptionQueue.setVisible(key, false, ws, tableId)
+            SubscriptionQueue.setVisible(key, false, ws, 'TokensPane:onRowVisibilityChange/hide')
           } catch {}
           if (next === 0 && ws && ws.readyState === WebSocket.OPEN) {
             try {
@@ -1376,6 +1423,10 @@ export default function TokensPane({
         onScrollStart={handleScrollStart}
         onToggleRowSubscription={handleToggleRowSubscription}
         getRowStatus={(row: TokenRow) => {
+          // Faux tokens never manage WS subscriptions; mark them unsubscribed with tooltip
+          if ((row as { faux?: boolean }).faux) {
+            return { state: 'unsubscribed', tooltip: 'Faux token — WS subscription disabled' }
+          }
           const pair = row.pairAddress ?? ''
           const token = row.tokenAddress ?? ''
           if (!pair || !token) return undefined
@@ -1402,7 +1453,13 @@ export default function TokensPane({
           const nextVisible: string[] = []
           let skippedDisabled = 0
           let skippedLocked = 0
+          let skippedFaux = 0
           for (const row of visibleRows) {
+            // Skip faux rows entirely
+            if ((row as { faux?: boolean }).faux) {
+              skippedFaux++
+              continue
+            }
             const pair = row.pairAddress ?? ''
             const token = row.tokenAddress ?? ''
             if (!pair || !token) continue
@@ -1434,6 +1491,7 @@ export default function TokensPane({
               removedSample: removed.slice(0, 5),
               skippedDisabled,
               skippedLocked,
+              skippedFaux,
               time: new Date().toISOString(),
             })
           } catch {}

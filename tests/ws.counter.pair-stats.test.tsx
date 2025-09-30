@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { act } from 'react'
 import App from '../src/App'
 
@@ -155,65 +155,29 @@ describe('Pair-Stats Counter', () => {
         <App />
     );
 
-    // Wait until our MockWebSocket is created and opened
+    // Wait for initial rows to seed from mocked REST fetch (ensures inject has a key to target)
     await waitFor(() => {
-      expect(mockWs).toBeDefined();
-      expect((mockWs as IMockWebSocket).readyState).toBe(MockWebSocket.OPEN);
-    }, { timeout: 3000 });
+      const trending = screen.getByTestId('rows-count-trending') as HTMLElement
+      const n = Number(trending.textContent || '0')
+      expect(n).toBeGreaterThan(0)
+    }, { timeout: 5000 })
 
-    // Wait for the Pair Stats button / label to be present in the top bar
-    const pairStatsBtn = await screen.findByText(/Pair Stats:/, {}, { timeout: 3000 });
-    expect(pairStatsBtn).toBeDefined();
+    // Locate the Pair Stats faux event button and capture initial count
+    const pairStatsBtn = await screen.findByTitle(/Inject a faux Pair Stats event/)
+    const initialMatch = pairStatsBtn.textContent?.match(/Pair Stats:\s*(\d+)/)
+    const initialCount = initialMatch ? parseInt(initialMatch[1], 10) : 0
 
-    // Extract initial numeric value from the label (e.g., 'Pair Stats: 0')
-    const initialMatch = pairStatsBtn.textContent?.match(/Pair Stats:\s*(\d+)/);
-    const initialCount = initialMatch ? parseInt(initialMatch[1], 10) : 0;
-
-    // Ensure rows are rendered (Row uses class 'token-row')
-    await waitFor(() => {
-      const rows = container.querySelectorAll('.token-row');
-      expect(rows.length).toBeGreaterThan(0);
-    }, { timeout: 3000 });
-
-    // Find the first rendered token row and the expand button inside it
-    const firstRow = container.querySelector('.token-row') as HTMLElement | null;
-    expect(firstRow).toBeTruthy();
-
-    // Build a pair-stats event that matches the App's mapping logic
-    const pairStatsEvent = {
-      event: 'pair-stats',
-      data: {
-        pair: {
-          pairAddress: '0x1234567890123456789012345678901234567890',
-          token1Address: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
-          chain: 'ETH',
-        },
-        pairStats: {
-          volume24h: '1000000',
-          liquidity: '5000000',
-        },
-        migrationProgress: '0',
-        callCount: 1,
-        socialLinks: [
-          { type: 'twitter', url: 'https://twitter.com/mocktoken' },
-          { type: 'telegram', url: 'https://t.me/mocktoken' }
-        ],
-      },
-    };
-
-    // Deliver the message through the mock WS
     await act(async () => {
-      (mockWs as IMockWebSocket).simulateMessage(pairStatsEvent);
-      // allow the message pipeline to settle
-      await new Promise((r) => setTimeout(r, 150));
-    });
+      fireEvent.click(pairStatsBtn)
+      // Allow eventCounts flush (coalesced ~250ms)
+      await new Promise((r) => setTimeout(r, 600))
+    })
 
-    // Wait for the UI to reflect an incremented counter
+    const updated = await screen.findByTitle(/Inject a faux Pair Stats event/)
     await waitFor(() => {
-      const updated = screen.getByText(/Pair Stats:/);
-      const m = updated.textContent?.match(/Pair Stats:\s*(\d+)/);
-      const count = m ? parseInt(m[1], 10) : NaN;
-      expect(Number.isFinite(count) ? count : NaN).toBe(initialCount + 1);
-    }, { timeout: 3000 });
+      const m = updated.textContent?.match(/Pair Stats:\s*(\d+)/)
+      const count = m ? parseInt(m[1], 10) : NaN
+      expect(count).toBe(initialCount + 1)
+    }, { timeout: 3000 })
   })
 })

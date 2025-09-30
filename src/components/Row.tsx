@@ -403,6 +403,23 @@ const Row = memo(
                   </strong>
                   /{t.chain}
                 </span>
+                {t.faux ? (
+                  <span
+                    title="Faux token — receives only local AutoTick events"
+                    style={{
+                      fontSize: 10,
+                      padding: '1px 6px',
+                      borderRadius: 10,
+                      border: '1px solid #4b5563',
+                      background: 'rgba(255,255,255,0.06)',
+                      color: 'var(--accent-up)',
+                      lineHeight: 1.2,
+                      marginLeft: 4,
+                    }}
+                  >
+                    FAUX
+                  </span>
+                ) : null}
               </div>
               <div
                 className="muted"
@@ -772,21 +789,25 @@ const Row = memo(
                   {(() => {
                     const st2 = getRowStatus?.(t)
                     const isEnabled = st2?.state === 'subscribed'
-                    const title2 = isEnabled
-                      ? 'click to pause data subscription for this token'
-                      : 'click to re-enable data subscription for this token'
+                    const title2 = t.faux
+                      ? 'Faux token — WS subscription disabled'
+                      : isEnabled
+                        ? 'click to pause data subscription for this token'
+                        : 'click to re-enable data subscription for this token'
                     return (
                       <button
                         type="button"
                         title={title2}
                         aria-label={title2}
-                        onClick={() => onToggleRowSubscription?.(t)}
+                        onClick={t.faux ? undefined : () => onToggleRowSubscription?.(t)}
                         ref={eyeRef}
                         style={{
-                          color: freshColor,
+                          color: t.faux ? 'var(--muted, #9CA3AF)' : freshColor,
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: 4,
+                          pointerEvents: t.faux ? 'none' : 'auto',
+                          opacity: t.faux ? 0.6 : 1,
                         }}
                       >
                         <Eye size={14} />
