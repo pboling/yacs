@@ -318,3 +318,12 @@ table.tokens {
 .metadata-row {
   background-color: rgba(0, 0, 0, 0.45);
 }
+
+/* Topbar styles */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 110;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}

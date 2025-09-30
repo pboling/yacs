@@ -121,6 +121,7 @@ function TopBar({
 }) {
   return (
     <div
+      className="topbar"
       style={{
         display: 'flex',
         alignItems: 'stretch',
@@ -2063,6 +2064,38 @@ function App() {
           </div>
         ) : null
       })()}
+      {/* TopBar pinned to the top, outside the padded content wrapper */}
+      <TopBar
+        title="YACS (Demo)"
+        version={(state as unknown as { version?: number }).version ?? 0}
+        theme={theme}
+        onThemeChange={(v) => {
+          setTheme(v)
+        }}
+        lockActive={lockActive}
+        eventCounts={eventCounts}
+        subCount={subCount}
+        invisCount={invisCount}
+        consoleVisible={consoleVisible}
+        onToggleConsole={() => {
+          setConsoleVisible((v) => !v)
+        }}
+        onOpenDetail={() => {
+          setDetailRow(null)
+          setDetailOpen(true)
+        }}
+        subBaseLimit={subBaseLimit}
+        setSubBaseLimit={(n: number) => {
+          ;(setSubBaseLimit as (n: number) => void)(n)
+        }}
+        onInject={injectFauxWsEvent}
+        isAutoPlaying={autoPlaying}
+        onToggleAutoPlay={() => {
+          setAutoPlaying((s) => !s)
+        }}
+        showOverlay={showOverlay}
+      />
+      {/* Main content */}
       <div style={{ padding: '16px 16px 16px 10px' }}>
         <DetailModal
           open={detailOpen}
@@ -2071,36 +2104,6 @@ function App() {
           onClose={closeDetails}
           getRowById={getRowById}
           allRows={Object.values((state as unknown as { byId: Record<string, TokenRow> }).byId)}
-        />
-        <TopBar
-          title="YACS (Demo)"
-          version={(state as unknown as { version?: number }).version ?? 0}
-          theme={theme}
-          onThemeChange={(v) => {
-            setTheme(v)
-          }}
-          lockActive={lockActive}
-          eventCounts={eventCounts}
-          subCount={subCount}
-          invisCount={invisCount}
-          consoleVisible={consoleVisible}
-          onToggleConsole={() => {
-            setConsoleVisible((v) => !v)
-          }}
-          onOpenDetail={() => {
-            setDetailRow(null)
-            setDetailOpen(true)
-          }}
-          subBaseLimit={subBaseLimit}
-          setSubBaseLimit={(n: number) => {
-            ;(setSubBaseLimit as (n: number) => void)(n)
-          }}
-          onInject={injectFauxWsEvent}
-          isAutoPlaying={autoPlaying}
-          onToggleAutoPlay={() => {
-            setAutoPlaying((s) => !s)
-          }}
-          showOverlay={showOverlay}
         />
         {/* Filters Bar */}
         <div className="filters">
