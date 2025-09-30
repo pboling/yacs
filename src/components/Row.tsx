@@ -362,7 +362,7 @@ const Row = memo(
             window.setTimeout(cleanup, lastMs + 40)
           }, firstMs)
         }
-      } catch (err) {
+      } catch (_err) {
         // Fail fast for animation pipeline issues but avoid throwing into callers
         return
       }
@@ -573,7 +573,7 @@ const Row = memo(
 
                 // Final fallback: use the current price as a tiny flat series so the sparkline renders
                 if (data.length === 0) {
-                  const base = Number(t.priceUsd)
+                  const base = t.priceUsd
                   data = Array.from({ length: 5 }, () => base)
                 }
 

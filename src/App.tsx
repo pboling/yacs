@@ -1389,8 +1389,8 @@ function App() {
         const byId = st.byId ?? {}
         const pages = st.pages ?? {}
         const idSources: string[] =
-          (Array.isArray(pages[TRENDING_PAGE]) && (pages[TRENDING_PAGE] as string[])) ||
-          (Array.isArray(pages[NEW_PAGE]) && (pages[NEW_PAGE] as string[])) ||
+          (Array.isArray(pages[TRENDING_PAGE]) && pages[TRENDING_PAGE]) ||
+          (Array.isArray(pages[NEW_PAGE]) && pages[NEW_PAGE]) ||
           Object.keys(byId)
         for (const id of idSources) {
           const row = byId[id]

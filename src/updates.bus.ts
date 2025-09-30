@@ -50,7 +50,7 @@ export function onUpdate(cb: (e: UpdateEvent) => void): () => void {
 }
 
 export function onUpdateKey(key: string, cb: (e: UpdateEvent) => void): () => void {
-  const k = String(key)
+  const k = key
   let set = keyed.get(k)
   if (!set) {
     set = new Set()

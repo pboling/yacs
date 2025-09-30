@@ -327,8 +327,13 @@ export const SubscriptionQueue = {
     // Unsubscribe any queued/visible keys that are no longer in the universe
     const nextSet = new Set(next)
     for (const entry of [...invisibleQueue]) {
-      const key = Array.isArray(entry) ? entry[0] : entry
-      if (!nextSet.has(key)) {
+      let key: string | undefined
+      if (Array.isArray(entry)) {
+        if (typeof entry[0] === 'string') key = entry[0]
+      } else if (typeof entry === 'string') {
+        key = entry
+      }
+      if (key && !nextSet.has(key)) {
         removeFromQueue(key)
         unsubscribeKey(ws, key, 'removed-from-universe', { phase: 'updateUniverse/remove' })
       }

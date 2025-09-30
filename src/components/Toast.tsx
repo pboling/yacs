@@ -23,6 +23,7 @@ export default function Toast({ children }: { children: React.ReactNode }) {
     >
       <span style={{ flex: 1 }}>{children}</span>
       <button
+        type="button"
         onClick={() => {
           setVisible(false)
         }}
