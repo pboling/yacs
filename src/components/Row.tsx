@@ -9,9 +9,6 @@ import {
   Pause,
   ArrowUpFromLine,
   ArrowDownFromLine,
-  Twitter,
-  MessageCircle,
-  Users,
   Link as LinkIcon,
 } from 'lucide-react'
 import { formatAge } from '../helpers/format'
@@ -19,6 +16,7 @@ import type { Token as TokenRow } from '../models/Token'
 import { onUpdateKey } from '../updates.bus'
 import { buildTickKey } from '../utils/key_builder'
 import Sparkline from './Sparkline'
+import { SiX, SiTelegram, SiDiscord } from '@icons-pack/react-simple-icons'
 
 export interface RowProps {
   row: TokenRow
@@ -899,10 +897,10 @@ const Row = memo(
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        <Twitter size={20} />
+                        <SiX title="Twitter" color="#000000" size={20} />
                       </a>
                     ) : (
-                      <Twitter size={20} />
+                      <SiX title="Twitter" color="#000000" size={20} />
                     )}
                   </span>
                   <span
@@ -920,10 +918,10 @@ const Row = memo(
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        <MessageCircle size={20} />
+                        <SiTelegram title="Telegram" color="#0088CC" size={20} />
                       </a>
                     ) : (
-                      <MessageCircle size={20} />
+                      <SiTelegram title="Telegram" color="#0088CC" size={20} />
                     )}
                   </span>
                   <span
@@ -941,10 +939,10 @@ const Row = memo(
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        <Users size={20} />
+                        <SiDiscord title="Discord" color="#5865F2" size={20} />
                       </a>
                     ) : (
-                      <Users size={20} />
+                      <SiDiscord title="Discord" color="#5865F2" size={20} />
                     )}
                   </span>
                 </div>
