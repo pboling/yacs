@@ -134,9 +134,16 @@ export default function NumberCell({
           return nfNum.format(n)
         }
         const scaled = n / divisor
-        // Format scaled number to 4 significant digits and strip trailing zeros after decimal
+        // Format scaled number to maxSigDigits significant digits and strip trailing zeros after decimal
         let s = nfNum.format(scaled)
         s = s.replace(/(\.[0-9]*?)0+$/, '$1').replace(/\.$/, '')
+        // If the significant digits in s (excluding suffix) exceed maxSigDigits, use scientific notation
+        const sigDigits = s.replace(/[^0-9]/g, '').length
+        if (sigDigits > Math.max(1, Math.floor(maxSigDigits))) {
+          const sig = Math.max(1, Math.floor(maxSigDigits))
+          const sci = n.toExponential(sig - 1)
+          return sci.replace(/e\+?(-?\d+)/i, 'e$1')
+        }
         return s + suffixLocal
       }
       text = abbreviate(num)
