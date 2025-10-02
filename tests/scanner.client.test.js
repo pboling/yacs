@@ -1,5 +1,4 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
+import { describe, it, expect } from 'vitest';
 import { buildScannerQuery, mapScannerPage, fetchScanner } from '../src/scanner.client.js';
 
 function makeScanner(overrides = {}) {
@@ -58,7 +57,7 @@ function makeScanner(overrides = {}) {
     txns: 0,
     volume: '9999.5',
     ...overrides,
-  }
+  };
 }
 
 const sampleResponse = {
@@ -75,25 +74,25 @@ const sampleResponse = {
   totalPages: 5,
 }
 
-test('scanner.client.js utilities', async (t) => {
-  await t.test('buildScannerQuery serializes primitives and arrays', () => {
+describe('scanner.client', () => {
+  it('buildScannerQuery serializes primitives and arrays', () => {
     const qp = buildScannerQuery({ chain: 'ETH', page: 2, dexes: ['uni', 'ray'], isNotHP: true })
     const s = qp.toString()
-    assert.match(s, /chain=ETH/)
-    assert.match(s, /page=2/)
+    expect(s).toMatch(/chain=ETH/)
+    expect(s).toMatch(/page=2/)
     // array becomes repeated params
-    assert.equal((s.match(/dexes=/g) || []).length, 2)
-    assert.match(s, /isNotHP=true/)
+    expect((s.match(/dexes=/g) || []).length).toBe(2)
+    expect(s).toMatch(/isNotHP=true/)
   })
 
-  await t.test('mapScannerPage maps ScannerPairs to TokenData[]', () => {
+  it('mapScannerPage maps ScannerPairs to TokenData[]', () => {
     const tokens = mapScannerPage(sampleResponse)
-    assert.equal(tokens.length, 2)
-    assert.equal(tokens[0].pairAddress, '0xPAIR')
-    assert.equal(tokens[1].tokenSymbol, 'TK2')
+    expect(tokens.length).toBe(2)
+    expect(tokens[0].pairAddress).toBe('0xPAIR')
+    expect(tokens[1].tokenSymbol).toBe('TK2')
   })
 
-  await t.test('fetchScanner uses injected fetch and maps tokens', async () => {
+  it('fetchScanner uses injected fetch and maps tokens', async () => {
     const calls = []
     const mockFetch = async (url) => {
       calls.push(url)
@@ -106,8 +105,8 @@ test('scanner.client.js utilities', async (t) => {
       { chain: 'ETH', page: 1 },
       { baseUrl: 'https://mock', fetchImpl: mockFetch },
     )
-    assert.deepEqual(raw, sampleResponse)
-    assert.equal(tokens.length, 2)
-    assert.match(calls[0], /^https:\/\/mock\/scanner\?/)
+    expect(raw).toEqual(sampleResponse)
+    expect(tokens.length).toBe(2)
+    expect(calls[0]).toMatch(/^https:\/\/mock\/scanner\?/)
   })
 })

@@ -1,5 +1,4 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
+import { describe, it, expect } from 'vitest';
 import { computeFilteredCompareOptions } from '../src/utils/filteredCompareOptions.mjs';
 
 const makeRow = (id, name, symbol) => ({ id, tokenName: name, tokenSymbol: symbol });
@@ -9,18 +8,18 @@ const rows = [
   makeRow('3', 'Gamma Asset', 'GAMMA'),
 ];
 
-test('computeFilteredCompareOptions', async (t) => {
-  await t.test('returns empty when not open', () => {
+describe('computeFilteredCompareOptions', () => {
+  it('returns empty when not open', () => {
     const res = computeFilteredCompareOptions({
       open: false,
       allRows: rows,
       currentRow: rows[0],
       compareSearch: '',
     });
-    assert.equal(res.length, 0);
+    expect(res.length).toBe(0);
   });
 
-  await t.test('excludes current row by id', () => {
+  it('excludes current row by id', () => {
     const res = computeFilteredCompareOptions({
       open: true,
       allRows: rows,
@@ -29,11 +28,11 @@ test('computeFilteredCompareOptions', async (t) => {
       includeStale: true,
       includeDegraded: true,
     });
-    assert.equal(res.length, 2);
-    assert.ok(res.every((r) => r.id !== '2'));
+    expect(res.length).toBe(2);
+    expect(res.every((r) => r.id !== '2')).toBe(true);
   });
 
-  await t.test('caps to top 100 when no search', () => {
+  it('caps to top 100 when no search', () => {
     const many = Array.from({ length: 150 }, (_, i) => makeRow(String(i), `Name${i}`, `SYM${i}`));
     const res = computeFilteredCompareOptions({
       open: true,
@@ -43,10 +42,10 @@ test('computeFilteredCompareOptions', async (t) => {
       includeStale: true,
       includeDegraded: true,
     });
-    assert.equal(res.length, 100);
+    expect(res.length).toBe(100);
   });
 
-  await t.test('filters by tokenName or tokenSymbol (case-insensitive)', () => {
+  it('filters by tokenName or tokenSymbol (case-insensitive)', () => {
     const res1 = computeFilteredCompareOptions({
       open: true,
       allRows: rows,
@@ -55,8 +54,8 @@ test('computeFilteredCompareOptions', async (t) => {
       includeStale: true,
       includeDegraded: true,
     });
-    assert.equal(res1.length, 1);
-    assert.equal(res1[0].id, '2');
+    expect(res1.length).toBe(1);
+    expect(res1[0].id).toBe('2');
 
     const res2 = computeFilteredCompareOptions({
       open: true,
@@ -66,7 +65,7 @@ test('computeFilteredCompareOptions', async (t) => {
       includeStale: true,
       includeDegraded: true,
     });
-    assert.equal(res2.length, 1);
-    assert.equal(res2[0].id, '3');
+    expect(res2.length).toBe(1);
+    expect(res2[0].id).toBe('3');
   });
 });

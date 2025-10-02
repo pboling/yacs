@@ -1,10 +1,9 @@
-import test from 'node:test'
-import assert from 'node:assert/strict'
+import { describe, it, expect } from 'vitest';
 import {
   calcMarketCapFromResponse,
   mapRESTScannerResultToToken,
   applyTickToToken,
-} from '../src/tdd.runtime.js'
+} from '../src/tdd.runtime.js';
 
 function baseScanner(overrides = {}) {
   return {
@@ -62,131 +61,133 @@ function baseScanner(overrides = {}) {
     txns: 0,
     volume: '9999.5',
     ...overrides,
-  }
+  };
 }
 
-test('calcMarketCapFromResponse respects priority order', () => {
-  const s1 = baseScanner({
-    currentMcap: '0',
-    initialMcap: '5',
-    pairMcapUsd: '3',
-    pairMcapUsdInitial: '2',
+describe('tdd.runtime', () => {
+  it('calcMarketCapFromResponse respects priority order', () => {
+    const s1 = baseScanner({
+      currentMcap: '0',
+      initialMcap: '5',
+      pairMcapUsd: '3',
+      pairMcapUsdInitial: '2',
+    })
+    expect(calcMarketCapFromResponse(s1)).toBe(5)
+    const s2 = baseScanner({
+      currentMcap: '100',
+      initialMcap: '5',
+      pairMcapUsd: '3',
+      pairMcapUsdInitial: '2',
+    })
+    expect(calcMarketCapFromResponse(s2)).toBe(100)
+    const s3 = baseScanner({
+      currentMcap: '0',
+      initialMcap: '0',
+      pairMcapUsd: '3.14',
+      pairMcapUsdInitial: '2',
+    })
+    expect(calcMarketCapFromResponse(s3)).toBe(3.14)
+    const s4 = baseScanner({
+      currentMcap: '0',
+      initialMcap: '0',
+      pairMcapUsd: '0',
+      pairMcapUsdInitial: '7',
+    })
+    expect(calcMarketCapFromResponse(s4)).toBe(7)
+    const s5 = baseScanner({
+      currentMcap: '0',
+      initialMcap: '0',
+      pairMcapUsd: '0',
+      pairMcapUsdInitial: '0',
+    })
+    expect(calcMarketCapFromResponse(s5)).toBe(0)
   })
-  assert.equal(calcMarketCapFromResponse(s1), 5)
-  const s2 = baseScanner({
-    currentMcap: '100',
-    initialMcap: '5',
-    pairMcapUsd: '3',
-    pairMcapUsdInitial: '2',
-  })
-  assert.equal(calcMarketCapFromResponse(s2), 100)
-  const s3 = baseScanner({
-    currentMcap: '0',
-    initialMcap: '0',
-    pairMcapUsd: '3.14',
-    pairMcapUsdInitial: '2',
-  })
-  assert.equal(calcMarketCapFromResponse(s3), 3.14)
-  const s4 = baseScanner({
-    currentMcap: '0',
-    initialMcap: '0',
-    pairMcapUsd: '0',
-    pairMcapUsdInitial: '7',
-  })
-  assert.equal(calcMarketCapFromResponse(s4), 7)
-  const s5 = baseScanner({
-    currentMcap: '0',
-    initialMcap: '0',
-    pairMcapUsd: '0',
-    pairMcapUsdInitial: '0',
-  })
-  assert.equal(calcMarketCapFromResponse(s5), 0)
-})
 
-test('mapRESTScannerResultToToken maps core fields correctly', () => {
-  const s = baseScanner({
-    currentMcap: '0',
-    initialMcap: '0',
-    pairMcapUsd: '42',
-    price: '1.5',
-    buys: 10,
-    sells: 5,
+  it('mapRESTScannerResultToToken maps core fields correctly', () => {
+    const s = baseScanner({
+      currentMcap: '0',
+      initialMcap: '0',
+      pairMcapUsd: '42',
+      price: '1.5',
+      buys: 10,
+      sells: 5,
+    })
+    const t = mapRESTScannerResultToToken(s)
+    expect(t.id).toBe('0xPAIR')
+    expect(t.tokenName).toBe('My Token')
+    expect(t.tokenSymbol).toBe('MTK')
+    expect(t.tokenAddress).toBe('0xTOKEN')
+    expect(t.pairAddress).toBe('0xPAIR')
+    expect(t.chain).toBe('ETH')
+    expect(t.exchange).toBe('0xROUTER')
+    expect(t.priceUsd).toBe(1.5)
+    expect(t.volumeUsd).toBe(9999.5)
+    expect(t.mcap).toBe(42)
+    expect(t.priceChangePcs).toEqual({ '5m': 0.5, '1h': 1.1, '6h': 0.9, '24h': 2.2 })
+    expect(t.transactions).toEqual({ buys: 10, sells: 5 })
+    expect(t.audit).toEqual({
+      mintable: false,
+      freezable: true,
+      honeypot: false,
+      contractVerified: true,
+    })
+    expect(t.tokenCreatedTimestamp.toISOString()).toBe(s.age)
+    expect(t.liquidity).toEqual({ current: 12345.67, changePc: 3.3 })
   })
-  const t = mapRESTScannerResultToToken(s)
-  assert.equal(t.id, '0xPAIR')
-  assert.equal(t.tokenName, 'My Token')
-  assert.equal(t.tokenSymbol, 'MTK')
-  assert.equal(t.tokenAddress, '0xTOKEN')
-  assert.equal(t.pairAddress, '0xPAIR')
-  assert.equal(t.chain, 'ETH')
-  assert.equal(t.exchange, '0xROUTER')
-  assert.equal(t.priceUsd, 1.5)
-  assert.equal(t.volumeUsd, 9999.5)
-  assert.equal(t.mcap, 42)
-  assert.deepEqual(t.priceChangePcs, { '5m': 0.5, '1h': 1.1, '6h': 0.9, '24h': 2.2 })
-  assert.deepEqual(t.transactions, { buys: 10, sells: 5 })
-  assert.deepEqual(t.audit, {
-    mintable: false,
-    freezable: true,
-    honeypot: false,
-    contractVerified: true,
-  })
-  assert.equal(t.tokenCreatedTimestamp.toISOString(), s.age)
-  assert.deepEqual(t.liquidity, { current: 12345.67, changePc: 3.3 })
-})
 
-test('applyTickToToken uses latest non-outlier swap and updates price, mcap, volume and tx counts', () => {
-  const s = baseScanner({ price: '1.0' })
-  const token = mapRESTScannerResultToToken(s)
-  const swaps = [
-    {
-      timestamp: '1',
-      addressTo: '',
-      addressFrom: '',
+  it('applyTickToToken uses latest non-outlier swap and updates price, mcap, volume and tx counts', () => {
+    const s = baseScanner({ price: '1.0' })
+    const token = mapRESTScannerResultToToken(s)
+    const swaps = [
+      {
+        timestamp: '1',
+        addressTo: '',
+        addressFrom: '',
+        token0Address: '0xWETH',
+        amountToken0: '1',
+        amountToken1: '100',
+        priceToken0Usd: '3000',
+        priceToken1Usd: '1.1',
+        tokenInAddress: '0xTOKEN',
+        isOutlier: true,
+      },
+      {
+        timestamp: '2',
+        addressTo: '',
+        addressFrom: '',
+        token0Address: '0xWETH',
+        amountToken0: '1',
+        amountToken1: '100',
+        priceToken0Usd: '3000',
+        priceToken1Usd: '1.2',
+        tokenInAddress: '0xWETH',
+        isOutlier: false,
+      },
+      {
+        timestamp: '3',
+        addressTo: '',
+        addressFrom: '',
+        token0Address: '0xWETH',
+        amountToken0: '1',
+        amountToken1: '50',
+        priceToken0Usd: '3000',
+        priceToken1Usd: '1.3',
+        tokenInAddress: '0xTOKEN',
+        isOutlier: false,
+      },
+    ]
+    const updated = applyTickToToken(token, swaps, {
+      totalSupply: 1000000,
       token0Address: '0xWETH',
-      amountToken0: '1',
-      amountToken1: '100',
-      priceToken0Usd: '3000',
-      priceToken1Usd: '1.1',
-      tokenInAddress: '0xTOKEN',
-      isOutlier: true,
-    },
-    {
-      timestamp: '2',
-      addressTo: '',
-      addressFrom: '',
-      token0Address: '0xWETH',
-      amountToken0: '1',
-      amountToken1: '100',
-      priceToken0Usd: '3000',
-      priceToken1Usd: '1.2',
-      tokenInAddress: '0xWETH',
-      isOutlier: false,
-    },
-    {
-      timestamp: '3',
-      addressTo: '',
-      addressFrom: '',
-      token0Address: '0xWETH',
-      amountToken0: '1',
-      amountToken1: '50',
-      priceToken0Usd: '3000',
-      priceToken1Usd: '1.3',
-      tokenInAddress: '0xTOKEN',
-      isOutlier: false,
-    },
-  ]
-  const updated = applyTickToToken(token, swaps, {
-    totalSupply: 1000000,
-    token0Address: '0xWETH',
-    token1Address: '0xTOKEN',
+      token1Address: '0xTOKEN',
+    })
+    // latest non-outlier is the last one (price 1.3)
+    expect(updated.priceUsd).toBe(1.3)
+    expect(updated.mcap).toBe(1300000)
+    // volume delta = sum(|amountToken1| * price1Usd) for non-outliers: 100*1.2 + 50*1.3 = 120 + 65 = 185
+    expect(Math.round((updated.volumeUsd - token.volumeUsd) * 1000) / 1000).toBe(185)
+    // buys: tokenIn === token0 (0xWETH) => 1; sells: tokenIn === token1 => 1
+    expect(updated.transactions.buys - token.transactions.buys).toBe(1)
+    expect(updated.transactions.sells - token.transactions.sells).toBe(1)
   })
-  // latest non-outlier is the last one (price 1.3)
-  assert.equal(updated.priceUsd, 1.3)
-  assert.equal(updated.mcap, 1300000)
-  // volume delta = sum(|amountToken1| * price1Usd) for non-outliers: 100*1.2 + 50*1.3 = 120 + 65 = 185
-  assert.equal(Math.round((updated.volumeUsd - token.volumeUsd) * 1000) / 1000, 185)
-  // buys: tokenIn === token0 (0xWETH) => 1; sells: tokenIn === token1 => 1
-  assert.equal(updated.transactions.buys - token.transactions.buys, 1)
-  assert.equal(updated.transactions.sells - token.transactions.sells, 1)
 })

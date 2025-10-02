@@ -1,5 +1,4 @@
-import test from 'node:test'
-import assert from 'node:assert/strict'
+import { describe, it, expect } from 'vitest'
 import { tokensReducer, initialState, actions } from '../src/tokens.reducer.js'
 
 function mkScanner(overrides = {}) {
@@ -61,97 +60,99 @@ function mkScanner(overrides = {}) {
   }
 }
 
-test('scanner/pairs ingests page and preserves live-updated price/mcap on refresh', () => {
-  const page1 = [mkScanner()]
-  let state = tokensReducer(initialState, actions.scannerPairs(1, page1))
-  const id = '0xPAIR'
-  // simulate live update
-  const updated = { ...state.byId[id], priceUsd: 1.5, mcap: 1500000 }
-  state = { ...state, byId: { ...state.byId, [id]: updated } }
-  // refresh with new scanner data (price=1.0) should preserve 1.5
-  state = tokensReducer(state, actions.scannerPairs(1, page1))
-  assert.equal(state.byId[id].priceUsd, 1.5)
-  assert.equal(state.pages[1][0], id)
-})
+describe('tokens.reducer', () => {
+  it('scanner/pairs ingests page and preserves live-updated price/mcap on refresh', () => {
+    const page1 = [mkScanner()]
+    let state = tokensReducer(initialState, actions.scannerPairs(1, page1))
+    const id = '0xPAIR'
+    // simulate live update
+    const updated = { ...state.byId[id], priceUsd: 1.5, mcap: 1500000 }
+    state = { ...state, byId: { ...state.byId, [id]: updated } }
+    // refresh with new scanner data (price=1.0) should preserve 1.5
+    state = tokensReducer(state, actions.scannerPairs(1, page1))
+    expect(state.byId[id].priceUsd).toEqual(1.5)
+    expect(state.pages[1][0]).toEqual(id)
+  })
 
-test('pair/tick updates price, mcap, volume and persists token0Address meta', () => {
-  const page1 = [mkScanner({ price: '1.0' })]
-  let state = tokensReducer(initialState, actions.scannerPairs(1, page1))
-  const swaps = [
-    {
-      timestamp: '1',
-      addressTo: '',
-      addressFrom: '',
-      token0Address: '0xWETH',
-      amountToken0: '1',
-      amountToken1: '100',
-      priceToken0Usd: '3000',
-      priceToken1Usd: '1.2',
-      tokenInAddress: '0xWETH',
-      isOutlier: false,
-    },
-    {
-      timestamp: '2',
-      addressTo: '',
-      addressFrom: '',
-      token0Address: '0xWETH',
-      amountToken0: '1',
-      amountToken1: '50',
-      priceToken0Usd: '3000',
-      priceToken1Usd: '1.3',
-      tokenInAddress: '0xTOKEN',
-      isOutlier: false,
-    },
-  ]
-  state = tokensReducer(
-    state,
-    actions.tick({ pair: '0xPAIR', token: '0xTOKEN', chain: 'ETH' }, swaps),
-  )
-  const t = state.byId['0xPAIR']
-  assert.equal(t.priceUsd, 1.3)
-  assert.ok(state.meta['0xPAIR'].token0Address === '0xWETH')
-  // README compliance: mcap recalculated as totalSupply * newPrice
-  const totalSupply = parseFloat(page1[0].token1TotalSupplyFormatted)
-  assert.equal(t.mcap, totalSupply * 1.3)
-  // Volume increased based on non-outlier swaps
-  assert.ok(t.volumeUsd > 0)
-})
+  it('pair/tick updates price, mcap, volume and persists token0Address meta', () => {
+    const page1 = [mkScanner({ price: '1.0' })]
+    let state = tokensReducer(initialState, actions.scannerPairs(1, page1))
+    const swaps = [
+      {
+        timestamp: '1',
+        addressTo: '',
+        addressFrom: '',
+        token0Address: '0xWETH',
+        amountToken0: '1',
+        amountToken1: '100',
+        priceToken0Usd: '3000',
+        priceToken1Usd: '1.2',
+        tokenInAddress: '0xWETH',
+        isOutlier: false,
+      },
+      {
+        timestamp: '2',
+        addressTo: '',
+        addressFrom: '',
+        token0Address: '0xWETH',
+        amountToken0: '1',
+        amountToken1: '50',
+        priceToken0Usd: '3000',
+        priceToken1Usd: '1.3',
+        tokenInAddress: '0xTOKEN',
+        isOutlier: false,
+      },
+    ]
+    state = tokensReducer(
+      state,
+      actions.tick({ pair: '0xPAIR', token: '0xTOKEN', chain: 'ETH' }, swaps),
+    )
+    const t = state.byId['0xPAIR']
+    expect(t.priceUsd).toEqual(1.3)
+    expect(state.meta['0xPAIR'].token0Address).toEqual('0xWETH')
+    // README compliance: mcap recalculated as totalSupply * newPrice
+    const totalSupply = parseFloat(page1[0].token1TotalSupplyFormatted)
+    expect(t.mcap).toEqual(totalSupply * 1.3)
+    // Volume increased based on non-outlier swaps
+    expect(t.volumeUsd).toBeGreaterThan(0)
+  })
 
-test('pair/stats merges audit flags per README mapping', () => {
-  const page1 = [mkScanner()]
-  let state = tokensReducer(initialState, actions.scannerPairs(1, page1))
-  const msg = {
-    pair: {
-      pairAddress: '0xPAIR',
-      isVerified: true,
-      token1IsHoneypot: true,
-      mintAuthorityRenounced: false,
-      freezeAuthorityRenounced: true,
-      linkDiscord: 'https://discord.gg/abc',
-      linkTelegram: 'https://t.me/abc',
-      linkTwitter: 'https://x.com/abc',
-      linkWebsite: 'https://example.com',
-      dexPaid: true,
-    },
-    pairStats: {},
-    migrationProgress: '42',
-    callCount: 1,
-  }
-  state = tokensReducer(state, actions.pairStats(msg))
-  const t = state.byId['0xPAIR']
-  const a = t.audit
-  // README: honeypot := !token1IsHoneypot
-  assert.equal(a.honeypot, false)
-  assert.equal(a.contractVerified, true)
-  // README: mintable := mintAuthorityRenounced; freezable := freezeAuthorityRenounced
-  assert.equal(a.mintable, false)
-  assert.equal(a.freezable, true)
-  // Links and dexPaid
-  assert.equal(a.linkDiscord, 'https://discord.gg/abc')
-  assert.equal(a.linkTelegram, 'https://t.me/abc')
-  assert.equal(a.linkTwitter, 'https://x.com/abc')
-  assert.equal(a.linkWebsite, 'https://example.com')
-  assert.equal(a.dexPaid, true)
-  // migrationPc numeric
-  assert.equal(t.migrationPc, 42)
+  it('pair/stats merges audit flags per README mapping', () => {
+    const page1 = [mkScanner()]
+    let state = tokensReducer(initialState, actions.scannerPairs(1, page1))
+    const msg = {
+      pair: {
+        pairAddress: '0xPAIR',
+        isVerified: true,
+        token1IsHoneypot: true,
+        mintAuthorityRenounced: false,
+        freezeAuthorityRenounced: true,
+        linkDiscord: 'https://discord.gg/abc',
+        linkTelegram: 'https://t.me/abc',
+        linkTwitter: 'https://x.com/abc',
+        linkWebsite: 'https://example.com',
+        dexPaid: true,
+      },
+      pairStats: {},
+      migrationProgress: '42',
+      callCount: 1,
+    }
+    state = tokensReducer(state, actions.pairStats(msg))
+    const t = state.byId['0xPAIR']
+    const a = t.audit
+    // README: honeypot := !token1IsHoneypot
+    expect(a.honeypot).toEqual(false)
+    expect(a.contractVerified).toEqual(true)
+    // README: mintable := mintAuthorityRenounced; freezable := freezeAuthorityRenounced
+    expect(a.mintable).toEqual(false)
+    expect(a.freezable).toEqual(true)
+    // Links and dexPaid
+    expect(a.linkDiscord).toEqual('https://discord.gg/abc')
+    expect(a.linkTelegram).toEqual('https://t.me/abc')
+    expect(a.linkTwitter).toEqual('https://x.com/abc')
+    expect(a.linkWebsite).toEqual('https://example.com')
+    expect(a.dexPaid).toEqual(true)
+    // migrationPc numeric
+    expect(t.migrationPc).toEqual(42)
+  })
 })

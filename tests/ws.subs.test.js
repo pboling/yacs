@@ -1,59 +1,58 @@
-import test from 'node:test'
-import assert from 'node:assert/strict'
+import { describe, it, expect } from 'vitest';
+import { computePairPayloads } from '../src/ws.subs.js';
 
-import { computePairPayloads } from '../src/ws.subs.js'
+describe('ws.subs: computePairPayloads', () => {
+  it('emits SupportedChainName chain variants and deduplicates', () => {
+    const items = [
+      {
+        pairAddress: '0xPAIR1',
+        token1Address: '0xTOKEN1',
+        chainId: 1, // ETH
+      },
+      {
+        pairAddress: '0xpair1', // same pair/token differing case should still be treated the same at consumer layer
+        token1Address: '0xTOKEN1',
+        chainId: '1',
+      },
+      {
+        pairAddress: '0xPAIR2',
+        token1Address: '0xTOKEN2',
+        chainId: 56, // BSC
+      },
+      {
+        pairAddress: '0xPAIR3',
+        token1Address: '0xTOKEN3',
+        chainId: 8453, // BASE
+      },
+      {
+        pairAddress: '0xPAIR4',
+        token1Address: '0xTOKEN4',
+        chainId: 900, // SOL
+      },
+      // invalid rows should be ignored
+      { pairAddress: '0xBAD', token1Address: '0xTOKEN', chainId: 'not-a-number' },
+      { pairAddress: null, token1Address: '0xTOKEN', chainId: 1 },
+      { pairAddress: '0xPAIR', token1Address: null, chainId: 1 },
+      null,
+      42,
+    ];
 
-test('ws.subs: computePairPayloads emits SupportedChainName chain variants and deduplicates', () => {
-  const items = [
-    {
-      pairAddress: '0xPAIR1',
-      token1Address: '0xTOKEN1',
-      chainId: 1, // ETH
-    },
-    {
-      pairAddress: '0xpair1', // same pair/token differing case should still be treated the same at consumer layer
-      token1Address: '0xTOKEN1',
-      chainId: '1',
-    },
-    {
-      pairAddress: '0xPAIR2',
-      token1Address: '0xTOKEN2',
-      chainId: 56, // BSC
-    },
-    {
-      pairAddress: '0xPAIR3',
-      token1Address: '0xTOKEN3',
-      chainId: 8453, // BASE
-    },
-    {
-      pairAddress: '0xPAIR4',
-      token1Address: '0xTOKEN4',
-      chainId: 900, // SOL
-    },
-    // invalid rows should be ignored
-    { pairAddress: '0xBAD', token1Address: '0xTOKEN', chainId: 'not-a-number' },
-    { pairAddress: null, token1Address: '0xTOKEN', chainId: 1 },
-    { pairAddress: '0xPAIR', token1Address: null, chainId: 1 },
-    null,
-    42,
-  ]
+    const out = computePairPayloads(items);
+    const keys = out.map((o) => `${o.pair}|${o.token}|${o.chain}`);
 
-  const out = computePairPayloads(items)
-  const keys = out.map((o) => `${o.pair}|${o.token}|${o.chain}`)
+    // Ensure only SupportedChainName exists per row
+    expect(keys.includes('0xPAIR1|0xTOKEN1|ETH')).toBe(true);
+    expect(keys.includes('0xPAIR2|0xTOKEN2|BSC')).toBe(true);
+    expect(keys.includes('0xPAIR3|0xTOKEN3|BASE')).toBe(true);
+    expect(keys.includes('0xPAIR4|0xTOKEN4|SOL')).toBe(true);
 
-  // Ensure only SupportedChainName exists per row
-  assert.ok(keys.includes('0xPAIR1|0xTOKEN1|ETH'))
-  assert.ok(keys.includes('0xPAIR2|0xTOKEN2|BSC'))
-  assert.ok(keys.includes('0xPAIR3|0xTOKEN3|BASE'))
-  assert.ok(keys.includes('0xPAIR4|0xTOKEN4|SOL'))
+    // Dedupe: the duplicate of pair1 should not create extra entries beyond a single variant
+    const pair1Variants = keys.filter((k) => k.startsWith('0xPAIR1|0xTOKEN1|'));
+    expect(pair1Variants.length).toBe(1);
 
-  // Dedupe: the duplicate of pair1 should not create extra entries beyond a single variant
-  const pair1Variants = keys.filter((k) => k.startsWith('0xPAIR1|0xTOKEN1|'))
-  assert.equal(pair1Variants.length, 1)
-
-  // No invalid entries should leak
-  assert.equal(
-    keys.some((k) => k.includes('not-a-number')),
-    false,
-  )
-})
+    // No invalid entries should leak
+    expect(
+      keys.some((k) => k.includes('not-a-number')),
+    ).toBe(false);
+  });
+});
