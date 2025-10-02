@@ -15,6 +15,7 @@
     "lint:ci:fix": "eslint . --config eslint.ci.config.js --fix --max-warnings=0",
     "preview": "vite preview",
     "dev:serve": "concurrently -k -s first -n server,frontend -c blue,green \"pnpm run server\" \"pnpm run dev\"",
+    "dev:serve:local": "export VITE_API_BASE=\"http://localhost:3001\"\nexport VITE_WS_URL=\"ws://localhost:3001/ws\"\nexport VITE_DISABLE_WS=0 && export TEST_FAST=1 && pnpm dev:serve",
     "test:unit": "vitest run",
     "test:unit:json": "vitest run --reporter=json --outputFile vitest-results.json",
     "test": "pnpm run test:unit",

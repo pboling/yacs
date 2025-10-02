@@ -317,19 +317,12 @@ export function attachWsServer(server) {
               const slowFactorStats = slowFactorByKey.get(key) ?? DEFAULT_SLOW_FACTOR
               const shouldSendStats = isStatsFast ? n % 2 === 0 : n % slowFactorStats === 0
               if (shouldSendStats) {
-                const ver = ((hash32(pairKey) + n) & 1) === 0
-                const hp = ((hash32(pairKey) ^ n) & 3) === 0
+                // Generate deterministic, varying stats for this tick and chain
+                const statsResponse = generateScannerResponse({ chain: chainIdToName(item.chainId) }, n)
+                const statsPayload = statsResponse.scannerPairs.map(mapToWsPair)
                 const stats = {
                   event: 'pair-stats',
-                  data: {
-                    pair: {
-                      pairAddress: item.pairAddress,
-                      token1IsHoneypot: hp,
-                      isVerified: ver,
-                      mintAuthorityRenounced: true,
-                      freezeAuthorityRenounced: true,
-                    },
-                  },
+                  data: statsPayload,
                 }
                 safeSend(ws, stats)
               }

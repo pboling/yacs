@@ -197,7 +197,7 @@ function loadSymbols() {
  * @param {Record<string, any>} params
  * @returns {{ page: number, totalPages: number, scannerPairs: any[] }}
  */
-export function generateScannerResponse(params = {}) {
+export function generateScannerResponse(params = {}, tick = 0) {
   const page = Number(params.page ?? 1) || 1
   const totalPages = 10
   const size = 50
@@ -285,8 +285,9 @@ export function generateScannerResponse(params = {}) {
     const pairAddress = mkAddress('PAIR', rnd)
     const token1Address = mkAddress('TKN', rnd)
 
-    const buys = Math.floor(rnd() * 500)
-    const sells = Math.floor(rnd() * 500)
+    // Use tick and symbolIndex to vary buys/sells deterministically
+    const buys = Math.floor(rnd() * 500 + ((tick + 1) * (symbolIndex + 1)) % 100)
+    const sells = Math.floor(rnd() * 500 + ((tick + 3) * (symbolIndex + 3)) % 100)
     const txns = buys + sells
 
     const item = {
@@ -294,10 +295,10 @@ export function generateScannerResponse(params = {}) {
       bundlerHoldings: toFixedStr(rnd() * 1000),
       buyFee: null,
       buys,
-      callCount: 1,
       chainId,
       contractRenounced: rnd() > 0.9,
       contractVerified: rnd() > 0.5,
+      callCount: i + 1,
       currentMcap: String(m1),
       devHoldings: toFixedStr(rnd() * 1000),
       dexPaid: rnd() > 0.8,
@@ -337,17 +338,17 @@ export function generateScannerResponse(params = {}) {
       reserves0Usd: toFixedStr(rnd() * 10_000),
       reserves1: toFixedStr(rnd() * 10_000),
       reserves1Usd: toFixedStr(rnd() * 10_000),
-      routerAddress: pick(routerMap[chosenChain] || routerMap.ETH, rnd),
+      routerAddress: String(pick(routerMap[chosenChain] || routerMap.ETH, rnd)),
       sellFee: null,
       sells,
       sniperHoldings: toFixedStr(rnd() * 1000),
       snipers: Math.floor(rnd() * 200),
       telegramLink: null,
-      token0Decimals,
+      token0Decimals: token0Decimals, // Ensure number
       token0Symbol: chosenChain === 'SOL' ? 'WSOL' : chosenChain === 'BSC' ? 'WBNB' : 'WETH',
       token1Address,
-      token1Decimals: String(token1Decimals),
-      token1ImageUri: null,
+      token1Decimals: String(token1Decimals), // Ensure string
+      token1ImageUri: null, // string/null/undefined
       token1Name,
       token1Symbol,
       token1TotalSupplyFormatted: String(token1Supply),

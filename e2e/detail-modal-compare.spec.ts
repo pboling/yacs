@@ -4,12 +4,44 @@ import type { Page } from '@playwright/test'
 
 type TableName = 'Trending Tokens' | 'New Tokens'
 
+// Find the table.tokens that logically belongs to the given section heading.
+async function findTableForHeading(page: Page, tableName: string) {
+  const tables = page.locator('table.tokens')
+  const count = await tables.count()
+  for (let i = 0; i < count; i++) {
+    const table = tables.nth(i)
+    const ok = await table.evaluate((tbl: Element, name: string) => {
+      function findPrevHeading(node: Element | null): string | null {
+        if (!node) return null
+        let sib = node.previousElementSibling
+        while (sib) {
+          // direct heading sibling
+          if (/^H[1-6]$/.test(sib.tagName)) return (sib.textContent || '').trim()
+          // check for nested heading inside wrapper
+          const h = sib.querySelector('h1,h2,h3,h4,h5,h6')
+          if (h) return (h.textContent || '').trim()
+          sib = sib.previousElementSibling
+        }
+        // move up and repeat
+        return node.parentElement ? findPrevHeading(node.parentElement) : null
+      }
+      const headingText = findPrevHeading(tbl)
+      if (!headingText) return false
+      // compare start of headingText with provided name (heading contains count)
+      return headingText.trim().toLowerCase().startsWith(name.toLowerCase())
+    }, tableName)
+    if (ok) return table
+  }
+  throw new Error(`table.tokens for heading "${tableName}" not found`)
+}
+
 async function firstSubscribedRowId(page: Page, table: TableName): Promise<string> {
   const heading = page.getByRole('heading', { name: table })
   await expect(heading).toBeVisible()
-  const tableEl = heading.locator('..').locator('table.tokens')
+  // Find the table.tokens logically associated with this heading.
+  const tableEl = await findTableForHeading(page, table)
   await expect(tableEl).toBeVisible()
-  const subscribedRow = tableEl.locator('tbody tr:has([aria-label="Subscribed"])').first()
+  const subscribedRow = tableEl.locator('tbody tr[data-row-state="subscribed"]').first()
   await expect(subscribedRow).toBeVisible()
   const rowId = (await subscribedRow.getAttribute('data-row-id')) ?? ''
   expect(rowId.length).toBeGreaterThan(0)
@@ -17,15 +49,15 @@ async function firstSubscribedRowId(page: Page, table: TableName): Promise<strin
 }
 
 async function openDetails(page: Page, table: TableName, rowId: string) {
-  const heading = page.getByRole('heading', { name: table })
-  const row = heading.locator('..').locator(`table.tokens tbody tr[data-row-id="${rowId}"]`)
+  const tableEl = await findTableForHeading(page, table)
+  const row = tableEl.locator(`tbody tr[data-row-id="${rowId}"]`)
   await expect(row).toBeVisible()
-  await row.getByRole('button', { name: 'Open details' }).click()
+  await row.getByTestId(`open-details-#1`).click()
 }
 
 async function pickCompareToken(page: Page) {
   // Focus the compare input and click the first option in the dropdown list
-  const input = page.getByPlaceholder('Search token name or symbol')
+  const input = page.getByTestId('compare-input')
   await input.click()
   // Wait for options to render (we expect at least one)
   const optionsContainer = input

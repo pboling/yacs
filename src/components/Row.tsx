@@ -384,6 +384,7 @@ const Row = memo(
             registerRow(el, t)
           }}
           className="token-row"
+          {...(getRowStatus?.(t)?.state ? { ['data-row-state']: getRowStatus(t)!.state } : {})}
           {...(idx === rowsLen - 1 ? ({ 'data-last-row': '1' } as Record<string, string>) : {})}
           {...(idx === Math.max(0, rowsLen - 10)
             ? ({ 'data-scroll-trigger': '1' } as Record<string, string>)
