@@ -47,7 +47,28 @@ function getTiming() {
  * @returns {WebSocketServer}
  */
 export function attachWsServer(server) {
+  // Log incoming upgrade attempts (diagnostic) to help trace ECONNRESET from proxied connections
+  try {
+    server.on('upgrade', (req, socket, head) => {
+      try {
+        const url = req.url || '<no-url>'
+        const addr = socket.remoteAddress || '<no-addr>'
+        console.log(`[server] HTTP upgrade request for ${url} from ${addr}`)
+      } catch (e) {
+        console.log('[server] upgrade event (log failed)')
+      }
+    })
+  } catch {
+    // ignore if server doesn't support events
+  }
+
   const wss = new WebSocketServer({ server, path: '/ws' })
+
+  // Provide additional diagnostics for connection lifecycle
+  wss.on('listening', () => console.log('[server] wss listening attached'))
+  wss.on('error', (err) => {
+    try { console.error('[server] wss error:', err && err.stack ? err.stack : err) } catch {}
+  })
 
   // Proactively close WS server when HTTP server.close() is invoked to avoid hanging tests.
   try {
@@ -55,26 +76,14 @@ export function attachWsServer(server) {
     server.close = (...args) => {
       try {
         for (const client of wss.clients) {
-          try {
-            client.terminate()
-          } catch {
-            /* ignore */
-          }
+          try { client.terminate() } catch {}
         }
-        try {
-          wss.close()
-        } catch {
-          /* ignore */
-        }
-      } catch {
-        /* ignore */
-      }
+        try { wss.close() } catch {}
+      } catch {}
       // @ts-ignore - preserve callback signature
       return origClose(...args)
     }
-  } catch {
-    /* no-op */
-  }
+  } catch { /* no-op */ }
 
   // Ensure the WS server is closed when the underlying HTTP server closes,
   // so Node's test runner can exit cleanly without lingering handles.
@@ -83,23 +92,21 @@ export function attachWsServer(server) {
       try {
         // Proactively terminate all clients to ensure their timers are cleared and close events fire
         for (const client of wss.clients) {
-          try {
-            client.terminate()
-          } catch {
-            /* ignore */
-          }
+          try { client.terminate() } catch {}
         }
         wss.close()
-      } catch {
-        /* ignore close errors */
-      }
+      } catch {}
     })
-  } catch {
-    /* no-op */
-  }
+  } catch { /* no-op */ }
 
   // Track simple subscriptions per socket
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req) => {
+    const remote = (req && (req.socket && (req.socket.remoteAddress || req.socket.remoteFamily))) || '<unknown>'
+    console.log(`[server] ws connection accepted from ${remote} (url=${req && req.url})`)
+
+    try { ws.on('error', (err) => { console.warn('[server] ws socket error:', err && err.stack ? err.stack : err) }) } catch {}
+    try { ws.on('close', (code, reason) => { console.log('[server] ws socket closed:', code, reason && reason.toString ? reason.toString() : reason) }) } catch {}
+
     // Avoid unhandled error events keeping the process alive in tests
     try {
       ws.on('error', () => {})
@@ -121,7 +128,7 @@ export function attachWsServer(server) {
     const itemsByKey = new Map()
     const BASE_SEED = getBaseSeed()
     // Resolve timing for this connection (reads env at runtime)
-    const { TICK_INTERVAL_MS, MAX_STAGGER_MS, DEFAULT_SLOW_FACTOR } = getTiming()
+    const { FAST_TIMING, TICK_INTERVAL_MS, MAX_STAGGER_MS, DEFAULT_SLOW_FACTOR } = getTiming()
     // Default slow factor fallback; overridden per-key using dynamic ratio to total rows
     /** @type {Map<string, number>} */
     const slowFactorByKey = new Map()
@@ -317,14 +324,21 @@ export function attachWsServer(server) {
               const slowFactorStats = slowFactorByKey.get(key) ?? DEFAULT_SLOW_FACTOR
               const shouldSendStats = isStatsFast ? n % 2 === 0 : n % slowFactorStats === 0
               if (shouldSendStats) {
-                // Generate deterministic, varying stats for this tick and chain
-                const statsResponse = generateScannerResponse({ chain: chainIdToName(item.chainId) }, n)
+                // Generate deterministic, varying stats for this tick and chain.
+                // When FAST_TIMING is enabled, accelerate the effective tick so stats
+                // values change more frequently for tests.
+                const tickForStats = FAST_TIMING ? n * 4 : n
+                const statsResponse = generateScannerResponse({ chain: chainIdToName(item.chainId) }, tickForStats)
                 const statsPayload = statsResponse.scannerPairs.map(mapToWsPair)
-                const stats = {
-                  event: 'pair-stats',
-                  data: statsPayload,
+                // Emit pair-stats as individual messages matching the app/fixture shape:
+                // { event: 'pair-stats', data: { pair: { ... } } }
+                for (const sp of statsPayload) {
+                  try {
+                    safeSend(ws, { event: 'pair-stats', data: { pair: sp } })
+                  } catch {
+                    /* ignore send errors per original behavior */
+                  }
                 }
-                safeSend(ws, stats)
               }
             }
           }

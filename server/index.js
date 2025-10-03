@@ -9,8 +9,37 @@ const HOST = process.env.HOST || '0.0.0.0'
 
 const app = createApp()
 
+// Create server and attach listeners to surface errors (EADDRINUSE) instead of
+// letting them throw as unhandled 'error' events which crashed the process in logs.
 const server = app.listen(PORT, HOST, () => {
   console.log(`[server] listening on http://${HOST}:${PORT}`)
+})
+
+// Attach a listener for server 'error' to avoid unhandled exceptions (seen as EADDRINUSE)
+server.on('error', (err) => {
+  try {
+    console.error('[server] HTTP server error:', err && err.stack ? err.stack : err)
+    if (err && err.code === 'EADDRINUSE') {
+      console.error(`[server] port ${PORT} already in use. If another instance is running, stop it or set PORT to a different value.`)
+    }
+  } catch {
+    // ignore logging errors
+  }
+  // In dev, crash to surface to concurrently runner (same behavior as before) but with clear message
+  try { process.exit(1) } catch { /* no-op */ }
+})
+
+// Add handler to avoid raw socket errors bubbling as unhandled exceptions
+server.on('clientError', (err, socket) => {
+  try {
+    console.warn('[server] clientError:', err && err.stack ? err.stack : err)
+    // Gracefully close socket if possible
+    if (socket && !socket.destroyed) {
+      try { socket.end('HTTP/1.1 400 Bad Request\r\n\r\n') } catch {}
+    }
+  } catch {
+    /* ignore */
+  }
 })
 
 // Attach WebSocket server for dev usage

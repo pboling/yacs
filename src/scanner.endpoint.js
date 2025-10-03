@@ -286,8 +286,36 @@ export function generateScannerResponse(params = {}, tick = 0) {
     const token1Address = mkAddress('TKN', rnd)
 
     // Use tick and symbolIndex to vary buys/sells deterministically
-    const buys = Math.floor(rnd() * 500 + ((tick + 1) * (symbolIndex + 1)) % 100)
-    const sells = Math.floor(rnd() * 500 + ((tick + 3) * (symbolIndex + 3)) % 100)
+    // Ensure buys/sells are monotonic with respect to `tick` by deriving a
+    // stable per-item base and a deterministic per-tick growth rate.
+    // For TEST_FAST=1 increase growth so tests see updates frequently.
+    const FAST_TIMING = process && process.env && process.env.TEST_FAST === '1'
+    // Derive two separate per-item seeds so buys and sells are uncorrelated.
+    const perSeedA = mixSeeds(seed, (symbolIndex + 0x9e3779b9) >>> 0)
+    const perSeedB = mixSeeds(seed, (symbolIndex ^ 0xabcdef01) >>> 0)
+    const prA = mulberry32(perSeedA)
+    const prB = mulberry32(perSeedB)
+
+    // Base counts (stable per item)
+    const baseBuys = Math.floor(prA() * 300) + Math.floor(prA() * 50) // 0..349
+    const baseSells = Math.floor(prB() * 300) + Math.floor(prB() * 50) // 0..349
+
+    // Growth rates per tick (ensure >=1). Make rates larger under FAST_TIMING.
+    const rateBuys = (FAST_TIMING ? 3 : 1) + Math.floor(prA() * (FAST_TIMING ? 6 : 3)) // FAST: 3..8, else 1..3
+    const rateSells = (FAST_TIMING ? 3 : 1) + Math.floor(prB() * (FAST_TIMING ? 6 : 3)) // FAST: 3..8, else 1..3
+
+    // Additional monotonic per-tick fractional growth (scaled by a deterministic factor)
+    // This produces more variance per tick while preserving monotonicity.
+    const extraRateBuys = (FAST_TIMING ? 0.8 : 0.15) * (prA() * 2 + 0.2)
+    const extraRateSells = (FAST_TIMING ? 0.8 : 0.15) * (prB() * 2 + 0.2)
+
+    // Small deterministic noise independent of tick
+    const noiseBuys = Math.floor(prA() * 5) // 0..4
+    const noiseSells = Math.floor(prB() * 5) // 0..4
+
+    const t = Math.floor(Number(tick) || 0)
+    const buys = baseBuys + t * rateBuys + Math.floor(t * extraRateBuys) + noiseBuys
+    const sells = baseSells + t * rateSells + Math.floor(t * extraRateSells) + noiseSells
     const txns = buys + sells
 
     const item = {
