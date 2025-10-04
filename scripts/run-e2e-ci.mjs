@@ -7,7 +7,21 @@ import fs from 'fs'
 
 const SERVER_CMD = 'pnpm run dev:serve:local'
 const SCANNER_URL = process.env.SCAN_URL || 'http://localhost:3001/scanner'
-const TEST_CMD = 'TEST_FAST=1 npx playwright test e2e/ws-updates-single.spec.ts --workers=1 --reporter=list'
+// Allow overriding the exact test files via TEST_FILES environment variable.
+// TEST_FILES may be a comma- or space-separated list of paths. Default to both
+// existing e2e test files in this repo.
+const DEFAULT_TEST_FILES = ['e2e/ws-updates.spec.ts', 'e2e/detail-modal-compare.spec.ts']
+const TEST_FILES = process.env.TEST_FILES && String(process.env.TEST_FILES).trim()
+  ? String(process.env.TEST_FILES).split(/\s*(?:,|\s)\s*/).filter(Boolean)
+  : DEFAULT_TEST_FILES
+
+// We'll invoke Playwright directly via spawn with an argv array so we don't
+// need to build a shell command or worry about quoting. We run Playwright
+// with TEST_FAST unset in its process environment (so the test runner's
+// behavior matches a manual `npx playwright test ...` run) while keeping the
+// server started by this helper in TEST_FAST mode (if desired).
+//
+const PLAYWRIGHT_ARGS_BASE = ['playwright', 'test', ...TEST_FILES, '--workers=1', '--reporter=list']
 const START_TIMEOUT_MS = 30000
 const POLL_INTERVAL_MS = 250
 
@@ -53,9 +67,15 @@ async function waitForScanner(url, timeoutMs = START_TIMEOUT_MS) {
 }
 
 function runTest() {
-  console.log('Running Playwright test: %s', TEST_CMD)
+  const args = PLAYWRIGHT_ARGS_BASE.slice()
+  console.log('Running Playwright via:', 'npx', args.join(' '))
   return new Promise((resolve) => {
-    const t = spawn('sh', ['-lc', TEST_CMD], { stdio: 'inherit', shell: false })
+    // Build a controlled env for the Playwright process: copy current env,
+    // but remove TEST_FAST so Playwright runs without that override.
+    const env = { ...process.env }
+    if ('TEST_FAST' in env) delete env.TEST_FAST
+
+    const t = spawn('npx', args, { stdio: 'inherit', env })
     t.on('close', (code) => resolve(code ?? 1))
     t.on('error', (err) => { console.error('Test spawn error', err); resolve(2) })
   })
@@ -82,6 +102,23 @@ function teardownServer(child) {
       process.exit(2)
     }
 
+    // Pre-flight check: ensure each requested Playwright test file exists so we fail fast
+    const missing = TEST_FILES.filter((f) => !fs.existsSync(f))
+    if (missing.length) {
+      console.error('One or more Playwright test files were not found:')
+      for (const m of missing) console.error('  ' + m)
+      try {
+        const e2eFiles = fs.readdirSync('e2e').filter(f => f.endsWith('.ts') || f.endsWith('.spec.ts'))
+        console.error('Available e2e files:')
+        for (const f of e2eFiles) console.error('  ' + f)
+      } catch (e) {
+        // ignore directory read errors
+      }
+      teardownServer(serverChild)
+      process.exit(4)
+    }
+
+    console.log('Running tests:', TEST_FILES.join(', '))
     const code = await runTest()
     console.log('Playwright exit code:', code)
     teardownServer(serverChild)
@@ -92,4 +129,3 @@ function teardownServer(child) {
     process.exit(3)
   }
 })()
-
