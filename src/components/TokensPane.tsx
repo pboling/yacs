@@ -22,6 +22,7 @@ import { buildPairKey, buildTickKey } from '../utils/key_builder'
 import { dedupeByPairAddress } from '../utils/dedupeByPairAddress'
 import { filterRowsByTokenQuery } from '../utils/filteredCompareOptions.mjs'
 import { logCatch, debugLog } from '../utils/debug.mjs'
+import { getLocalStorageJSON, setLocalStorageJSON } from '../utils/localStorage'
 import {
   onSubscriptionLockChange,
   isSubscriptionLockActive,
@@ -138,23 +139,13 @@ export default function TokensPane({
   const DISABLED_LS_KEY = 'dex.disabledTokens.v1'
   // Load disabled set on mount
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(DISABLED_LS_KEY)
-      if (raw) {
-        const arr: unknown = JSON.parse(raw)
-        if (Array.isArray(arr)) disabledTokensRef.current = new Set(arr.map(String))
-      }
-    } catch {
-      /* no-op */
-    }
+    const arr = getLocalStorageJSON<string[]>(DISABLED_LS_KEY, [])
+    disabledTokensRef.current = new Set(arr.map(String))
   }, [])
+
   const persistDisabled = useCallback(() => {
-    try {
-      const arr = Array.from(disabledTokensRef.current)
-      localStorage.setItem(DISABLED_LS_KEY, JSON.stringify(arr))
-    } catch {
-      /* no-op */
-    }
+    const arr = Array.from(disabledTokensRef.current)
+    setLocalStorageJSON(DISABLED_LS_KEY, arr)
   }, [])
 
   const disabledKeyFor = (row: TokenRow): string | null => {

@@ -51,26 +51,19 @@ import { emitUpdate } from './updates.bus'
 import { UNSUBSCRIPTIONS_DISABLED } from './ws.mapper.js'
 import Toast from './components/Toast'
 import { isDebugEnabled } from './utils/debug.mjs'
+import { getCookie, setCookie } from './utils/cookie'
 
 // Theme allow-list and cookie helpers
 const THEME_ALLOW = ['cherry-sour', 'rocket-lake', 'legendary'] as const
 export type ThemeName = (typeof THEME_ALLOW)[number]
+
 function readThemeCookie(): ThemeName {
-  try {
-    const m = /(?:^|; )theme=([^;]+)/.exec(document.cookie)
-    const v = m?.[1] ? decodeURIComponent(m[1]) : 'cherry-sour'
-    return (THEME_ALLOW as readonly string[]).includes(v) ? (v as ThemeName) : 'cherry-sour'
-  } catch {
-    return 'cherry-sour'
-  }
+  const v = getCookie('theme', 'cherry-sour')
+  return (THEME_ALLOW as readonly string[]).includes(v) ? (v as ThemeName) : 'cherry-sour'
 }
+
 function writeThemeCookie(v: ThemeName) {
-  try {
-    document.cookie =
-      'theme=' + encodeURIComponent(v) + '; path=/; max-age=' + String(60 * 60 * 24 * 365)
-  } catch {
-    /* no-op */
-  }
+  setCookie('theme', v, { path: '/', maxAge: 60 * 60 * 24 * 365 })
 }
 
 import UpdateRate from './components/UpdateRate'

@@ -11,7 +11,7 @@ import {
   ArrowDownFromLine,
   Link as LinkIcon,
 } from 'lucide-react'
-import { formatAge } from '../helpers/format'
+import { formatAge, ellipsed } from '../helpers/format'
 import type { Token as TokenRow } from '../models/Token'
 import { onUpdateKey } from '../updates.bus'
 import { buildTickKey } from '../utils/key_builder'
@@ -31,11 +31,6 @@ export interface RowProps {
   registerRow: (el: HTMLTableRowElement | null, row: TokenRow) => void
 }
 
-function ellipsed(input: string, length = 5) {
-  if (length <= 0) return ''
-  if (input.length <= length) return input
-  return input.slice(0, Math.max(1, length - 1)) + '…'
-}
 
 const Row = memo(
   function Row({

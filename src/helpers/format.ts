@@ -18,12 +18,10 @@ export function formatAge(input: Date | number | string): string {
     ts = input
   } else if (typeof input === 'number') {
     ts = new Date(input)
-  } else if (typeof input === 'string') {
-    // Fallback: attempt to parse
+  } else {
+    // At this point TypeScript knows input is a string
     const d = new Date(input)
     ts = Number.isFinite(d.getTime()) ? d : new Date()
-  } else {
-    ts = new Date()
   }
   const now = Date.now()
   const diffMs = Math.max(0, now - ts.getTime())
@@ -62,4 +60,17 @@ export function formatAge(input: Date | number | string): string {
   // Years
   const years = diffMs / yearMs
   return years.toFixed(1) + 'y'
+}
+
+/**
+ * Truncate a string to a maximum length and append ellipsis (…) if truncated.
+ *
+ * @param input - The string to truncate
+ * @param length - Maximum length (default: 5)
+ * @returns Truncated string with ellipsis if needed
+ */
+export function ellipsed(input: string, length = 5): string {
+  if (length <= 0) return ''
+  if (input.length <= length) return input
+  return input.slice(0, Math.max(1, length - 1)) + '…'
 }

@@ -19,6 +19,8 @@
 // This approach allows developers to leverage the benefits of static typing for reliable code.
 // The flexibility of JavaScript allows creating mock objects and test data.
 
+import { toChainName } from './utils/chain.js'
+
 // Optional logger sink: in browser, a global hook can be provided by the UI console.
 // In tests/Node, this is a no-op.
 function __wsLog(kind, text) {
@@ -44,25 +46,6 @@ export function isAllowedOutgoingEvent(event) {
 }
 export function isAllowedIncomingEvent(event) {
   return IN_ALLOWED_EVENTS.has(String(event))
-}
-
-// Normalize chain to the symbol expected by WS API (ETH, BSC, BASE, SOL)
-function toChainName(input) {
-  const v = input == null ? '' : String(input).trim()
-  const up = v.toUpperCase()
-  if (up === 'ETH' || up === 'BSC' || up === 'BASE' || up === 'SOL') return up
-  switch (Number(v)) {
-    case 1:
-      return 'ETH'
-    case 56:
-      return 'BSC'
-    case 8453:
-      return 'BASE'
-    case 900:
-      return 'SOL'
-    default:
-      return up || 'ETH'
-  }
 }
 
 export function buildScannerSubscription(params) {

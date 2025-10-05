@@ -1,11 +1,16 @@
-// src/utils/chain.ts
-// Single source of truth for normalizing chain identifiers to numeric string IDs used by the backend.
-// Accepts common chain names (ETH, BSC, BASE, SOL) or numeric/string IDs and returns a string ID.
-export function toChainId(input: string | number | undefined): string {
+// src/utils/chain.js
+// JavaScript version for CommonJS/ESM compatibility
+// Mirrors chain.ts for JS modules that can't import .ts directly
+
+/**
+ * Convert chain identifier to numeric string ID.
+ * @param {string | number | undefined} input
+ * @returns {string}
+ */
+export function toChainId(input) {
   if (input == null) return '1'
   if (typeof input === 'number') return Number.isFinite(input) ? String(input) : '1'
-  // At this point, TypeScript narrows input to string
-  const s = input.toUpperCase().trim()
+  const s = String(input).toUpperCase().trim()
   if (s === 'ETH') return '1'
   if (s === 'BSC') return '56'
   if (s === 'BASE') return '8453'
@@ -15,16 +20,13 @@ export function toChainId(input: string | number | undefined): string {
 }
 
 /**
- * Convert chain ID (numeric or string) to human-readable chain name.
- * Returns uppercase chain symbol (ETH, BSC, BASE, SOL) or the input as-is if unknown.
- *
- * @param input - Chain ID (1, '1', 'ETH', etc.)
- * @returns Chain name (ETH, BSC, BASE, SOL) or stringified input
+ * Convert chain ID to human-readable chain name.
+ * @param {string | number | undefined} input
+ * @returns {string}
  */
-export function toChainName(input: string | number | undefined): string {
+export function toChainName(input) {
   if (input == null) return 'ETH'
 
-  // If it's already a known chain name, return it uppercase
   if (typeof input === 'string') {
     const upper = input.toUpperCase().trim()
     if (upper === 'ETH' || upper === 'BSC' || upper === 'BASE' || upper === 'SOL') {
@@ -32,7 +34,6 @@ export function toChainName(input: string | number | undefined): string {
     }
   }
 
-  // Convert to number and map
   const numericId = typeof input === 'number' ? input : Number(input)
 
   switch (numericId) {
@@ -48,3 +49,4 @@ export function toChainName(input: string | number | undefined): string {
       return String(input).toUpperCase()
   }
 }
+

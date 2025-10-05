@@ -8,6 +8,8 @@
 // subscriptions based on the scanner results.
 // Implemented in JS to keep runtime simple while TS consumers can narrow types.
 
+import { toChainName } from './utils/chain.js'
+
 /**
  * Compute unique { pair, token, chain } payloads from a list of items.
  * The function is defensive: it accepts any array and tries to extract
@@ -25,21 +27,6 @@ export function computePairPayloads(items) {
   const out = []
   const seen = new Set()
 
-  const idToName = (id) => {
-    switch (Number(id)) {
-      case 1:
-        return 'ETH'
-      case 56:
-        return 'BSC'
-      case 8453:
-        return 'BASE'
-      case 900:
-        return 'SOL'
-      default:
-        return String(id)
-    }
-  }
-
   for (const it of items) {
     if (!it || typeof it !== 'object') continue
     const pair = typeof it.pairAddress === 'string' ? it.pairAddress : undefined
@@ -52,7 +39,7 @@ export function computePairPayloads(items) {
           : undefined
     if (!pair || !token || chainIdNum == null || Number.isNaN(chainIdNum)) continue
 
-    const chain = idToName(chainIdNum)
+    const chain = toChainName(chainIdNum)
 
     // Case-insensitive de-dupe using lowercased addresses for the key
     const normKey = pair.toLowerCase() + '|' + token.toLowerCase() + '|' + chain
