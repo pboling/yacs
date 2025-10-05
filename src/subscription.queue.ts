@@ -17,6 +17,10 @@
 
 import { sendSubscribe, sendUnsubscribe, UNSUBSCRIPTIONS_DISABLED } from './ws.mapper.js'
 import { getDefaultInvisibleBaseLimit } from './subscription.limit.bus.js'
+import { 
+  isSubscriptionLockActive, 
+  getSubscriptionLockAllowedKeys 
+} from './subscription.lock.bus.js'
 import { debugLog } from './utils/debug.mjs'
 
 type Key = string // pair|token|chain
@@ -146,6 +150,23 @@ function unsubscribeKey(
   details?: Record<string, unknown>,
 ) {
   try {
+    // Check if subscription lock is active and this key is protected
+    if (isSubscriptionLockActive()) {
+      const allowedKeys = getSubscriptionLockAllowedKeys()
+      if (allowedKeys.includes(key)) {
+        try {
+          debugLog('[SubscriptionQueue] UNSUB BLOCKED by subscription lock', {
+            key,
+            reason,
+            details,
+            allowedKeys,
+            when: new Date().toISOString(),
+          })
+        } catch {}
+        return // Do NOT unsubscribe protected keys
+      }
+    }
+    
     lastUnsubscribedAt.set(key, Date.now())
     const { pair, token, chain } = splitKey(key)
     try {

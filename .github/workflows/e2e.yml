@@ -25,5 +25,7 @@ jobs:
           cache: 'pnpm'
       - name: Install dependencies
         run: pnpm install
+      - name: Install playwright
+        run: npx playwright install
       - name: e2e tests
         run: node scripts/run-e2e-ci.mjs
