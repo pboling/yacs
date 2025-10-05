@@ -151,7 +151,7 @@ describe('Pair-Stats Counter', () => {
   })
 
   it('should increment counter for pair-stats events', async () => {
-    const { container } = render(
+    render(
         <App />
     );
 
