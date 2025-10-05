@@ -23,12 +23,25 @@ class __MockResizeObserver {
   disconnect() {}
 }
 
+class __MockMutationObserver {
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  constructor(_cb?: MutationCallback) {}
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  observe(_target: Node, _options?: MutationObserverInit) {}
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  disconnect() {}
+  takeRecords(): MutationRecord[] { return [] }
+}
+
 // Install stubs only if not already provided by a test
 if (typeof (globalThis as any).IntersectionObserver === 'undefined') {
   ;(globalThis as any).IntersectionObserver = __MockIntersectionObserver as any
 }
 if (typeof (globalThis as any).ResizeObserver === 'undefined') {
   ;(globalThis as any).ResizeObserver = __MockResizeObserver as any
+}
+if (typeof (globalThis as any).MutationObserver === 'undefined') {
+  ;(globalThis as any).MutationObserver = __MockMutationObserver as any
 }
 
 // requestAnimationFrame / cancelAnimationFrame shims for JSDOM

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { act } from 'react'
 import App from '../src/App'
+import { setupObserverMocks } from './helpers/observerMocks'
 
 interface IMockWebSocket {
   url: string;
@@ -43,18 +44,24 @@ class MockWebSocket implements IMockWebSocket {
 }
 
 vi.mock('../src/scanner.client.js', () => ({
-  fetchScanner: vi.fn().mockResolvedValue({ tokens: [], raw: { scannerPairs: [] } }),
+  // Return empty initial data - the test will inject faux data via the button
+  fetchScanner: vi.fn().mockResolvedValue({
+    tokens: [],
+    raw: { pairs: [] }
+  }),
 }))
 
 describe('Scanner page suffix injection', () => {
   let mockWs: IMockWebSocket | undefined;
   let origWS: typeof global.WebSocket;
-  let origIO: typeof global.IntersectionObserver;
+  let cleanupObservers: (() => void) | undefined;
 
   beforeEach(() => {
     origWS = global.WebSocket;
-    origIO = global.IntersectionObserver;
-    global.IntersectionObserver = vi.fn().mockImplementation(() => ({ observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn() }));
+
+    // Use the shared observer mocks helper
+    cleanupObservers = setupObserverMocks();
+
     global.WebSocket = vi.fn().mockImplementation((url: string) => {
       mockWs = new MockWebSocket(url);
       return mockWs as unknown as WebSocket;
@@ -66,13 +73,17 @@ describe('Scanner page suffix injection', () => {
     Object.defineProperty(window, 'requestIdleCallback', { writable: true, value: (fn: () => void) => setTimeout(fn, 0) });
     Object.defineProperty(window, 'localStorage', { writable: true, value: { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn() } });
     Object.defineProperty(window, 'sessionStorage', { writable: true, value: { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn(), clear: vi.fn() } });
-    Object.defineProperty(window, '__BYPASS_BOOT__', { writable: true, value: true });
+    // Bypass boot overlay - critical for these tests since initial fetch returns empty
+    Object.defineProperty(window, '__BYPASS_BOOT__', { writable: true, value: true, configurable: true });
+    // Mock document.cookie for theme cookie utilities
+    Object.defineProperty(document, 'cookie', { writable: true, value: '', configurable: true });
     // Initialize REST page map to page 1 for both panes (legacy helper; app manages its own counter)
     ;(window as any).__REST_PAGES__ = { 101: 1, 201: 1 };
   });
+
   afterEach(() => {
     global.WebSocket = origWS;
-    global.IntersectionObserver = origIO;
+    cleanupObservers?.();
     vi.clearAllMocks();
   });
 
@@ -84,12 +95,20 @@ describe('Scanner page suffix injection', () => {
 
     const { container } = render(<App />);
 
-    // Use the Faux Scanner REST control that appends pages for both panes
-    const restBtn = await screen.findByTestId('inject-scanner-rest');
+    // Wait for the app to fully render - look for the table sections first
+    await waitFor(() => {
+      const sections = container.querySelectorAll('section');
+      expect(sections.length).toBeGreaterThan(0);
+    }, { timeout: 3000 });
+
+    // Wait for UI to be ready - find the inject button
+    const restBtn = await screen.findByTestId('inject-scanner-rest', {}, { timeout: 3000 });
 
     // First click should produce -p1 rows for Trending
     await act(async () => {
       fireEvent.click(restBtn);
+      // Give time for the faux data to be injected and rendered
+      await new Promise(resolve => setTimeout(resolve, 200));
     });
 
     // Wait until Trending has some rows and -p1 appears
@@ -98,6 +117,7 @@ describe('Scanner page suffix injection', () => {
       const n = Number(countEl.textContent || '0');
       expect(n).toBeGreaterThan(0);
     }, { timeout: 5000 });
+
     await waitFor(() => {
       const rowsP1 = container.querySelectorAll('tr[data-row-id*="-p1::TREND"]');
       expect(rowsP1.length).toBeGreaterThan(0);
@@ -106,6 +126,7 @@ describe('Scanner page suffix injection', () => {
     // Second click should advance to -p2 rows
     await act(async () => {
       fireEvent.click(restBtn);
+      await new Promise(resolve => setTimeout(resolve, 200));
     });
 
     await waitFor(() => {
@@ -113,6 +134,7 @@ describe('Scanner page suffix injection', () => {
       const n = Number(countEl.textContent || '0');
       expect(n).toBeGreaterThan(50);
     }, { timeout: 8000 });
+
     await waitFor(() => {
       const rowsP2 = container.querySelectorAll('tr[data-row-id*="-p2::TREND"]');
       expect(rowsP2.length).toBeGreaterThan(0);

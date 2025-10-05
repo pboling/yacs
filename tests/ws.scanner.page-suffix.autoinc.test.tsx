@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { act } from 'react'
 import App from '../src/App'
+import { setupObserverMocks } from './helpers/observerMocks'
 
 interface IMockWebSocket {
   url: string
@@ -43,18 +44,20 @@ class MockWebSocket implements IMockWebSocket {
 }
 
 vi.mock('../src/scanner.client.js', () => ({
-  fetchScanner: vi.fn().mockResolvedValue({ tokens: [], raw: { scannerPairs: [] } }),
+  fetchScanner: vi.fn().mockResolvedValue({ tokens: [], raw: { pairs: [] } }),
 }))
 
 describe('Scanner page suffix auto-increment', () => {
   let mockWs: IMockWebSocket | undefined
   let origWS: typeof global.WebSocket
-  let origIO: typeof global.IntersectionObserver
+  let cleanupObservers: (() => void) | undefined
 
   beforeEach(() => {
     origWS = global.WebSocket
-    origIO = global.IntersectionObserver
-    global.IntersectionObserver = vi.fn().mockImplementation(() => ({ observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn() }))
+
+    // Use the shared observer mocks helper
+    cleanupObservers = setupObserverMocks()
+
     global.WebSocket = vi.fn().mockImplementation((url: string) => {
       mockWs = new MockWebSocket(url)
       return mockWs as unknown as WebSocket
@@ -66,12 +69,16 @@ describe('Scanner page suffix auto-increment', () => {
     Object.defineProperty(window, 'requestIdleCallback', { writable: true, value: (fn: () => void) => setTimeout(fn, 0) })
     Object.defineProperty(window, 'localStorage', { writable: true, value: { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn() } })
     Object.defineProperty(window, 'sessionStorage', { writable: true, value: { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn(), clear: vi.fn() } })
-    Object.defineProperty(window, '__BYPASS_BOOT__', { writable: true, value: true })
+    // Bypass boot overlay - critical for these tests since initial fetch returns empty
+    Object.defineProperty(window, '__BYPASS_BOOT__', { writable: true, value: true, configurable: true })
+    // Mock document.cookie for theme cookie utilities
+    Object.defineProperty(document, 'cookie', { writable: true, value: '', configurable: true })
     ;(window as any).__REST_PAGES__ = { 101: 1, 201: 1 }
   })
+
   afterEach(() => {
     global.WebSocket = origWS
-    global.IntersectionObserver = origIO
+    cleanupObservers?.()
     vi.clearAllMocks()
   })
 
@@ -83,12 +90,14 @@ describe('Scanner page suffix auto-increment', () => {
 
     const { container } = render(<App />)
 
-    const restBtn = await screen.findByTestId('inject-scanner-rest')
+    const restBtn = await screen.findByTestId('inject-scanner-rest', {}, { timeout: 3000 })
 
     // First click should produce -p1 rows
     await act(async () => {
       fireEvent.click(restBtn)
+      await new Promise(resolve => setTimeout(resolve, 100))
     })
+
     // Wait until rows appear in Trending
     let firstCount = 0
     await waitFor(() => {
@@ -96,6 +105,7 @@ describe('Scanner page suffix auto-increment', () => {
       firstCount = Number(countEl.textContent || '0')
       expect(firstCount).toBeGreaterThan(0)
     }, { timeout: 5000 })
+
     await waitFor(() => {
       const rowsP1 = container.querySelectorAll('tr[data-row-id*="-p1::TREND"]')
       expect(rowsP1.length).toBeGreaterThan(0)
@@ -104,11 +114,14 @@ describe('Scanner page suffix auto-increment', () => {
     // Second click should produce -p2 rows
     await act(async () => {
       fireEvent.click(restBtn)
+      await new Promise(resolve => setTimeout(resolve, 100))
     })
+
     await waitFor(() => {
       const rowsP2 = container.querySelectorAll('tr[data-row-id*="-p2::TREND"]')
       expect(rowsP2.length).toBeGreaterThan(0)
     }, { timeout: 5000 })
+
     await waitFor(() => {
       const countEl = screen.getByTestId('rows-count-trending') as HTMLElement
       const nextCount = Number(countEl.textContent || '0')

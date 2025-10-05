@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { act } from 'react'
 import App from '../src/App'
+import { setupObserverMocks } from './helpers/observerMocks'
 
 // Mock WebSocket to simulate server behavior
 interface IMockWebSocket {
@@ -88,20 +89,15 @@ vi.mock('../src/scanner.client.js', () => ({
 describe('Pair-Stats Counter', () => {
   let mockWs: IMockWebSocket | undefined;
   let originalWebSocket: typeof global.WebSocket;
-  let originalIntersectionObserver: typeof global.IntersectionObserver;
+  let cleanupObservers: (() => void) | undefined;
 
   // Ensure test lifecycle hooks are available
   beforeEach(() => {
     // Preserve originals
     originalWebSocket = global.WebSocket;
-    originalIntersectionObserver = global.IntersectionObserver
 
-    // Minimal IntersectionObserver mock used by Table
-    global.IntersectionObserver = vi.fn().mockImplementation(() => ({
-      observe: vi.fn(),
-      unobserve: vi.fn(),
-      disconnect: vi.fn(),
-    }))
+    // Use the shared observer mocks helper
+    cleanupObservers = setupObserverMocks();
 
     // Replace WebSocket with our mock
     global.WebSocket = vi.fn().mockImplementation((url: string) => {
@@ -136,6 +132,13 @@ describe('Pair-Stats Counter', () => {
       },
     })
 
+    // Mock document.cookie for theme cookie utilities
+    Object.defineProperty(document, 'cookie', {
+      writable: true,
+      value: '',
+      configurable: true,
+    })
+
     // Bypass boot overlay for tests
     Object.defineProperty(window, '__BYPASS_BOOT__', {
       writable: true,
@@ -146,7 +149,7 @@ describe('Pair-Stats Counter', () => {
   afterEach(() => {
     // Restore originals
     global.WebSocket = originalWebSocket
-    global.IntersectionObserver = originalIntersectionObserver
+    cleanupObservers?.()
     vi.clearAllMocks()
   })
 

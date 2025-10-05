@@ -175,6 +175,9 @@ function TopBar({
             Scanner: <strong style={{ marginLeft: 4 }}>{eventCounts['scanner-pairs']}</strong>
           </span>
           {/* Other event counters remain single buttons */}
+          {/* - Inject a faux Tick event */}
+          {/* - Inject a faux Pair Stats event */}
+          {/* - Inject a faux WPEG event */}
           {(
             [
               ['tick', 'Tick'],
@@ -1898,7 +1901,14 @@ function App() {
   }, [rateSeries])
 
   // App boot readiness: wait until backend is ready to prevent double-load on first dev boot
-  const [appReady, setAppReady] = useState(false)
+  const [appReady, setAppReady] = useState(() => {
+    // Check for test bypass flag
+    try {
+      return !!(window as any).__BYPASS_BOOT__;
+    } catch {
+      return false;
+    }
+  })
   const [wsScannerReady, setWsScannerReady] = useState<{ trending: boolean; newer: boolean }>({
     trending: false,
     newer: false,
@@ -2243,6 +2253,17 @@ function App() {
   // Fetch initial token data from REST API and dispatch to reducer
   useEffect(() => {
     console.log('[App.tsx] Initial fetch effect running')
+
+    // Check for test bypass flag - skip fetch if set
+    try {
+      if ((window as any).__BYPASS_BOOT__) {
+        console.log('[App.tsx] __BYPASS_BOOT__ is set, skipping initial fetch')
+        return
+      }
+    } catch {
+      // Continue if check fails
+    }
+
     // Use sessionStorage to prevent duplicate fetches across remounts
     const isDev = import.meta.env.DEV
     if (typeof window !== 'undefined' && window.sessionStorage) {

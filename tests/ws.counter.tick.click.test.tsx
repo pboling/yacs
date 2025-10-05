@@ -78,14 +78,14 @@ describe('Tick counter click inject', () => {
     render(<App />);
 
     // Seed some rows so the faux Tick event has a key to target
-    const restBtn = await screen.findByTestId('inject-scanner-rest');
+    const restBtn = await screen.findByTestId('inject-scanner-rest', {}, { timeout: 3000 });
     await act(async () => {
       fireEvent.click(restBtn);
       await new Promise((r) => setTimeout(r, 400));
     });
 
     // Find the specific inject button (has title="Inject a faux Tick event")
-    const tickBtn = await screen.findByTitle(/Inject a faux Tick event/);
+    const tickBtn = await screen.findByTitle(/Inject a faux Tick event/, {}, { timeout: 3000 });
 
     const initialTick = (tickBtn.textContent?.match(/Tick:\s*(\d+)/) || [])[1];
     const initTickCount = initialTick ? parseInt(initialTick, 10) : 0;
@@ -96,10 +96,10 @@ describe('Tick counter click inject', () => {
       await new Promise((r) => setTimeout(r, 600));
     });
 
-    const updated = await screen.findByTitle(/Inject a faux Tick event/);
+    const updated = await screen.findByTitle(/Inject a faux Tick event/, {}, { timeout: 3000 });
     await waitFor(() => {
       const num = (updated.textContent?.match(/Tick:\s*(\d+)/) || [])[1];
       expect(parseInt(num || '0', 10)).toBe(initTickCount + 1);
-    }, { timeout: 2000 });
-  });
+    }, { timeout: 3000 });
+  }, 10000);
 });

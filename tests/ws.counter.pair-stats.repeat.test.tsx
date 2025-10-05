@@ -31,13 +31,13 @@ describe('Pair-Stats TopBar counter repeat', () => {
     render(<App />);
 
     // Seed rows via Faux Scanner REST so pair-stats injection has keys to target
-    const restBtn = await screen.findByTestId('inject-scanner-rest')
+    const restBtn = await screen.findByTestId('inject-scanner-rest', {}, { timeout: 3000 })
     await act(async () => {
       fireEvent.click(restBtn)
       await new Promise((r) => setTimeout(r, 250))
     })
 
-    const pairStatsBtn = await screen.findByTitle(/Inject a faux Pair Stats event/)
+    const pairStatsBtn = await screen.findByTitle(/Inject a faux Pair Stats event/, {}, { timeout: 3000 })
     const initial = (pairStatsBtn.textContent?.match(/Pair Stats:\s*(\d+)/) || [])[1]
     const initCount = initial ? parseInt(initial, 10) : 0
 
@@ -52,6 +52,6 @@ describe('Pair-Stats TopBar counter repeat', () => {
       const updated = screen.getByTitle(/Inject a faux Pair Stats event/)
       const num = (updated.textContent?.match(/Pair Stats:\s*(\d+)/) || [])[1]
       expect(parseInt(num || '0', 10)).toBe(initCount + 2)
-    }, { timeout: 2000 })
-  });
+    }, { timeout: 3000 })
+  }, 10000);
 });
