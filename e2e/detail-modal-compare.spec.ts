@@ -55,6 +55,13 @@ async function pickCompareToken(page: Page) {
 
 test.describe('DetailModal compare streaming', () => {
   test('Compare rate becomes > 0 and chart leaves Subscribing state', async ({ page }) => {
+    // Set up console logging to capture WebSocket events
+    page.on('console', (msg) => {
+      if (msg.type() === 'log' || msg.type() === 'info' || msg.type() === 'error') {
+        console.log(`PAGE LOG [${msg.type()}]:`, msg.text())
+      }
+    })
+
     await page.goto('/')
     const tableName: TableName = 'New Tokens'
     const tableEl = await findTableForHeading(page, tableName)
@@ -96,19 +103,59 @@ test.describe('DetailModal compare streaming', () => {
       }
     }
     if (!rowId) throw new Error('No rowId found for token in table')
+
+    // Add WebSocket monitoring before opening the modal
+    await page.evaluate(() => {
+      const win = window as any
+      const ws = win.__APP_WS__
+      if (ws) {
+        console.log('[WS-DIAGNOSTIC] Initial WebSocket state:', ws.readyState,
+          '(0=CONNECTING, 1=OPEN, 2=CLOSING, 3=CLOSED)')
+
+        // Track sent messages
+        const originalSend = ws.send.bind(ws)
+        ws.send = function(data: any) {
+          try {
+            const parsed = JSON.parse(data)
+            if (parsed.event?.includes('subscribe')) {
+              console.log('[WS-DIAGNOSTIC] Sending subscription:', parsed.event, parsed.data)
+            }
+          } catch {}
+          return originalSend(data)
+        }
+
+        // Track close events
+        ws.addEventListener('close', (e: CloseEvent) => {
+          console.log('[WS-DIAGNOSTIC] WebSocket closed! Code:', e.code, 'Reason:', e.reason,
+            'Clean:', e.wasClean)
+        })
+
+        ws.addEventListener('error', (e: Event) => {
+          console.log('[WS-DIAGNOSTIC] WebSocket error event:', e)
+        })
+      } else {
+        console.log('[WS-DIAGNOSTIC] No __APP_WS__ found on window')
+      }
+    })
+
     await openDetailsByRowId(page, rowId)
     await pickCompareToken(page)
+
     // Diagnostic: log compare subscription state and backend response
     const compareState = await page.evaluate(() => {
       const modal = document.querySelector('[role="dialog"]')
       if (!modal) return null
       const subText = modal.textContent || ''
+      const ws = (window as any).__APP_WS__
       return {
         modalText: subText,
         subscribingVisible: !!/Subscribing/.exec(subText),
+        wsState: ws ? ws.readyState : 'no-ws',
+        wsUrl: ws ? ws.url : 'no-ws',
       }
     })
     console.log('DIAGNOSTIC: Modal compare state:', compareState)
+
     try {
       const resp = await page.request.get('http://localhost:3001/scanner')
       if (resp.ok()) {
@@ -121,7 +168,44 @@ test.describe('DetailModal compare streaming', () => {
     } catch (err: unknown) {
       console.log('DIAGNOSTIC: /scanner fetch error:', err)
     }
+
+    // Monitor for updates while waiting
+    const updateMonitor = page.evaluate(() => {
+      return new Promise((resolve) => {
+        const win = window as any
+        const ws = win.__APP_WS__
+        let messageCount = 0
+        let updateEventCount = 0
+
+        if (ws) {
+          const messageHandler = (e: MessageEvent) => {
+            try {
+              const msg = JSON.parse(e.data)
+              messageCount++
+              if (msg.event === 'tick' || msg.event === 'pair-stats') {
+                updateEventCount++
+                console.log('[WS-DIAGNOSTIC] Received update event:', msg.event,
+                  'Total messages:', messageCount, 'Updates:', updateEventCount)
+              }
+            } catch {}
+          }
+          ws.addEventListener('message', messageHandler)
+
+          setTimeout(() => {
+            ws.removeEventListener('message', messageHandler)
+            resolve({ messageCount, updateEventCount })
+          }, 25000)
+        } else {
+          resolve({ error: 'no-ws' })
+        }
+      })
+    })
+
     await expect(page.getByText('(Subscribing…)')).toBeHidden({ timeout: 30_000 })
+
+    const monitorResult = await updateMonitor
+    console.log('DIAGNOSTIC: Update monitor result:', monitorResult)
+
     const diff = page.getByText('Differential (Base vs Compare)')
     await expect(diff).toBeVisible()
   })
