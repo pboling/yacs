@@ -12,7 +12,7 @@
 
 | Theme: Cherry Sour                                    | Theme: Rocket Lake (a11y accessible)                  | Theme: Legendary (a11y accessible)              | Detail (Chart) Modal                               |
 |-------------------------------------------------------|-------------------------------------------------------|-------------------------------------------------|----------------------------------------------------|
-| Not pictured: detail row with social links            | Not pictured: detail row with social links            | Not pictured: detail row with social links      | Not pictured: detail row with social links         |
+| Not pictured: detail row with social links            | Not pictured: detail row with social links            | Not pictured: detail row with social links      |                                                    |
 | [![yacs-theme-cherry-sour][cherry-sour]][cherry-sour] | [![yacs-theme-rocket-lake][rocket-lake]][rocket-lake] | [![yacs-theme-legendary][legendary]][legendary] | [![yacs-detail-modal][detail-modal]][detail-modal] |
 
 [cherry-sour]: https://github.com/user-attachments/assets/e81d370b-1476-4db0-93b2-d7c0371fef93
