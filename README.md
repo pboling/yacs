@@ -10,7 +10,15 @@
 - ⚠️ WARNING ⚠️ This demo site can mix **mock/fake data** with real-time data from the [DEX Scanner API](https://www.dexcelerate.com/)
 - ⏳️ Why? ⏳️ This is a prod demo of what local dev could be like if you hire me!
 
-<img width="2853" height="1587" alt="pboling-yacs2-crop" src="https://github.com/user-attachments/assets/dd75ba7a-da19-4e1b-9ba8-af68009ce6ca" />
+| Theme: Cherry Sour                                    | Theme: Rocket Lake (a11y accessible)                  | Theme: Legendary (a11y accessible)              | Detail (Chart) Modal                               |
+|-------------------------------------------------------|-------------------------------------------------------|-------------------------------------------------|----------------------------------------------------|
+| Not pictured: detail row with social links            | Not pictured: detail row with social links            | Not pictured: detail row with social links      | Not pictured: detail row with social links         |
+| [![yacs-theme-cherry-sour][cherry-sour]][cherry-sour] | [![yacs-theme-rocket-lake][rocket-lake]][rocket-lake] | [![yacs-theme-legendary][legendary]][legendary] | [![yacs-detail-modal][detail-modal]][detail-modal] |
+
+[cherry-sour]: https://github.com/user-attachments/assets/e81d370b-1476-4db0-93b2-d7c0371fef93
+[rocket-lake]:https://github.com/user-attachments/assets/52e2b7a0-3ab4-4b22-882c-dc0b0a9cb68f
+[legendary]: https://github.com/user-attachments/assets/8067b114-5ce9-402c-bd8d-aceb7df2f33f
+[detail-modal]: https://github.com/user-attachments/assets/b2d4b02b-275b-4263-8a64-00766b4d3680
 
 ## Overview
 
