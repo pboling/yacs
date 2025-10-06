@@ -4,9 +4,10 @@
 
 💫 Faux REST and WebSocket Backends for Testing 💫
 
-[![CI](https://github.com/pboling/yacs/actions/workflows/ci.yml/badge.svg)](https://github.com/pboling/yacs/actions/workflows/ci.yml) [![Deploy](https://github.com/pboling/yacs/actions/workflows/deploy.yml/badge.svg)](https://github.com/pboling/yacs/actions/workflows/deploy.yml) [![Live Demo](https://img.shields.io/badge/Live-Demo-blue)][demo]
+[![CI](https://github.com/pboling/yacs/actions/workflows/ci.yml/badge.svg)](https://github.com/pboling/yacs/actions/workflows/ci.yml) [![Deploy](https://github.com/pboling/yacs/actions/workflows/deploy.yml/badge.svg)](https://github.com/pboling/yacs/actions/workflows/deploy.yml) [![Live Demo][demo-img]][demo]
 
 [demo]: https://pboling.github.io/yacs/
+[demo-img]: https://img.shields.io/badge/Live-Demo-blue
 
 - ✅️ Original website 👉️️ https://www.dexcelerate.com/
 - ⚠️ WARNING ⚠️ This demo site can mix **mock/fake data** with real-time data from the [DEX Scanner API](https://www.dexcelerate.com/)
