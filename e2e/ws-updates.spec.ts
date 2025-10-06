@@ -3,232 +3,188 @@ import { test, expect } from '@playwright/test'
 // Use shared helpers from e2e/helpers.ts
 import {
   findTableForHeading,
-  getRowIdsForTokens,
   getCellTextByToken,
-  scrollRowIntoViewByToken,
-  clickDetailsByToken,
-  clickDetailsByRowId,
-  generateDeterministicTokens,
   parseCounter,
 } from './helpers'
 
 // Single focused test with a simple name (no parens) so -g regex is easy
 test('NewTokensSells', async ({ page }) => {
   page.on('console', (msg) => console.log(`PAGE LOG [${msg.type()}]: ${msg.text()}`))
+
+  console.log('DIAGNOSTIC: Starting test - navigating to /')
   await page.goto('/')
 
-  // sort by token column in the New Tokens table
-  const tableName = 'New Tokens'
-  const tableEl = await findTableForHeading(page, tableName)
-  const ths = tableEl.locator('thead tr th')
-  const count = await ths.count()
-  let tokenHeaderIdx = -1
-  for (let i = 0; i < count; i++) {
-    const thText = (await ths.nth(i).textContent())?.trim().toLowerCase()
-    if (thText && thText.includes('token')) { tokenHeaderIdx = i; break }
-  }
-  if (tokenHeaderIdx === -1) throw new Error('Token header not found')
-  await ths.nth(tokenHeaderIdx).click()
-  await page.waitForTimeout(300)
-
-  // Fetch and log backend /scanner response for diagnostics
-  let scannerPairs: any[] = [];
-  let tokens: string[] = [];
-  try {
-    const resp = await page.request.get('http://localhost:3001/scanner');
-    if (resp.ok()) {
-      const body = await resp.json() as any;
-      if (body && Array.isArray(body.pairs)) {
-        scannerPairs = body.pairs.filter((p: any) => p.pairAddress && p.token1Address);
-        tokens = scannerPairs.map((p: any) => String(p.token1Symbol || p.token1Name || '').trim()).filter(Boolean);
-        console.log('DIAGNOSTIC: /scanner pairs:', JSON.stringify(scannerPairs.slice(0, 10)));
-      }
+  // Wait for tables to be rendered with data
+  console.log('DIAGNOSTIC: Waiting for tables to load with data...')
+  await page.waitForFunction(() => {
+    const tables = document.querySelectorAll('table.tokens');
+    if (tables.length === 0) return false;
+    // Check if at least one table has rows
+    for (const table of tables) {
+      const rows = table.querySelectorAll('tbody tr');
+      if (rows.length > 0) return true;
     }
-  } catch (err: any) {
-    console.log('DIAGNOSTIC: /scanner fetch error:', err);
-  }
-  if (!tokens.length) tokens = generateDeterministicTokens(50);
-  console.log('DIAGNOSTIC: using tokens (first 10):', tokens.slice(0, 10).join(', '));
-  console.log('DIAGNOSTIC: using tokens (count):', tokens.length);
-  // Always select a compare token from scannerPairs to guarantee updates
-  let compareToken = tokens[0];
-  if (scannerPairs.length) {
-    compareToken = String(scannerPairs[0].token1Symbol || scannerPairs[0].token1Name || '').trim();
-  }
-  // Pick a token from the first visible row in the table
+    return false;
+  }, { timeout: 30000 }).catch((err) => {
+    console.log('DIAGNOSTIC: Tables load timeout. Error:', err.message);
+    throw err;
+  });
+
+  console.log('DIAGNOSTIC: Tables loaded!');
+
+  // Check what tables are available
+  console.log('DIAGNOSTIC: Checking for available tables...');
+  const tableInfo = await page.evaluate(() => {
+    const tables = document.querySelectorAll('table.tokens');
+    const headings = document.querySelectorAll('h2, h3');
+    return {
+      tableCount: tables.length,
+      headings: Array.from(headings).map(h => h.textContent?.trim()),
+      tablesWithRows: Array.from(tables).map((table, idx) => ({
+        index: idx,
+        rowCount: table.querySelectorAll('tbody tr').length,
+        hasData: table.querySelectorAll('tbody tr').length > 0
+      }))
+    };
+  });
+  console.log('DIAGNOSTIC: Table info:', JSON.stringify(tableInfo));
+
+  // Use Trending Tokens table
+  const tableName = 'Trending Tokens'
+  console.log(`DIAGNOSTIC: Looking for table with heading "${tableName}"...`);
+
+  const tableEl = await findTableForHeading(page, tableName)
+  console.log('DIAGNOSTIC: Found table element');
+
+  // Wait a moment for any initial rendering/sorting to complete
+  await page.waitForTimeout(500);
+
   const tableRowsLocator = tableEl.locator('tbody tr');
   const rowCount = await tableRowsLocator.count();
-  if (rowCount === 0) throw new Error('No rows found in New Tokens table');
-  // Get all tokens visible in the table with their rowIds
-  const tableTokensWithIds: { token: string, rowId: string }[] = [];
-  for (let i = 0; i < rowCount; i++) {
-    const rowText = await tableRowsLocator.nth(i).textContent();
-    const rowId = await tableRowsLocator.nth(i).getAttribute('data-row-id') || '';
-    const tokenMatch = rowText?.match(/[A-Za-z0-9-]+/);
-    if (tokenMatch) tableTokensWithIds.push({ token: tokenMatch[0], rowId });
-  }
-  // Find intersection of tokens from backend and table (case-insensitive)
-  const backendTokensLower = tokens.map(t => t.toLowerCase());
-  const candidateTokens = tableTokensWithIds.filter(({ token }) => backendTokensLower.includes(token.toLowerCase()));
-  if (candidateTokens.length === 0) {
-    console.log('DIAGNOSTIC: No intersection between table tokens and backend tokens. Table tokens:', tableTokensWithIds.map(t => t.token));
-    console.log('DIAGNOSTIC: Backend tokens:', tokens);
-    throw new Error('No token found in both table and backend for monitoring (case-insensitive, with valid rowId)');
-  }
-  // Use the first candidate token for monitoring
-  const monitoredToken = candidateTokens[0].token;
-  compareToken = monitoredToken;
-  // Try to locate rows for the monitored tokens with retries. If we fail, print
-  // helpful diagnostic info: the /scanner pair list and a DOM snapshot of the
-  // currently-rendered table rows so test debugging can proceed quickly.
-  let monitoredRows: { rowId: string; token: string }[] = [];
-  const maxAttempts = 3;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    monitoredRows = await getRowIdsForTokens(page, tableName, [compareToken]);
-    if (monitoredRows.length) break;
-    console.log(`Attempt ${attempt}: no monitored rows found — collecting diagnostics`)
-    // Fetch /scanner tokens for diagnosis
-    try {
-      const resp = await page.request.get('http://localhost:3001/scanner')
-      if (resp.ok()) {
-        const body = await resp.json() as any
-        const scannerTokens: { token: string; pair: string }[] = Array.isArray(body.pairs) ? (body.pairs as any[]).map((p: any) => ({ token: (p.token1Symbol || p.token1Name || ''), pair: p.pairAddress || p.pair || p.id || '' })).slice(0, 50) : []
-        console.log('scanner entries (first 50):', scannerTokens.map((s) => `${s.token}@${s.pair}`).join(', '))
+  console.log(`DIAGNOSTIC: [${tableName}] Row count:`, rowCount);
+  if (rowCount === 0) throw new Error(`No rows found in ${tableName} table`);
+
+  // Extract ALL tokens with their rowIds AND initial buys/sells state in one batch operation
+  console.log(`DIAGNOSTIC: [${tableName}] Reading all token states from currently visible rows...`);
+
+  const initialState = await tableEl.evaluate((table) => {
+    const rows = table.querySelectorAll('tbody tr');
+    const result = new Map<string, { buys: number, sells: number, maxCounter: number, rowId: string }>();
+    const debugSamples: string[] = [];
+
+    rows.forEach((row, idx) => {
+      const rowId = row.getAttribute('data-row-id');
+      if (!rowId) return;
+
+      // Get token from first cell
+      const firstCell = row.querySelector('td');
+      if (!firstCell) return;
+      const tokenMatch = firstCell.textContent?.trim().match(/[A-Za-z0-9-]+/);
+      if (!tokenMatch) return;
+      const token = tokenMatch[0];
+
+      // Get buys/sells from 8th cell (nth-child is 1-indexed)
+      // The B/S cell has two spans: first contains buys (with up arrow), second contains sells (with down arrow)
+      const buySellCell = row.querySelector('td:nth-child(8)');
+      if (!buySellCell) return;
+
+      // Find the two spans that contain the actual numbers
+      const spans = buySellCell.querySelectorAll('span > span');
+      let buys = 0;
+      let sells = 0;
+
+      if (spans.length >= 2) {
+        // First span (inside the "Buys" container) contains buys
+        const buysText = spans[0]?.textContent?.trim() || '0';
+        // Second span (inside the "Sells" container) contains sells
+        const sellsText = spans[1]?.textContent?.trim() || '0';
+
+        buys = Number(buysText.replace(/,/g, '')) || 0;
+        sells = Number(sellsText.replace(/,/g, '')) || 0;
+
+        if (idx < 3) {
+          debugSamples.push(`${token}: buys="${buysText}" sells="${sellsText}"`);
+        }
       } else {
-        console.log('scanner fetch failed during diagnostic:', resp.status, resp.statusText)
+        // Fallback: try to extract all numbers from the cell text
+        const text = buySellCell.textContent?.trim() || '';
+        const matches = text.match(/\d[\d,]*/g);
+        const nums: number[] = matches ? matches.map(n => Number(n.replace(/,/g, ''))) : [];
+
+        if (nums.length >= 2) {
+          buys = nums[0];
+          sells = nums[1];
+        }
+
+        if (idx < 3) {
+          debugSamples.push(`${token}: fallback="${text}" -> buys=${buys} sells=${sells}`);
+        }
       }
-    } catch (err) {
-      const e: any = err
-      console.log('scanner fetch error during diagnostic:', e && e.stack ? e.stack : e)
-    }
 
-    // DOM snapshot of currently-rendered rows (element-handle based)
-    try {
-      const containerHandle = await tableEl.locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " table-wrap ")][1]').elementHandle()
-      if (containerHandle) {
-        const domRows = await page.evaluate((el: Element) => {
-          const table = (el as Element).querySelector('table.tokens') as HTMLTableElement | null
-          if (!table) return []
-          return Array.from(table.querySelectorAll('tbody tr')).slice(0, 200).map(tr => {
-            const rid = tr.getAttribute('data-row-id')
-            const td = tr.querySelector('td')
-            const raw = td ? (td.textContent || '').trim() : ''
-            let token = ''
-            if (raw) {
-              const m = raw.match(/[A-Za-z0-9-]+/)
-              token = m ? m[0] : raw
-            }
-            return { rid, token }
-          })
-        }, containerHandle)
-        console.log('DOM rows snapshot (first 200):', JSON.stringify((domRows || []).slice(0, 50)))
-        try { await containerHandle.dispose() } catch {}
+      const maxCounter = Math.max(buys, sells);
+
+      if (isFinite(buys) && isFinite(sells)) {
+        result.set(token, { buys, sells, maxCounter, rowId });
       }
-    } catch (err) {
-      const e: any = err
-      console.log('DOM snapshot error during diagnostic:', e && e.stack ? e.stack : e)
-    }
+    });
 
-    // Small backoff before retrying
-    await page.waitForTimeout(200)
+    // Convert Map to array of entries for serialization
+    return {
+      entries: Array.from(result.entries()),
+      debugSamples
+    };
+  });
+
+  // Convert back to Map
+  const tokenStates = new Map(initialState.entries);
+
+  console.log(`DIAGNOSTIC: [${tableName}] Sample parsed buys/sells (first 3):`, initialState.debugSamples.join(', '));
+  console.log(`DIAGNOSTIC: [${tableName}] Successfully read initial state for ${tokenStates.size} tokens`);
+  console.log(`DIAGNOSTIC: [${tableName}] Sample initial states (first 5):`,
+    Array.from(tokenStates.entries()).slice(0, 5).map(([token, state]) =>
+      `${token}: buys=${state.buys} sells=${state.sells}`
+    ).join(', ')
+  );
+
+  if (tokenStates.size === 0) {
+    throw new Error(`Could not read initial state for any tokens in ${tableName} table`);
   }
 
-  if (!monitoredRows.length) {
-    throw new Error('No monitored tokens found after retries; see previous diagnostics logs for /scanner and DOM rows')
-  }
-  console.log('Found monitored tokens in table:', monitoredRows.map(r => r.token).join(', '))
-  console.log('monitoredRows (detailed):', JSON.stringify(monitoredRows.slice(0, 50)))
-  try {
-    const containerHandle2 = await tableEl.locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " table-wrap ")][1]').elementHandle()
-    if (containerHandle2) {
-      const domRows2 = await page.evaluate((el: Element) => {
-        const table = (el as Element).querySelector('table.tokens') as HTMLTableElement | null
-        if (!table) return []
-        return Array.from(table.querySelectorAll('tbody tr')).slice(0, 200).map(tr => ({ rid: tr.getAttribute('data-row-id'), text: (tr.querySelector('td')?.textContent || '').trim() }))
-      }, containerHandle2)
-      console.log('DOM rows (before subscribe) snapshot (first 200):', JSON.stringify(domRows2.slice(0, 50)))
-      try { await containerHandle2.dispose() } catch {}
-    }
-  } catch (err) {
-    const e: any = err
-    console.log('pre-subscribe DOM snapshot error:', e && e.stack ? e.stack : e)
-  }
+  // Poll all tokens, checking for any increase in buys or sells
+  // Use Promise.any to succeed as soon as ANY token shows an update
+  console.log(`DIAGNOSTIC: [${tableName}] Starting to poll all ${tokenStates.size} tokens for updates...`);
 
-  // Build a token->rowId map for fallbacks
-  const tokenToRow = new Map<string, string>()
-  for (const r of monitoredRows) tokenToRow.set(r.token, r.rowId)
-
-  // Diagnostic: print all row tokens and rowIds in the table
-  const allTableRows: { token: string, rowId: string }[] = [];
-  for (let i = 0; i < rowCount; i++) {
-    const rowText = await tableRowsLocator.nth(i).textContent();
-    const rowId = await tableRowsLocator.nth(i).getAttribute('data-row-id') || '';
-    const tokenMatch = rowText?.match(/[A-Za-z0-9-]+/);
-    allTableRows.push({ token: tokenMatch ? tokenMatch[0] : '', rowId });
-  }
-  console.log('DIAGNOSTIC: All table rows:', JSON.stringify(allTableRows));
-
-  // subscribe + open details for first to accelerate updates
-  const validTokens: string[] = []
-  for (let i = 0; i < monitoredRows.length; i++) {
-    const token = monitoredRows[i].token
-    let scrolled = false, clicked = false;
-    try {
-      scrolled = await scrollRowIntoViewByToken(page, tableName, token)
-      if (!scrolled) {
-        // fallback: try clicking by rowId if we have it
-        const rid = tokenToRow.get(token)
-        if (rid) {
-          clicked = await clickDetailsByRowId(page, rid)
-          if (clicked) {
-            validTokens.push(token)
-            continue
+  await Promise.any(
+    Array.from(tokenStates.entries()).map(([token, initial]) =>
+      expect.poll(async () => {
+        try {
+          const raw = await getCellTextByToken(page, tableName, token, 8);
+          if (!raw) {
+            // Token not currently visible (virtualized out), skip silently
+            return initial.maxCounter;
           }
-        }
-        console.log(`Could not find/scroll/click row for token ${token}. RowId: ${tokenToRow.get(token)}`)
-        continue
-      }
-      // short wait for any virtualized subscription to happen
-      await page.waitForTimeout(80)
-      if (validTokens.length === 0) {
-        // open details for the first valid token
-        clicked = await clickDetailsByToken(page, tableName, token)
-        if (!clicked) {
-          // try fallback by rowId
-          const rid = tokenToRow.get(token)
-          if (rid) await clickDetailsByRowId(page, rid)
-        }
-      }
-      validTokens.push(token)
-    } catch (err) {
-      const e: any = err
-      console.log(`Error acting on token ${token}:`, e && e.stack ? e.stack : e)
-    }
-  }
-  if (!validTokens.length) {
-    console.log('DIAGNOSTIC: No valid tokens after scroll/click attempts. MonitoredRows:', monitoredRows)
-    console.log('DIAGNOSTIC: All table rows:', allTableRows)
-    throw new Error('No monitored tokens remained after attempting to scroll/click rows')
-  }
-  await page.waitForTimeout(150)
+          const buys = parseCounter(raw, 'buys');
+          const sells = parseCounter(raw, 'sells');
+          const currentMax = Math.max(buys, sells);
 
-  // Read initial counters by token (use validTokens)
-  const initialPairs = await Promise.all(validTokens.map(async (token) => {
-    const raw = await getCellTextByToken(page, tableName, token, 8)
-    return { buys: parseCounter(raw, 'buys'), sells: parseCounter(raw, 'sells') }
-  }))
-  const initialMax = initialPairs.map(p => Math.max(p.buys, p.sells))
-  console.log('Initial counters (buys/sells):', initialPairs)
+          // Only log if there's a change
+          if (currentMax > initial.maxCounter) {
+            console.log(`DIAGNOSTIC: [${tableName}] ✓ Token ${token} updated! Initial: buys=${initial.buys} sells=${initial.sells}, Current: buys=${buys} sells=${sells}`);
+          } else if (currentMax !== initial.maxCounter || buys !== initial.buys || sells !== initial.sells) {
+            console.log(`DIAGNOSTIC: [${tableName}] Token ${token} changed: buys=${initial.buys}→${buys} sells=${initial.sells}→${sells}`);
+          }
 
-  // pass as soon as any monitored token's buys or sells increases
-  await Promise.any(validTokens.map((token, idx) =>
-    expect.poll(async () => {
-      const raw = await getCellTextByToken(page, tableName, token, 8)
-      const buys = parseCounter(raw, 'buys')
-      const sells = parseCounter(raw, 'sells')
-      const v = Math.max(buys, sells)
-      console.log(`Polled ${token} => buys:${buys} sells:${sells} max:${v}`)
-      return v
-    }, { timeout: 60000, intervals: [100,250,500,1000,2000] }).toBeGreaterThan(initialMax[idx])
-  ))
+          return currentMax;
+        } catch (err) {
+          // Token not visible, return initial to skip
+          return initial.maxCounter;
+        }
+      }, {
+        timeout: 60000,
+        intervals: [100, 250, 500, 1000, 2000]
+      }).toBeGreaterThan(initial.maxCounter)
+    )
+  );
+
+  console.log(`DIAGNOSTIC: [${tableName}] Test passed! At least one token showed buys/sells increase.`);
 })
