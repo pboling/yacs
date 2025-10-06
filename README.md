@@ -4,11 +4,13 @@
 
 💫 Faux REST and WebSocket Backends for Testing 💫
 
-[![CI](https://github.com/pboling/yacs/actions/workflows/ci.yml/badge.svg)](https://github.com/pboling/yacs/actions/workflows/ci.yml) [![Deploy](https://github.com/pboling/yacs/actions/workflows/deploy.yml/badge.svg)](https://github.com/pboling/yacs/actions/workflows/deploy.yml)
+[![CI](https://github.com/pboling/yacs/actions/workflows/ci.yml/badge.svg)](https://github.com/pboling/yacs/actions/workflows/ci.yml) [![Deploy](https://github.com/pboling/yacs/actions/workflows/deploy.yml/badge.svg)](https://github.com/pboling/yacs/actions/workflows/deploy.yml) [![Live Demo](https://img.shields.io/badge/Live-Demo-blue)][demo]
+
+[demo]: https://pboling.github.io/yacs/
 
 - ✅️ Original website 👉️️ https://www.dexcelerate.com/
 - ⚠️ WARNING ⚠️ This demo site can mix **mock/fake data** with real-time data from the [DEX Scanner API](https://www.dexcelerate.com/)
-- ⏳️ Why? ⏳️ This is a prod demo of what local dev could be like if you hire me!
+- ⏳️ Why? ⏳️ This is a [live demo][demo] of what local dev could be like if you hire me!
 
 | Theme: Cherry Sour                                    | Theme: Rocket Lake (a11y accessible)                  | Theme: Legendary (a11y accessible)              | Detail (Chart) Modal                               |
 |-------------------------------------------------------|-------------------------------------------------------|-------------------------------------------------|----------------------------------------------------|
