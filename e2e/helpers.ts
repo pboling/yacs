@@ -104,6 +104,24 @@ export async function getRowIdsForTokens(page: Page, tableName: string, tokenLis
   await expect(tableEl).toBeVisible()
   const container = tableEl.locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " table-wrap ")][1]')
   await expect(container).toBeVisible()
+  // Robustly wait for at least one row to be present in the table
+  const rowLocator = tableEl.locator('tbody tr')
+  let rowAppeared = false
+  const rowTimeout = 15000
+  const rowStart = Date.now()
+  while (Date.now() - rowStart < rowTimeout) {
+    if (await rowLocator.count() > 0) {
+      rowAppeared = true
+      break
+    }
+    await page.waitForTimeout(200)
+  }
+  if (!rowAppeared) {
+    // Diagnostic logging
+    const tableHtml = await tableEl.evaluate(el => el.outerHTML)
+    const containerHtml = await container.evaluate(el => el.outerHTML)
+    throw new Error(`No rows appeared in table '${tableName}' after ${rowTimeout}ms. Table HTML: ${tableHtml}\nContainer HTML: ${containerHtml}`)
+  }
   const lowerSet = new Set(tokenList.map(t => t.toLowerCase()))
   const found: { rowId: string; token: string }[] = []
   const seen = new Set<string>()

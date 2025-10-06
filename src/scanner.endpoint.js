@@ -12,26 +12,6 @@
 // Mock /scanner endpoint generator and Vite middleware/plugin (ESM)
 // Provides deterministic, param-influenced mock data for development and tests.
 
-// Deterministic PRNG (mulberry32)
-/**
- * Create a fast deterministic PRNG based on mulberry32.
- *
- * - Produces a function that returns floats in [0, 1).
- * - Suitable for mock data generation where reproducibility matters.
- *
- * @param {number} seed - 32-bit integer seed.
- * @returns {() => number} Random generator function.
- */
-function mulberry32(seed) {
-  let t = seed >>> 0
-  return function () {
-    t += 0x6d2b79f5
-    let r = Math.imul(t ^ (t >>> 15), 1 | t)
-    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r)
-    return ((r ^ (r >>> 14)) >>> 0) / 4294967296
-  }
-}
-
 /**
  * Simple FNV-1a-like hash of a params object, stable across key order.
  *
@@ -111,12 +91,13 @@ function mkAddress(prefix, rnd) {
   return s + prefix
 }
 
+import { loadSymbols, mulberry32 } from './utils/token.fixture.js'
 import { getBaseSeed, mixSeeds } from './seed.util.js'
 import fs from 'node:fs'
 
 // Lazy-load and cache symbols from YAML (no external YAML parser needed for simple list)
 let CACHED_SYMBOLS = null
-function loadSymbols() {
+function loadSymbolsFromFile() {
   if (Array.isArray(CACHED_SYMBOLS) && CACHED_SYMBOLS.length > 0) return CACHED_SYMBOLS
   try {
     const url = new URL('./config/symbols.yaml', import.meta.url)
