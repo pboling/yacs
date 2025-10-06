@@ -5,31 +5,9 @@ import type { Page } from '@playwright/test'
 // Use shared helpers
 import { findTableForHeading, clickDetailsByRowId, openDetailsByRowIdRobust } from './helpers'
 // Import deterministic token generator
-import { generateDeterministicTokens } from '../src/utils/token.fixture.js'
+// import { generateDeterministicTokens } from '../src/utils/token.fixture.js'
 
 type TableName = 'Trending Tokens' | 'New Tokens'
-
-// Robust: find first row currently in subscribed state using element evaluation
-async function firstSubscribedRowId(page: Page, table: TableName): Promise<string> {
-  const tableEl = await findTableForHeading(page, table)
-  await expect(tableEl).toBeVisible()
-  // Use element handle evaluation to avoid locator stability issues
-  const containerHandle = await tableEl.locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " table-wrap ")][1]').elementHandle()
-  if (!containerHandle) throw new Error('Table container handle not available')
-  try {
-    const rid = await page.evaluate((el: Element) => {
-      const table = (el as Element).querySelector('table.tokens') as HTMLTableElement | null
-      if (!table) return null
-      const tr = table.querySelector('tbody tr[data-row-state="subscribed"]') as HTMLElement | null
-      if (!tr) return null
-      return tr.getAttribute('data-row-id') || null
-    }, containerHandle)
-    if (!rid) throw new Error('No subscribed row found in table')
-    return String(rid)
-  } finally {
-    try { await containerHandle.dispose() } catch {}
-  }
-}
 
 // Use shared click helper to open details by rowId. This delegates to a DOM evaluate click.
 async function openDetailsByRowId(page: Page, rowId: string) {
@@ -72,32 +50,8 @@ async function pickCompareToken(page: Page) {
   await firstOption.click()
 }
 
-function parseRate(text: string): number {
-  // Accept either 'upd/s' or 'upd/min' (e.g. "98.57 upd/min (5m avg)"), convert to updates-per-second
-  if (!text) return 0
-  const mSec = /([0-9]+(?:\.[0-9]+)?)\s*upd\/s/i.exec(text)
-  if (mSec) {
-    const v = Number(mSec[1])
-    return Number.isFinite(v) ? v : 0
-  }
-  const mMin = /([0-9]+(?:\.[0-9]+)?)\s*upd\/min/i.exec(text)
-  if (mMin) {
-    const v = Number(mMin[1])
-    // convert per-minute to per-second
-    return Number.isFinite(v) ? v / 60 : 0
-  }
-  // fallback: try to find any number and return it (best-effort)
-  const mAny = /([0-9]+(?:\.[0-9]+)?)/.exec(text)
-  if (mAny) {
-    const v = Number(mAny[1])
-    return Number.isFinite(v) ? v : 0
-  }
-  return 0
-}
-
 // Use a deterministic token for test selection
-const deterministicTokens = generateDeterministicTokens(1)
-const testTokenSymbol = deterministicTokens[0]
+// const deterministicTokens = generateDeterministicTokens(1)
 
 test.describe('DetailModal compare streaming', () => {
   test('Compare rate becomes > 0 and chart leaves Subscribing state', async ({ page }) => {
@@ -137,7 +91,7 @@ test.describe('DetailModal compare streaming', () => {
     for (let i = 0; i < rowCount; i++) {
       const rowText = await tableRowsLocator.nth(i).textContent()
       if (rowText?.includes(compareToken)) {
-        rowId = await tableRowsLocator.nth(i).getAttribute('data-row-id') || ''
+        rowId = (await tableRowsLocator.nth(i).getAttribute('data-row-id')) || ''
         break
       }
     }
@@ -151,7 +105,7 @@ test.describe('DetailModal compare streaming', () => {
       const subText = modal.textContent || ''
       return {
         modalText: subText,
-        subscribingVisible: !!subText.match(/Subscribing/),
+        subscribingVisible: !!/Subscribing/.exec(subText),
       }
     })
     console.log('DIAGNOSTIC: Modal compare state:', compareState)
@@ -159,9 +113,12 @@ test.describe('DetailModal compare streaming', () => {
       const resp = await page.request.get('http://localhost:3001/scanner')
       if (resp.ok()) {
         const body = await resp.json()
-        console.log('DIAGNOSTIC: /scanner pairs (first 10):', JSON.stringify(body.pairs?.slice(0, 10)))
+        console.log(
+          'DIAGNOSTIC: /scanner pairs (first 10):',
+          JSON.stringify(body.pairs?.slice(0, 10)),
+        )
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.log('DIAGNOSTIC: /scanner fetch error:', err)
     }
     await expect(page.getByText('(Subscribing…)')).toBeHidden({ timeout: 30_000 })
@@ -206,7 +163,7 @@ test.describe('DetailModal compare streaming', () => {
     for (let i = 0; i < rowCount; i++) {
       const rowText = await tableRowsLocator.nth(i).textContent()
       if (rowText?.includes(compareToken)) {
-        rowId = await tableRowsLocator.nth(i).getAttribute('data-row-id') || ''
+        rowId = (await tableRowsLocator.nth(i).getAttribute('data-row-id')) || ''
         break
       }
     }

@@ -31,7 +31,6 @@ export interface RowProps {
   registerRow: (el: HTMLTableRowElement | null, row: TokenRow) => void
 }
 
-
 const Row = memo(
   function Row({
     row: t,

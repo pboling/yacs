@@ -38,35 +38,55 @@ function run() {
   for (const [k, v] of entries) {
     const bf = analyzeTokenSeries(v.buys)
     const sf = analyzeTokenSeries(v.sells)
-    details.push({ token: k, buyChangeFraction: bf, sellChangeFraction: sf, buys: v.buys.slice(0, 12), sells: v.sells.slice(0, 12) })
+    details.push({
+      token: k,
+      buyChangeFraction: bf,
+      sellChangeFraction: sf,
+      buys: v.buys.slice(0, 12),
+      sells: v.sells.slice(0, 12),
+    })
     if (Math.max(bf, sf) >= requiredChangeFraction) okCount++
   }
 
   const passRatio = entries.length ? okCount / entries.length : 0
-  console.log(`Analyzed ${entries.length} tokens; ${okCount} (${(passRatio * 100).toFixed(1)}%) meet required change fraction >= ${requiredChangeFraction}`)
+  console.log(
+    `Analyzed ${entries.length} tokens; ${okCount} (${(passRatio * 100).toFixed(1)}%) meet required change fraction >= ${requiredChangeFraction}`,
+  )
 
   // Print samples: failing and passing
-  const failing = details.filter(d => Math.max(d.buyChangeFraction, d.sellChangeFraction) < requiredChangeFraction).slice(0, 6)
-  const passing = details.filter(d => Math.max(d.buyChangeFraction, d.sellChangeFraction) >= requiredChangeFraction).slice(0, 6)
+  const failing = details
+    .filter((d) => Math.max(d.buyChangeFraction, d.sellChangeFraction) < requiredChangeFraction)
+    .slice(0, 6)
+  const passing = details
+    .filter((d) => Math.max(d.buyChangeFraction, d.sellChangeFraction) >= requiredChangeFraction)
+    .slice(0, 6)
 
   if (passing.length) {
     console.log('\nExamples (passing):')
     for (const p of passing) {
-      console.log(`- ${p.token}: buyFrac=${p.buyChangeFraction.toFixed(2)} sellFrac=${p.sellChangeFraction.toFixed(2)} buys=[${p.buys.join(',')}] sells=[${p.sells.join(',')}]`)
+      console.log(
+        `- ${p.token}: buyFrac=${p.buyChangeFraction.toFixed(2)} sellFrac=${p.sellChangeFraction.toFixed(2)} buys=[${p.buys.join(',')}] sells=[${p.sells.join(',')}]`,
+      )
     }
   }
   if (failing.length) {
     console.log('\nExamples (failing):')
     for (const p of failing) {
-      console.log(`- ${p.token}: buyFrac=${p.buyChangeFraction.toFixed(2)} sellFrac=${p.sellChangeFraction.toFixed(2)} buys=[${p.buys.join(',')}] sells=[${p.sells.join(',')}]`)
+      console.log(
+        `- ${p.token}: buyFrac=${p.buyChangeFraction.toFixed(2)} sellFrac=${p.sellChangeFraction.toFixed(2)} buys=[${p.buys.join(',')}] sells=[${p.sells.join(',')}]`,
+      )
     }
   }
 
   if (passRatio < requiredTokenPassFraction) {
-    console.error(`\nFAIL: only ${(passRatio * 100).toFixed(1)}% of sampled tokens meet the frequency requirement (need ${(requiredTokenPassFraction * 100).toFixed(1)}%).`)
+    console.error(
+      `\nFAIL: only ${(passRatio * 100).toFixed(1)}% of sampled tokens meet the frequency requirement (need ${(requiredTokenPassFraction * 100).toFixed(1)}%).`,
+    )
     process.exitCode = 2
   } else {
-    console.log(`\nPASS: ${(passRatio * 100).toFixed(1)}% of sampled tokens meet the frequency requirement`)
+    console.log(
+      `\nPASS: ${(passRatio * 100).toFixed(1)}% of sampled tokens meet the frequency requirement`,
+    )
   }
 }
 

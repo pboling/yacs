@@ -24,10 +24,7 @@ export function isWebSocketReady(ws: WebSocket | null | undefined): boolean {
  * @param timeoutMs - Maximum time to wait in milliseconds (default: 5000)
  * @returns Promise that resolves when ready or rejects on timeout/error
  */
-export function waitForWebSocketReady(
-  ws: WebSocket,
-  timeoutMs: number = 5000
-): Promise<void> {
+export function waitForWebSocketReady(ws: WebSocket, timeoutMs = 5000): Promise<void> {
   return new Promise((resolve, reject) => {
     if (isWebSocketReady(ws)) {
       resolve()
@@ -44,7 +41,7 @@ export function waitForWebSocketReady(
       resolve()
     }
 
-    const onError = (error: Event) => {
+    const onError = (_error: Event) => {
       cleanup()
       reject(new Error('WebSocket connection error'))
     }
@@ -101,7 +98,7 @@ export function getWebSocketState(ws: WebSocket | null | undefined): string {
  */
 export function safeSendWebSocket(
   ws: WebSocket | null | undefined,
-  data: string | object
+  data: string | object,
 ): boolean {
   if (!isWebSocketReady(ws)) return false
 
@@ -113,4 +110,3 @@ export function safeSendWebSocket(
     return false
   }
 }
-

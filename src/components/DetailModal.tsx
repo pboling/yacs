@@ -337,7 +337,7 @@ export default function DetailModal({
     compareSearch,
     includeStale,
     includeDegraded,
-  } as unknown as any)
+  })
   const filteredBaseOptions = computeFilteredCompareOptions<DetailModalRow>({
     open,
     allRows,
@@ -345,7 +345,7 @@ export default function DetailModal({
     compareSearch: baseSearch,
     includeStale,
     includeDegraded,
-  } as unknown as any)
+  })
 
   // Debug updates panel: capture raw JSON updates for this row
   const [updatesLog, setUpdatesLog] = useState<{ id: number; text: string }[]>([])
@@ -1226,7 +1226,7 @@ export default function DetailModal({
                       style={{ minWidth: 240, display: 'flex', flexDirection: 'column', gap: 12 }}
                     >
                       {['price', 'mcap', 'liquidity'].map((key) => {
-                        const d = (diffs as any).find((x: any) => x.k === key)
+                        const d = diffs?.find((x) => x.k === key)
                         return (
                           <div key={key} style={{ minWidth: 160 }}>
                             <div style={{ color: palette[key as SeriesKey], fontWeight: 600 }}>

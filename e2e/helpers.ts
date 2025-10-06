@@ -19,7 +19,7 @@ export function getBaseSeed() {
   try {
     const p = path.resolve(process.cwd(), '.seed')
     const txt = fs.readFileSync(p, 'utf8')
-    const m = txt.match(/-?\d+/)
+    const m = /-?\d+/.exec(txt)
     if (m) {
       const parsed = toUInt32(m[0])
       if (parsed !== undefined) return parsed
@@ -102,7 +102,9 @@ export async function findTableForHeading(page: Page, tableName: string) {
 export async function getRowIdsForTokens(page: Page, tableName: string, tokenList: string[]) {
   const tableEl = await findTableForHeading(page, tableName)
   await expect(tableEl).toBeVisible()
-  const container = tableEl.locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " table-wrap ")][1]')
+  const container = tableEl.locator(
+    'xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " table-wrap ")][1]',
+  )
   await expect(container).toBeVisible()
   // Robustly wait for at least one row to be present in the table
   const rowLocator = tableEl.locator('tbody tr')
@@ -110,7 +112,7 @@ export async function getRowIdsForTokens(page: Page, tableName: string, tokenLis
   const rowTimeout = 15000
   const rowStart = Date.now()
   while (Date.now() - rowStart < rowTimeout) {
-    if (await rowLocator.count() > 0) {
+    if ((await rowLocator.count()) > 0) {
       rowAppeared = true
       break
     }
@@ -118,18 +120,25 @@ export async function getRowIdsForTokens(page: Page, tableName: string, tokenLis
   }
   if (!rowAppeared) {
     // Diagnostic logging
-    const tableHtml = await tableEl.evaluate(el => el.outerHTML)
-    const containerHtml = await container.evaluate(el => el.outerHTML)
-    throw new Error(`No rows appeared in table '${tableName}' after ${rowTimeout}ms. Table HTML: ${tableHtml}\nContainer HTML: ${containerHtml}`)
+    const tableHtml = await tableEl.evaluate((el) => el.outerHTML)
+    const containerHtml = await container.evaluate((el) => el.outerHTML)
+    throw new Error(
+      `No rows appeared in table '${tableName}' after ${rowTimeout}ms. Table HTML: ${tableHtml}\nContainer HTML: ${containerHtml}`,
+    )
   }
-  const lowerSet = new Set(tokenList.map(t => t.toLowerCase()))
+  const lowerSet = new Set(tokenList.map((t) => t.toLowerCase()))
   const found: { rowId: string; token: string }[] = []
   const seen = new Set<string>()
   const containerHandleForMetrics = await container.elementHandle()
   const metrics = containerHandleForMetrics
-    ? await page.evaluate((el: Element) => { const c = el as HTMLElement; return { scrollHeight: c.scrollHeight, clientHeight: c.clientHeight } }, containerHandleForMetrics)
+    ? await page.evaluate((el: Element) => {
+        const c = el as HTMLElement
+        return { scrollHeight: c.scrollHeight, clientHeight: c.clientHeight }
+      }, containerHandleForMetrics)
     : { scrollHeight: 0, clientHeight: 0 }
-  try { if (containerHandleForMetrics) await containerHandleForMetrics.dispose() } catch {}
+  try {
+    if (containerHandleForMetrics) await containerHandleForMetrics.dispose()
+  } catch {}
   const step = Math.max(100, Math.floor(metrics.clientHeight * 0.8))
   let scrollTop = 0
   const maxSteps = Math.ceil(metrics.scrollHeight / step) + 5
@@ -138,21 +147,23 @@ export async function getRowIdsForTokens(page: Page, tableName: string, tokenLis
     let rowsData: { rid: string | null; token: string }[] = []
     if (containerHandle) {
       rowsData = await page.evaluate((el: Element) => {
-        const table = (el as Element).querySelector('table.tokens') as HTMLTableElement | null
+        const table = el.querySelector('table.tokens')
         if (!table) return []
-        return Array.from(table.querySelectorAll('tbody tr')).map(tr => {
+        return Array.from(table.querySelectorAll('tbody tr')).map((tr) => {
           const rid = tr.getAttribute('data-row-id')
           const td = tr.querySelector('td')
           const raw = td ? (td.textContent || '').trim() : ''
           let token = ''
           if (raw) {
-            const m = raw.match(/[A-Za-z0-9-]+/)
+            const m = /[A-Za-z0-9-]+/.exec(raw)
             token = m ? m[0] : raw
           }
           return { rid, token }
         })
       }, containerHandle)
-      try { await containerHandle.dispose() } catch {}
+      try {
+        await containerHandle.dispose()
+      } catch {}
     }
 
     for (const item of rowsData) {
@@ -162,15 +173,24 @@ export async function getRowIdsForTokens(page: Page, tableName: string, tokenLis
       const tl = token.toLowerCase()
       for (const s of lowerSet) {
         if (!s) continue
-        if (tl.includes(s) || s.includes(tl)) { found.push({ rowId: rid, token }); break }
+        if (tl.includes(s) || s.includes(tl)) {
+          found.push({ rowId: rid, token })
+          break
+        }
       }
       seen.add(rid)
     }
     if (found.length >= lowerSet.size) break
     const handleForScroll = await container.elementHandle()
     if (handleForScroll) {
-      try { await handleForScroll.evaluate((el: HTMLElement, top: number) => { el.scrollTop = top }, scrollTop) } catch {}
-      try { await handleForScroll.dispose() } catch {}
+      try {
+        await handleForScroll.evaluate((el: HTMLElement, top: number) => {
+          el.scrollTop = top
+        }, scrollTop)
+      } catch {}
+      try {
+        await handleForScroll.dispose()
+      } catch {}
     }
     await page.waitForTimeout(50)
     scrollTop += step
@@ -179,16 +199,28 @@ export async function getRowIdsForTokens(page: Page, tableName: string, tokenLis
   return found
 }
 
-export async function getCellTextByToken(page: Page, tableName: string, token: string, nth: number): Promise<string> {
+export async function getCellTextByToken(
+  page: Page,
+  tableName: string,
+  token: string,
+  nth: number,
+): Promise<string> {
   const tableEl = await findTableForHeading(page, tableName)
   await expect(tableEl).toBeVisible()
-  const container = tableEl.locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " table-wrap ")][1]')
+  const container = tableEl.locator(
+    'xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " table-wrap ")][1]',
+  )
   await expect(container).toBeVisible()
   const containerHandleForMetrics = await container.elementHandle()
   const metrics = containerHandleForMetrics
-    ? await containerHandleForMetrics.evaluate((el: HTMLElement) => ({ scrollHeight: el.scrollHeight, clientHeight: el.clientHeight }))
+    ? await containerHandleForMetrics.evaluate((el: HTMLElement) => ({
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+      }))
     : { scrollHeight: 0, clientHeight: 0 }
-  try { if (containerHandleForMetrics) await containerHandleForMetrics.dispose() } catch {}
+  try {
+    if (containerHandleForMetrics) await containerHandleForMetrics.dispose()
+  } catch {}
   const step = Math.max(100, Math.floor(metrics.clientHeight * 0.8))
   let scrollTop = 0
   const maxSteps = Math.ceil(metrics.scrollHeight / step) + 5
@@ -197,32 +229,45 @@ export async function getCellTextByToken(page: Page, tableName: string, token: s
   for (let i = 0; i < maxSteps; i++) {
     const containerHandle = await container.elementHandle()
     if (!containerHandle) break
-    const val = await containerHandle.evaluate((el: Element, args: { wanted: string; idx: number }) => {
-      const table = (el as Element).querySelector('table.tokens') as HTMLTableElement | null
-      if (!table) return null
-      const rows = Array.from(table.querySelectorAll('tbody tr'))
-      for (const tr of rows) {
-        const td = tr.querySelector('td')
-        if (!td) continue
-        const raw = (td.textContent || '').trim()
-        const m = raw.match(/[A-Za-z0-9-]+/)
-        const tokenText = m ? m[0] : raw
-        const low = tokenText.toLowerCase()
-        if (!low) continue
-        if (low.includes(args.wanted) || args.wanted.includes(low)) {
-          try { (el as HTMLElement).scrollTop = Math.max(0, (tr as HTMLElement).offsetTop - 20) } catch {}
-          const cell = tr.querySelector(`td:nth-child(${args.idx})`)
-          return cell ? (cell.textContent || '').trim() : ''
+    const val = await containerHandle.evaluate(
+      (el: Element, args: { wanted: string; idx: number }) => {
+        const table = el.querySelector('table.tokens')
+        if (!table) return null
+        const rows = Array.from(table.querySelectorAll('tbody tr'))
+        for (const tr of rows) {
+          const td = tr.querySelector('td')
+          if (!td) continue
+          const raw = (td.textContent || '').trim()
+          const m = /[A-Za-z0-9-]+/.exec(raw)
+          const tokenText = m ? m[0] : raw
+          const low = tokenText.toLowerCase()
+          if (!low) continue
+          if (low.includes(args.wanted) || args.wanted.includes(low)) {
+            try {
+              ;(el as HTMLElement).scrollTop = Math.max(0, (tr as HTMLElement).offsetTop - 20)
+            } catch {}
+            const cell = tr.querySelector(`td:nth-child(${args.idx})`)
+            return cell ? (cell.textContent || '').trim() : ''
+          }
         }
-      }
-      return null
-    }, { wanted, idx: nth })
-    try { await containerHandle.dispose() } catch {}
+        return null
+      },
+      { wanted, idx: nth },
+    )
+    try {
+      await containerHandle.dispose()
+    } catch {}
     if (val !== null) return String(val)
     const handleForScroll = await container.elementHandle()
     if (handleForScroll) {
-      try { await handleForScroll.evaluate((el: HTMLElement, top: number) => { el.scrollTop = top }, scrollTop) } catch {}
-      try { await handleForScroll.dispose() } catch {}
+      try {
+        await handleForScroll.evaluate((el: HTMLElement, top: number) => {
+          el.scrollTop = top
+        }, scrollTop)
+      } catch {}
+      try {
+        await handleForScroll.dispose()
+      } catch {}
     }
     await page.waitForTimeout(60)
     scrollTop += step
@@ -231,73 +276,98 @@ export async function getCellTextByToken(page: Page, tableName: string, token: s
   return ''
 }
 
-export async function scrollRowIntoViewByToken(page: Page, tableName: string, token: string): Promise<boolean> {
+export async function scrollRowIntoViewByToken(
+  page: Page,
+  tableName: string,
+  token: string,
+): Promise<boolean> {
   const tableEl = await findTableForHeading(page, tableName)
   await expect(tableEl).toBeVisible()
-  const container = tableEl.locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " table-wrap ")][1]')
+  const container = tableEl.locator(
+    'xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " table-wrap ")][1]',
+  )
   await expect(container).toBeVisible()
   const wanted = token.trim().toLowerCase()
   try {
-    const matched = await container.evaluate((el: Element, args: { wanted: string }) => {
-      const table = (el as Element).querySelector('table.tokens') as HTMLTableElement | null
-      if (!table) return false
-      const rows = Array.from(table.querySelectorAll('tbody tr'))
-      for (const tr of rows) {
-        const td = tr.querySelector('td')
-        if (!td) continue
-        const raw = (td.textContent || '').trim()
-        const m = raw.match(/[A-Za-z0-9-]+/)
-        const tokenText = m ? m[0] : raw
-        if (!tokenText) continue
-        const low = tokenText.toLowerCase()
-        if (low.includes(args.wanted) || args.wanted.includes(low)) {
-          try { (el as HTMLElement).scrollTop = Math.max(0, (tr as HTMLElement).offsetTop - 20) } catch {}
-          return true
+    const matched = await container.evaluate(
+      (el: Element, args: { wanted: string }) => {
+        const table = el.querySelector('table.tokens')
+        if (!table) return false
+        const rows = Array.from(table.querySelectorAll('tbody tr'))
+        for (const tr of rows) {
+          const td = tr.querySelector('td')
+          if (!td) continue
+          const raw = (td.textContent || '').trim()
+          const m = /[A-Za-z0-9-]+/.exec(raw)
+          const tokenText = m ? m[0] : raw
+          if (!tokenText) continue
+          const low = tokenText.toLowerCase()
+          if (low.includes(args.wanted) || args.wanted.includes(low)) {
+            try {
+              ;(el as HTMLElement).scrollTop = Math.max(0, (tr as HTMLElement).offsetTop - 20)
+            } catch {}
+            return true
+          }
         }
-      }
-      return false
-    }, { wanted })
+        return false
+      },
+      { wanted },
+    )
     return Boolean(matched)
   } catch (err) {
     const e: any = err
-    console.log('scrollRowIntoViewByToken error:', e && e.stack ? e.stack : e)
+    console.log('scrollRowIntoViewByToken error:', e?.stack ? e.stack : e)
     return false
   }
 }
 
-export async function clickDetailsByToken(page: Page, tableName: string, token: string): Promise<boolean> {
+export async function clickDetailsByToken(
+  page: Page,
+  tableName: string,
+  token: string,
+): Promise<boolean> {
   const tableEl = await findTableForHeading(page, tableName)
   await expect(tableEl).toBeVisible()
-  const container = tableEl.locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " table-wrap ")][1]')
+  const container = tableEl.locator(
+    'xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " table-wrap ")][1]',
+  )
   await expect(container).toBeVisible()
   const wanted = token.trim().toLowerCase()
   try {
-    const clicked = await container.evaluate((el: Element, args: { wanted: string }) => {
-      const table = (el as Element).querySelector('table.tokens') as HTMLTableElement | null
-      if (!table) return false
-      const rows = Array.from(table.querySelectorAll('tbody tr'))
-      for (const tr of rows) {
-        const td = tr.querySelector('td')
-        if (!td) continue
-        const raw = (td.textContent || '').trim()
-        const m = raw.match(/[A-Za-z0-9-]+/)
-        const tokenText = m ? m[0] : raw
-        if (!tokenText) continue
-        const low = tokenText.toLowerCase()
-        if (low.includes(args.wanted) || args.wanted.includes(low)) {
-          const btn = tr.querySelector('button[aria-label^="Open details"]') || tr.querySelector('button[title^="Open details"]') || tr.querySelector('button')
-          if (btn) {
-            try { (btn as HTMLElement).click() } catch {}
-            return true
+    const clicked = await container.evaluate(
+      (el: Element, args: { wanted: string }) => {
+        const table = el.querySelector('table.tokens')
+        if (!table) return false
+        const rows = Array.from(table.querySelectorAll('tbody tr'))
+        for (const tr of rows) {
+          const td = tr.querySelector('td')
+          if (!td) continue
+          const raw = (td.textContent || '').trim()
+          const m = /[A-Za-z0-9-]+/.exec(raw)
+          const tokenText = m ? m[0] : raw
+          if (!tokenText) continue
+          const low = tokenText.toLowerCase()
+          if (low.includes(args.wanted) || args.wanted.includes(low)) {
+            const btn =
+              tr.querySelector('button[aria-label^="Open details"]') ||
+              tr.querySelector('button[title^="Open details"]') ||
+              tr.querySelector('button')
+            if (btn) {
+              try {
+                ;(btn as HTMLElement).click()
+              } catch {}
+              return true
+            }
           }
         }
-      }
-      return false
-    }, { wanted })
+        return false
+      },
+      { wanted },
+    )
     return Boolean(clicked)
   } catch (err) {
     const e: any = err
-    console.log('clickDetailsByToken error:', e && e.stack ? e.stack : e)
+    console.log('clickDetailsByToken error:', e?.stack ? e.stack : e)
     return false
   }
 }
@@ -307,10 +377,17 @@ export async function clickDetailsByRowId(page: Page, rowId: string): Promise<bo
     const clicked = await page.evaluate((rid: string) => {
       const el = document.querySelector(`tr[data-row-id="${rid}"]`)
       if (!el) return false
-      try { (el as HTMLElement).scrollIntoView({ block: 'center' }) } catch {}
-      const btn = el.querySelector('button[aria-label^="Open details"]') || el.querySelector('button[title^="Open details"]') || el.querySelector('button')
+      try {
+        ;(el as HTMLElement).scrollIntoView({ block: 'center' })
+      } catch {}
+      const btn =
+        el.querySelector('button[aria-label^="Open details"]') ||
+        el.querySelector('button[title^="Open details"]') ||
+        el.querySelector('button')
       if (btn) {
-        try { (btn as HTMLElement).click() } catch {}
+        try {
+          ;(btn as HTMLElement).click()
+        } catch {}
         return true
       }
       return false
@@ -318,7 +395,7 @@ export async function clickDetailsByRowId(page: Page, rowId: string): Promise<bo
     return Boolean(clicked)
   } catch (err) {
     const e: any = err
-    console.log('clickDetailsByRowId error:', e && e.stack ? e.stack : e)
+    console.log('clickDetailsByRowId error:', e?.stack ? e.stack : e)
     return false
   }
 }
@@ -350,25 +427,40 @@ export async function findTableContainingRow(page: Page, rowId: string) {
   }
   const availableRowIds = await page.evaluate(() => {
     const tables = Array.from(document.querySelectorAll('table.tokens'))
-    return tables.map(table => Array.from(table.querySelectorAll('tbody tr[data-row-id]')).map(tr => tr.getAttribute('data-row-id')))
+    return tables.map((table) =>
+      Array.from(table.querySelectorAll('tbody tr[data-row-id]')).map((tr) =>
+        tr.getAttribute('data-row-id'),
+      ),
+    )
   })
-  throw new Error(`table containing row ${rowId} not found after ${timeout}ms. Available rowIds: ${JSON.stringify(availableRowIds)}`)
+  throw new Error(
+    `table containing row ${rowId} not found after ${timeout}ms. Available rowIds: ${JSON.stringify(availableRowIds)}`,
+  )
 }
 
 export async function openDetailsByRowIdRobust(page: Page, rowId: string): Promise<boolean> {
   try {
     const tableEl = await findTableContainingRow(page, rowId)
-    const container = tableEl.locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " table-wrap ")][1]')
+    const container = tableEl.locator(
+      'xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " table-wrap ")][1]',
+    )
     await expect(container).toBeVisible()
     // Scroll the container to the row offset and click the button inside it
     const clicked = await container.evaluate((el: Element, rid: string) => {
       const c = el as HTMLElement
-      const rowEl = c.querySelector(`tbody tr[data-row-id="${rid}"]`) as HTMLElement | null
+      const rowEl = c.querySelector(`tbody tr[data-row-id="${rid}"]`)
       if (!rowEl) return false
-      try { c.scrollTop = Math.max(0, rowEl.offsetTop - 20) } catch {}
-      const btn = rowEl.querySelector('button[aria-label^="Open details"]') || rowEl.querySelector('button[title^="Open details"]') || rowEl.querySelector('button')
+      try {
+        c.scrollTop = Math.max(0, (rowEl as HTMLElement).offsetTop - 20)
+      } catch {}
+      const btn =
+        rowEl.querySelector('button[aria-label^="Open details"]') ||
+        rowEl.querySelector('button[title^="Open details"]') ||
+        rowEl.querySelector('button')
       if (btn) {
-        try { (btn as HTMLElement).click() } catch {}
+        try {
+          ;(btn as HTMLElement).click()
+        } catch {}
         return true
       }
       return false
@@ -377,7 +469,7 @@ export async function openDetailsByRowIdRobust(page: Page, rowId: string): Promi
     return Boolean(clicked)
   } catch (err) {
     const e: any = err
-    console.log('openDetailsByRowIdRobust error:', e && e.stack ? e.stack : e)
+    console.log('openDetailsByRowIdRobust error:', e?.stack ? e.stack : e)
     return false
   }
 }

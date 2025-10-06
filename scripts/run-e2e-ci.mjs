@@ -11,9 +11,12 @@ const SCANNER_URL = process.env.SCAN_URL || 'http://localhost:3001/scanner'
 // TEST_FILES may be a comma- or space-separated list of paths. Default to both
 // existing e2e test files in this repo.
 const DEFAULT_TEST_FILES = ['e2e/ws-updates.spec.ts', 'e2e/detail-modal-compare.spec.ts']
-const TEST_FILES = process.env.TEST_FILES && String(process.env.TEST_FILES).trim()
-  ? String(process.env.TEST_FILES).split(/\s*(?:,|\s)\s*/).filter(Boolean)
-  : DEFAULT_TEST_FILES
+const TEST_FILES =
+  process.env.TEST_FILES && String(process.env.TEST_FILES).trim()
+    ? String(process.env.TEST_FILES)
+        .split(/\s*(?:,|\s)\s*/)
+        .filter(Boolean)
+    : DEFAULT_TEST_FILES
 
 // We'll invoke Playwright directly via spawn with an argv array so we don't
 // need to build a shell command or worry about quoting. We run Playwright
@@ -42,7 +45,9 @@ function spawnServer() {
   child.stderr.on('data', (d) => process.stderr.write(`[server ERR] ${d}`))
 
   // Unref to allow script to exit if we choose, but we'll manage teardown explicitly
-  try { child.unref() } catch (e) {}
+  try {
+    child.unref()
+  } catch (e) {}
   return child
 }
 
@@ -77,7 +82,10 @@ function runTest() {
 
     const t = spawn('npx', args, { stdio: 'inherit', env })
     t.on('close', (code) => resolve(code ?? 1))
-    t.on('error', (err) => { console.error('Test spawn error', err); resolve(2) })
+    t.on('error', (err) => {
+      console.error('Test spawn error', err)
+      resolve(2)
+    })
   })
 }
 
@@ -88,7 +96,9 @@ function teardownServer(child) {
     // Kill entire process group
     process.kill(-child.pid, 'SIGTERM')
   } catch (err) {
-    try { child.kill('SIGTERM') } catch (e) {}
+    try {
+      child.kill('SIGTERM')
+    } catch (e) {}
   }
 }
 
@@ -97,7 +107,9 @@ function teardownServer(child) {
   try {
     const ok = await waitForScanner(SCANNER_URL, START_TIMEOUT_MS)
     if (!ok) {
-      console.error('Scanner did not become ready within timeout; check server.stdout.log and server.stderr.log')
+      console.error(
+        'Scanner did not become ready within timeout; check server.stdout.log and server.stderr.log',
+      )
       teardownServer(serverChild)
       process.exit(2)
     }
@@ -108,7 +120,9 @@ function teardownServer(child) {
       console.error('One or more Playwright test files were not found:')
       for (const m of missing) console.error('  ' + m)
       try {
-        const e2eFiles = fs.readdirSync('e2e').filter(f => f.endsWith('.ts') || f.endsWith('.spec.ts'))
+        const e2eFiles = fs
+          .readdirSync('e2e')
+          .filter((f) => f.endsWith('.ts') || f.endsWith('.spec.ts'))
         console.error('Available e2e files:')
         for (const f of e2eFiles) console.error('  ' + f)
       } catch (e) {

@@ -8,4 +8,3 @@ export {
   setLocalStorage,
   setLocalStorageJSON,
 } from './cookie'
-

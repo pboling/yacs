@@ -751,8 +751,7 @@ export default function Table({
                   const items = virtualizer.getVirtualItems()
                   const total = virtualizer.getTotalSize()
                   const paddingTop = items.length > 0 ? items[0].start : 0
-                  const paddingBottom =
-                    items.length > 0 ? total - items[items.length - 1].end : 0
+                  const paddingBottom = items.length > 0 ? total - items[items.length - 1].end : 0
                   return (
                     <>
                       {paddingTop > 0 && (
@@ -789,7 +788,10 @@ export default function Table({
                       })}
                       {paddingBottom > 0 && (
                         <tr aria-hidden="true">
-                          <td colSpan={11} style={{ padding: 0, border: 0, height: paddingBottom }} />
+                          <td
+                            colSpan={11}
+                            style={{ padding: 0, border: 0, height: paddingBottom }}
+                          />
                         </tr>
                       )}
                     </>
@@ -798,41 +800,41 @@ export default function Table({
               </tbody>
             ) : (
               <tbody>
-                 {rows.map((t, idx) => {
-                   const suffix =
-                     title === 'Trending Tokens'
-                       ? 'TREND'
-                       : title === 'New Tokens'
-                         ? 'NEW'
-                         : title.replace(/\s+/g, '-').toUpperCase()
-                   const composedId = `${t.id}::${suffix}`
-                   return (
-                     <Row
-                       key={composedId}
-                       row={t}
-                       idx={idx}
-                       rowsLen={rows.length}
-                       composedId={composedId}
-                       getRowStatus={getRowStatus}
-                       onOpenRowDetails={onOpenRowDetails}
-                       onToggleRowSubscription={onToggleRowSubscription}
-                       registerRow={(el) => {
-                         registerRowCb(el, t)
-                       }}
-                     />
-                   )
-                 })}
-               </tbody>
-             )}
+                {rows.map((t, idx) => {
+                  const suffix =
+                    title === 'Trending Tokens'
+                      ? 'TREND'
+                      : title === 'New Tokens'
+                        ? 'NEW'
+                        : title.replace(/\s+/g, '-').toUpperCase()
+                  const composedId = `${t.id}::${suffix}`
+                  return (
+                    <Row
+                      key={composedId}
+                      row={t}
+                      idx={idx}
+                      rowsLen={rows.length}
+                      composedId={composedId}
+                      getRowStatus={getRowStatus}
+                      onOpenRowDetails={onOpenRowDetails}
+                      onToggleRowSubscription={onToggleRowSubscription}
+                      registerRow={(el) => {
+                        registerRowCb(el, t)
+                      }}
+                    />
+                  )
+                })}
+              </tbody>
+            )}
             <tfoot ref={tfootRef}>
-               <tr>
+              <tr>
                 <td colSpan={11} style={{ textAlign: 'center', padding: '6px 0' }}>
-                   <span className="muted" style={{ fontSize: 12 }}>
-                     End of table
-                   </span>
-                 </td>
-               </tr>
-             </tfoot>
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    End of table
+                  </span>
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>

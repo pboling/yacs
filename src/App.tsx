@@ -58,7 +58,7 @@ const THEME_ALLOW = ['cherry-sour', 'rocket-lake', 'legendary'] as const
 export type ThemeName = (typeof THEME_ALLOW)[number]
 
 function readThemeCookie(): ThemeName {
-  const v = getCookie('theme', 'cherry-sour')
+  const v = getCookie('theme', 'cherry-sour') ?? 'cherry-sour'
   return (THEME_ALLOW as readonly string[]).includes(v) ? (v as ThemeName) : 'cherry-sour'
 }
 
@@ -190,7 +190,9 @@ function TopBar({
               key={key}
               className="muted"
               title={`Inject a faux ${label} event`}
-              onClick={() => onInject(key)}
+              onClick={() => {
+                onInject(key)
+              }}
               style={{
                 fontSize: 11,
                 padding: '2px 6px',
@@ -207,7 +209,15 @@ function TopBar({
           ))}
         </h2>
         {/* AutoTick + Scanner WS/REST controls */}
-        <h2 style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <h2
+          style={{
+            margin: 0,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            flexWrap: 'wrap',
+          }}
+        >
           <button
             type="button"
             className="btn"
@@ -712,7 +722,10 @@ function App() {
         // If a shared WS exists from a previous mount/hot-reload, ensure it's not used further
         const anyWin = window as unknown as { __APP_WS__?: WebSocket }
         const existing = anyWin.__APP_WS__
-        if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
+        if (
+          existing &&
+          (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)
+        ) {
           try {
             // Best-effort close; ignore errors
             existing.close()
@@ -874,9 +887,9 @@ function App() {
           try {
             reuseFailTimer = setTimeout(() => {
               try {
-                const pagesNow = (state as any).pages ?? {}
+                const pagesNow = state.pages ?? {}
                 const hasAnyPageNow = Object.keys(pagesNow).length > 0
-                const byIdNow = (state as any).byId ?? {}
+                const byIdNow = state.byId ?? {}
                 const hasAnyRowsNow = !!(byIdNow && Object.keys(byIdNow).length > 0)
                 if (
                   !hasAnyPageNow &&
@@ -1642,7 +1655,7 @@ function App() {
       const tokenAddress = mkAddr()
       const baseSymbol = `FX${i}`
       const tokenName = `Faux ${i}`
-      const tokenSymbol = `${baseSymbol}`
+      const tokenSymbol = baseSymbol
       const exchangePool = EXCHANGES[chain] || ['DEX']
       const exchange = exchangePool[idx % exchangePool.length]
       const priceUsd = 0.05 + Math.random() * (1 + (idx % 10) / 3)
@@ -1698,7 +1711,10 @@ function App() {
       }
     })
     for (const page of [TRENDING_PAGE, NEW_PAGE]) {
-      const parsed = { event: 'scanner-pairs' as const, data: { filter: { page }, results: { pairs: items } } }
+      const parsed = {
+        event: 'scanner-pairs' as const,
+        data: { filter: { page }, results: { pairs: items } },
+      }
       bumpEventCount('scanner-pairs')
       const action = mapIncomingMessageToActionSafe(parsed)
       if (action) d(action as Action)
@@ -1716,8 +1732,9 @@ function App() {
     __restPageRef.current = (__restPageRef.current || 0) + 1
     const pageNum = __restPageRef.current
     try {
-      const restPages =
-        ((window as unknown as { __REST_PAGES__?: Record<number, number> }).__REST_PAGES__ ||= {})
+      const restPages = ((
+        window as unknown as { __REST_PAGES__?: Record<number, number> }
+      ).__REST_PAGES__ ||= {})
       restPages[TRENDING_PAGE] = pageNum
       restPages[NEW_PAGE] = pageNum
     } catch {}
@@ -1798,14 +1815,18 @@ function App() {
     })
     const trendingItems = [...baseItems].sort((a, b) => b.volumeUsd - a.volumeUsd)
     const newItems = [...baseItems].sort(
-      (a, b) => new Date(b.tokenCreatedTimestamp).getTime() - new Date(a.tokenCreatedTimestamp).getTime(),
+      (a, b) =>
+        new Date(b.tokenCreatedTimestamp).getTime() - new Date(a.tokenCreatedTimestamp).getTime(),
     )
     const payloads = [
       { page: TRENDING_PAGE, pairs: trendingItems },
       { page: NEW_PAGE, pairs: newItems },
     ]
     for (const { page, pairs } of payloads) {
-      const parsed = { event: 'scanner-pairs' as const, data: { filter: { page }, append: true, results: { pairs } } }
+      const parsed = {
+        event: 'scanner-pairs' as const,
+        data: { filter: { page }, append: true, results: { pairs } },
+      }
       bumpEventCount('scanner-pairs')
       const action = mapIncomingMessageToActionSafe(parsed)
       if (action) d(action as Action)
@@ -1904,9 +1925,9 @@ function App() {
   const [appReady, setAppReady] = useState(() => {
     // Check for test bypass flag
     try {
-      return !!(window as any).__BYPASS_BOOT__;
+      return !!(window as any).__BYPASS_BOOT__
     } catch {
-      return false;
+      return false
     }
   })
   const [wsScannerReady, setWsScannerReady] = useState<{ trending: boolean; newer: boolean }>({
@@ -2804,9 +2825,9 @@ function App() {
           </li>
           <li>This is a prod demo of what local dev could be like if you hire me!</li>
           <li>
-            Copyright (c) 2025 Peter H. Boling -
+            Copyright (c) 2025 Peter H. Boling -
             <a href="https://discord.gg/3qme4XHNKN">
-               Galtzo.com
+              Galtzo.com
               <picture>
                 <img
                   src="https://logos.galtzo.com/assets/images/galtzo-floss/avatar-128px-blank.svg"

@@ -49,4 +49,3 @@ export function toChainName(input) {
       return String(input).toUpperCase()
   }
 }
-

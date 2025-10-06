@@ -20,4 +20,3 @@ console.log('keys =', keys)
 console.log('contains 0xPAIR1|0xTOKEN1|ETH:', keys.includes('0xPAIR1|0xTOKEN1|ETH'))
 const pair1Variants = keys.filter((k) => k.startsWith('0xPAIR1|0xTOKEN1|'))
 console.log('pair1Variants.length =', pair1Variants.length)
-

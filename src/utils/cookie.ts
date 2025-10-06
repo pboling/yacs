@@ -10,7 +10,7 @@
 export function parseCookies(cookieString: string): Record<string, string> {
   const cookies: Record<string, string> = {}
   if (!cookieString) return cookies
-  
+
   try {
     cookieString.split(';').forEach((cookie) => {
       const [name, ...rest] = cookie.split('=')
@@ -21,7 +21,7 @@ export function parseCookies(cookieString: string): Record<string, string> {
   } catch {
     // Ignore parsing errors
   }
-  
+
   return cookies
 }
 
@@ -33,7 +33,7 @@ export function parseCookies(cookieString: string): Record<string, string> {
  */
 export function getCookie(name: string, defaultValue?: string): string | undefined {
   if (typeof document === 'undefined') return defaultValue
-  
+
   try {
     const regex = new RegExp('(?:^|; )' + name + '=([^;]+)')
     const match = regex.exec(document.cookie)
@@ -59,27 +59,21 @@ export function setCookie(
     domain?: string
     secure?: boolean
     sameSite?: 'Strict' | 'Lax' | 'None'
-  } = {}
+  } = {},
 ): boolean {
   if (typeof document === 'undefined') return false
-  
+
   try {
-    const {
-      maxAge,
-      path = '/',
-      domain,
-      secure,
-      sameSite,
-    } = options
-    
+    const { maxAge, path = '/', domain, secure, sameSite } = options
+
     let cookieString = `${name}=${encodeURIComponent(value)}`
-    
+
     if (path) cookieString += `; path=${path}`
     if (maxAge !== undefined) cookieString += `; max-age=${maxAge}`
     if (domain) cookieString += `; domain=${domain}`
     if (secure) cookieString += '; secure'
     if (sameSite) cookieString += `; samesite=${sameSite}`
-    
+
     document.cookie = cookieString
     return true
   } catch {
@@ -95,7 +89,7 @@ export function setCookie(
  */
 export function removeCookie(
   name: string,
-  options: { path?: string; domain?: string } = {}
+  options: { path?: string; domain?: string } = {},
 ): boolean {
   return setCookie(name, '', { ...options, maxAge: 0 })
 }
@@ -178,7 +172,7 @@ export function setLocalStorage(key: string, value: string): boolean {
  * @param value - The object to store
  * @returns true if successful, false otherwise
  */
-export function setLocalStorageJSON<T>(key: string, value: T): boolean {
+export function setLocalStorageJSON(key: string, value: unknown): boolean {
   if (!isLocalStorageAvailable()) return false
   try {
     window.localStorage.setItem(key, JSON.stringify(value))
@@ -216,4 +210,3 @@ export function clearLocalStorage(): boolean {
     return false
   }
 }
-

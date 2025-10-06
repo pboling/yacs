@@ -139,7 +139,7 @@ export default function TokensPane({
   const DISABLED_LS_KEY = 'dex.disabledTokens.v1'
   // Load disabled set on mount
   useEffect(() => {
-    const arr = getLocalStorageJSON<string[]>(DISABLED_LS_KEY, [])
+    const arr = getLocalStorageJSON<string[]>(DISABLED_LS_KEY, []) ?? []
     disabledTokensRef.current = new Set(arr.map(String))
   }, [])
 

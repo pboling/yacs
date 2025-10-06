@@ -7,7 +7,7 @@ console.log('Validating buys/sells monotonicity for token:', tokenName)
 
 for (let tick = 0; tick <= 10; tick++) {
   const res = generateScannerResponse(params, tick)
-  const found = res.scannerPairs.find(p => p.token1Name === tokenName)
+  const found = res.scannerPairs.find((p) => p.token1Name === tokenName)
   if (found) {
     console.log(`tick=${tick} -> buys=${found.buys} sells=${found.sells} token=${found.token1Name}`)
   } else {
@@ -19,4 +19,3 @@ for (let tick = 0; tick <= 10; tick++) {
     }
   }
 }
-

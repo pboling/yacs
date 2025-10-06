@@ -73,4 +73,3 @@ console.log('Deterministic token update order:')
 updates.forEach((token, i) => {
   console.log(`${i + 1}. ${token}`)
 })
-

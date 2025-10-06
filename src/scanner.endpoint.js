@@ -93,69 +93,6 @@ function mkAddress(prefix, rnd) {
 
 import { loadSymbols, mulberry32 } from './utils/token.fixture.js'
 import { getBaseSeed, mixSeeds } from './seed.util.js'
-import fs from 'node:fs'
-
-// Lazy-load and cache symbols from YAML (no external YAML parser needed for simple list)
-let CACHED_SYMBOLS = null
-function loadSymbolsFromFile() {
-  if (Array.isArray(CACHED_SYMBOLS) && CACHED_SYMBOLS.length > 0) return CACHED_SYMBOLS
-  try {
-    const url = new URL('./config/symbols.yaml', import.meta.url)
-    const text = fs.readFileSync(url, 'utf-8')
-    const lines = text.split(/\r?\n/)
-    const items = []
-    for (const raw of lines) {
-      const line = raw.trim()
-      if (!line || line.startsWith('#')) continue
-      // support "- VALUE" or plain JSON-style ["A","B"] if someone swaps format later
-      if (line.startsWith('- ')) {
-        let v = line.slice(2).trim()
-        // strip quotes if present
-        if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-          v = v.slice(1, -1)
-        }
-        if (v) items.push(v)
-      }
-    }
-
-    // Decide how to interpret the YAML items:
-    // 1) If items are already full symbols with numeric suffix (e.g., apple0001) and we have enough, use as-is.
-    const allAlpha = items.every((w) => /^[A-Za-z]+$/.test(w))
-    const allFive = allAlpha && items.every((w) => w.length === 5)
-    const allFiveWithSuffix = items.every((w) => /^[A-Za-z]{5}\d{4}$/.test(w))
-
-    if (allFiveWithSuffix && items.length >= 2000) {
-      CACHED_SYMBOLS = items
-      return CACHED_SYMBOLS
-    }
-
-    // 2) If the list is purely 5-letter words, expand them with a 4-digit suffix to reach >= 2500.
-    if (allFive && items.length > 0) {
-      const expanded = []
-      const target = Math.max(2000, 2500)
-      for (let i = 1; i <= target; i++) {
-        const word = items[(i - 1) % items.length]
-        expanded.push(`${word}${String(i).padStart(4, '0')}`)
-      }
-      CACHED_SYMBOLS = expanded
-      return CACHED_SYMBOLS
-    }
-
-    // 3) Otherwise (mixed lengths or not strictly 5-letter words), use the list as-is.
-    if (items.length > 0) {
-      CACHED_SYMBOLS = items
-      return CACHED_SYMBOLS
-    }
-  } catch {
-    // removed unused catch variable
-    // fall through to fallback
-  }
-  // Fallback: generate deterministic synthetic symbols (guarantee >= 2000)
-  const fallback = []
-  for (let i = 1; i <= 2500; i++) fallback.push(`SYM${String(i).padStart(4, '0')}`)
-  CACHED_SYMBOLS = fallback
-  return CACHED_SYMBOLS
-}
 
 /**
  * Generate a deterministic ScannerApiResponse-like payload for GET /scanner.

@@ -18,7 +18,7 @@ try {
       const p = pairs[i]
       const id = p.pairAddress || p.pair || p.id || null
       const token = p.token1Symbol || p.token1Name || p.token1 || p.token || ''
-      console.log(`${i+1}. id=${id} token=${token}`)
+      console.log(`${i + 1}. id=${id} token=${token}`)
     }
   }
 } catch (err) {

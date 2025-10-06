@@ -17,9 +17,9 @@
 
 import { sendSubscribe, sendUnsubscribe, UNSUBSCRIPTIONS_DISABLED } from './ws.mapper.js'
 import { getDefaultInvisibleBaseLimit } from './subscription.limit.bus.js'
-import { 
-  isSubscriptionLockActive, 
-  getSubscriptionLockAllowedKeys 
+import {
+  isSubscriptionLockActive,
+  getSubscriptionLockAllowedKeys,
 } from './subscription.lock.bus.js'
 import { debugLog } from './utils/debug.mjs'
 
@@ -166,7 +166,7 @@ function unsubscribeKey(
         return // Do NOT unsubscribe protected keys
       }
     }
-    
+
     lastUnsubscribedAt.set(key, Date.now())
     const { pair, token, chain } = splitKey(key)
     try {
